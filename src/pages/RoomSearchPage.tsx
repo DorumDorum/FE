@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Search, Plus, Bell } from 'lucide-react'
 import RoomCard from '@/components/room/RoomCard'
+import CreateRoomPage from './CreateRoomPage'
 import { Room } from '@/types/room'
 import toast from 'react-hot-toast'
 
 const RoomSearchPage = () => {
   const [searchQuery, setSearchQuery] = useState('')
+  const [showCreateRoom, setShowCreateRoom] = useState(false)
   const [rooms] = useState<Room[]>([
     {
       id: '1',
@@ -90,7 +92,7 @@ const RoomSearchPage = () => {
   }
 
   const handleCreateRoom = () => {
-    toast.success('방 만들기 페이지로 이동합니다!')
+    setShowCreateRoom(true)
   }
 
   return (
@@ -186,6 +188,11 @@ const RoomSearchPage = () => {
           </button>
         </div>
       </nav>
+
+      {/* 방 만들기 모달 */}
+      {showCreateRoom && (
+        <CreateRoomPage onClose={() => setShowCreateRoom(false)} />
+      )}
     </div>
   )
 }
