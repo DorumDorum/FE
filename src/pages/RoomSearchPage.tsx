@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Bell, Home, Users, MessageCircle, Menu, Search, Plus } from 'lucide-react'
 import RoomCard from '@/components/room/RoomCard'
-import CreateRoomPage from './CreateRoomPage'
-import ApplyRoomPage from './ApplyRoomPage'
-import ChatRequestPage from './ChatRequestPage'
+import CreateRoomModal from '@/components/modals/CreateRoomModal'
+import ApplyRoomModal from '@/components/modals/ApplyRoomModal'
+import ChatRequestModal from '@/components/modals/ChatRequestModal'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 import { Room } from '@/types/room'
 import toast from 'react-hot-toast'
 
@@ -12,7 +13,43 @@ const RoomSearchPage = () => {
   const [showCreateRoom, setShowCreateRoom] = useState(false)
   const [showApplyRoom, setShowApplyRoom] = useState(false)
   const [showChatRequest, setShowChatRequest] = useState(false)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
+  const [activeTab, setActiveTab] = useState<'recruiting' | 'applied' | 'joined'>('recruiting')
+  
+  // 지원한 방 데이터
+  const appliedRooms: Room[] = [
+    {
+      id: 'applied-1',
+      title: '1 기숙사',
+      roomType: '4인실',
+      capacity: 4,
+      currentMembers: 3,
+      description: '조용하고 깔끔한 분 구해요! 공부하는 분위기 좋아하시는 분이면 더 좋아요.',
+      hostName: '누구',
+      tags: ['조용함', '조용함'],
+      createdAt: '2시간 전',
+      status: 'recruiting' as const
+    }
+  ]
+  
+  // 속한 방 데이터
+  const joinedRooms: Room[] = [
+    {
+      id: 'joined-1',
+      title: '2 기숙사',
+      roomType: '2인실',
+      capacity: 2,
+      currentMembers: 2,
+      description: '친구같은 룸메 구해요! 같이 영화보고 맛집 탐방하는 분이면 좋겠어요.',
+      hostName: '김철수',
+      tags: ['친구같은', '활발함'],
+      createdAt: '1시간 전',
+      status: 'full' as const
+    }
+  ]
+  
   const [rooms] = useState<Room[]>([
     {
       id: '1',
@@ -97,15 +134,51 @@ const RoomSearchPage = () => {
   }
 
   const handleApply = (roomId: string) => {
-    const room = rooms.find(r => r.id === roomId)
+    const room = rooms.find(r => r.id === roomId) || appliedRooms.find(r => r.id === roomId)
     if (room) {
       setSelectedRoom(room)
-      setShowApplyRoom(true)
+      if (appliedRooms.some(r => r.id === roomId)) {
+        // 이미 지원한 방이면 취소 확인 모달 표시
+        setShowCancelConfirm(true)
+      } else {
+        // 새로운 방 지원이면 지원서 모달 표시
+        setShowApplyRoom(true)
+      }
     }
   }
 
   const handleCreateRoom = () => {
     setShowCreateRoom(true)
+  }
+
+  const handleLeave = (roomId: string) => {
+    const room = joinedRooms.find(r => r.id === roomId)
+    if (room) {
+      setSelectedRoom(room)
+      setShowLeaveConfirm(true)
+    }
+  }
+
+  const handleCancelApply = () => {
+    if (selectedRoom) {
+      // 지원 취소 로직 (실제로는 API 호출)
+      console.log('지원 취소:', selectedRoom.id)
+      toast.success('지원이 취소되었습니다.')
+      // 여기에 지원 취소 API 호출 및 상태 업데이트 로직 추가
+    }
+    setShowCancelConfirm(false)
+    setSelectedRoom(null)
+  }
+
+  const handleConfirmLeave = () => {
+    if (selectedRoom) {
+      // 방 나가기 로직 (실제로는 API 호출)
+      console.log('방 나가기:', selectedRoom.id)
+      toast.success('방에서 나갔습니다.')
+      // 여기에 방 나가기 API 호출 및 상태 업데이트 로직 추가
+    }
+    setShowLeaveConfirm(false)
+    setSelectedRoom(null)
   }
 
   return (
@@ -160,23 +233,82 @@ const RoomSearchPage = () => {
 
         {/* 방 목록 */}
         <div className="mt-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-medium text-black">모집 중인 방</h2>
-            <span className="bg-gray-200 text-black text-xs px-2 py-1 rounded-full">
-              {rooms.length}개
-            </span>
+          {/* 탭 네비게이션 */}
+          <div className="flex border-b border-gray-200 mb-4">
+            <button
+              onClick={() => setActiveTab('recruiting')}
+              className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'recruiting'
+                  ? 'border-[#fcb44e] text-[#fcb44e]'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              모집 중인 방
+            </button>
+            <button
+              onClick={() => setActiveTab('applied')}
+              className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'applied'
+                  ? 'border-[#fcb44e] text-[#fcb44e]'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              내가 지원한 방
+            </button>
+            <button
+              onClick={() => setActiveTab('joined')}
+              className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'joined'
+                  ? 'border-[#fcb44e] text-[#fcb44e]'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              내가 속한 방
+            </button>
           </div>
 
-          <div className="space-y-4">
-            {rooms.map((room) => (
-              <RoomCard
-                key={room.id}
-                room={room}
-                onChatRequest={handleChatRequest}
-                onApply={handleApply}
-              />
-            ))}
-          </div>
+          {/* 탭 콘텐츠 */}
+          {activeTab === 'recruiting' && (
+            <div className="space-y-4">
+              {rooms.map((room) => (
+                <RoomCard
+                  key={room.id}
+                  room={room}
+                  onChatRequest={handleChatRequest}
+                  onApply={handleApply}
+                />
+              ))}
+            </div>
+          )}
+
+          {activeTab === 'applied' && (
+            <div className="space-y-4">
+              {appliedRooms.map((room) => (
+                <RoomCard
+                  key={room.id}
+                  room={room}
+                  onChatRequest={handleChatRequest}
+                  onApply={handleApply}
+                  isApplied={true}
+                />
+              ))}
+            </div>
+          )}
+
+          {activeTab === 'joined' && (
+            <div className="space-y-4">
+              {joinedRooms.map((room) => (
+                <RoomCard
+                  key={room.id}
+                  room={room}
+                  onChatRequest={handleChatRequest}
+                  onApply={handleApply}
+                  onLeave={handleLeave}
+                  isJoined={true}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </main>
 
@@ -205,12 +337,12 @@ const RoomSearchPage = () => {
 
       {/* 방 만들기 모달 */}
       {showCreateRoom && (
-        <CreateRoomPage onClose={() => setShowCreateRoom(false)} />
+        <CreateRoomModal onClose={() => setShowCreateRoom(false)} />
       )}
 
       {/* 지원서 모달 */}
       {showApplyRoom && selectedRoom && (
-        <ApplyRoomPage 
+        <ApplyRoomModal 
           onClose={() => {
             setShowApplyRoom(false)
             setSelectedRoom(null)
@@ -226,7 +358,7 @@ const RoomSearchPage = () => {
 
       {/* 채팅 요청 모달 */}
       {showChatRequest && selectedRoom && (
-        <ChatRequestPage 
+        <ChatRequestModal 
           onClose={() => {
             setShowChatRequest(false)
             setSelectedRoom(null)
@@ -240,6 +372,32 @@ const RoomSearchPage = () => {
           }}
         />
       )}
+
+      {/* 지원 취소 확인 모달 */}
+      <ConfirmModal
+        isOpen={showCancelConfirm}
+        title="지원 취소"
+        message="정말로 지원을 취소하시겠습니까?"
+        confirmText="취소하기"
+        onConfirm={handleCancelApply}
+        onCancel={() => {
+          setShowCancelConfirm(false)
+          setSelectedRoom(null)
+        }}
+      />
+
+      {/* 방 나가기 확인 모달 */}
+      <ConfirmModal
+        isOpen={showLeaveConfirm}
+        title="방 나가기"
+        message="정말로 방에서 나가시겠습니까?"
+        confirmText="나가기"
+        onConfirm={handleConfirmLeave}
+        onCancel={() => {
+          setShowLeaveConfirm(false)
+          setSelectedRoom(null)
+        }}
+      />
     </div>
   )
 }

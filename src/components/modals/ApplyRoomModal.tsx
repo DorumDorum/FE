@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, MessageCircle } from 'lucide-react'
+import { X, User, Edit3, Tag, MessageCircle, Phone, Calendar } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-interface ChatRequestPageProps {
+interface ApplyRoomModalProps {
   onClose: () => void
   roomInfo?: {
     title: string
@@ -12,9 +12,10 @@ interface ChatRequestPageProps {
   }
 }
 
-const ChatRequestPage = ({ onClose, roomInfo }: ChatRequestPageProps) => {
+const ApplyRoomModal = ({ onClose, roomInfo }: ApplyRoomModalProps) => {
   const [formData, setFormData] = useState({
-    message: ''
+    introduction: '',
+    additionalMessage: ''
   })
   
   // 드래그 관련 상태
@@ -26,7 +27,7 @@ const ChatRequestPage = ({ onClose, roomInfo }: ChatRequestPageProps) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    toast.success('채팅 요청이 전송되었습니다!')
+    toast.success('지원서가 제출되었습니다!')
     onClose()
   }
 
@@ -43,7 +44,6 @@ const ChatRequestPage = ({ onClose, roomInfo }: ChatRequestPageProps) => {
     currentY.current = e.touches[0].clientY
     const deltaY = currentY.current - startY.current
     
-    // 아래로 드래그할 때만 반응
     if (deltaY > 0) {
       setDragOffset(deltaY)
     }
@@ -54,11 +54,9 @@ const ChatRequestPage = ({ onClose, roomInfo }: ChatRequestPageProps) => {
     
     const deltaY = currentY.current - startY.current
     
-    // 드래그 거리가 충분하면 닫기
     if (deltaY > 100) {
       onClose()
     } else {
-      // 원래 위치로 복귀
       setDragOffset(0)
     }
     
@@ -131,7 +129,7 @@ const ChatRequestPage = ({ onClose, roomInfo }: ChatRequestPageProps) => {
         
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-6 sticky top-0 bg-white pt-2">
-          <h2 className="text-xl font-bold text-black">채팅 요청</h2>
+          <h2 className="text-xl font-bold text-black">방 지원하기</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -140,29 +138,41 @@ const ChatRequestPage = ({ onClose, roomInfo }: ChatRequestPageProps) => {
           </button>
         </div>
 
-        {/* 방장 정보 */}
+        {/* 방 정보 */}
         {roomInfo && (
-          <div className="bg-blue-50 rounded-lg p-4 mb-6">
-            <div className="flex items-center mb-2">
-              <span className="font-medium text-black">{roomInfo.hostName || '깔끔이'}</span>
-              <span className="text-sm text-gray-600 ml-2">{roomInfo.dormitory} / {roomInfo.roomType}</span>
-            </div>
+          <div className="bg-gray-50 rounded-lg p-4 mb-6">
+            <h3 className="font-medium text-black mb-2">{roomInfo.dormitory} / {roomInfo.roomType}</h3>
             <p className="text-sm text-gray-600">{roomInfo.description}</p>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* 메시지 */}
+          {/* 자기소개 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              메시지
+              자기소개
             </label>
             <textarea
-              value={formData.message}
-              onChange={(e) => setFormData(prev => ({ ...prev, message: e.target.value }))}
+              value={formData.introduction}
+              onChange={(e) => setFormData(prev => ({ ...prev, introduction: e.target.value }))}
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-black"
               rows={4}
-              placeholder="채팅을 요청하는 이유나 인사말을 적어주세요"
+              placeholder="자신을 간단히 소개해주세요"
+              required
+            />
+          </div>
+
+          {/* 추가 메시지 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              추가 메시지 (선택사항)
+            </label>
+            <textarea
+              value={formData.additionalMessage}
+              onChange={(e) => setFormData(prev => ({ ...prev, additionalMessage: e.target.value }))}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-black"
+              rows={3}
+              placeholder="룸메이트에게 전하고 싶은 말이 있다면 적어주세요"
             />
           </div>
 
@@ -177,12 +187,9 @@ const ChatRequestPage = ({ onClose, roomInfo }: ChatRequestPageProps) => {
             </button>
             <button
               type="submit"
-              className="flex-1 bg-black text-white py-3 rounded-lg font-medium flex items-center justify-center gap-2"
+              className="flex-1 bg-black text-white py-3 rounded-lg font-medium"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-              요청하기
+              지원하기
             </button>
           </div>
         </form>
@@ -191,4 +198,4 @@ const ChatRequestPage = ({ onClose, roomInfo }: ChatRequestPageProps) => {
   )
 }
 
-export default ChatRequestPage
+export default ApplyRoomModal

@@ -1,8 +1,17 @@
 import { RoomCardProps } from '@/types/room'
 
-const RoomCard = ({ room, onChatRequest, onApply }: RoomCardProps) => {
+interface ExtendedRoomCardProps extends RoomCardProps {
+  showButtons?: boolean
+  isApplied?: boolean
+  isJoined?: boolean
+  onLeave?: (roomId: string) => void
+}
+
+const RoomCard = ({ room, onChatRequest, onApply, onLeave, showButtons = true, isApplied = false, isJoined = false }: ExtendedRoomCardProps) => {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4">
+    <div className="bg-white border border-gray-200 rounded-lg p-4" style={{
+      boxShadow: '0px 4px 6px 0px rgba(0, 0, 0, 0.15), 0px 2px 4px 0px rgba(0, 0, 0, 0.25)'
+    }}>
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center space-x-2">
@@ -24,11 +33,11 @@ const RoomCard = ({ room, onChatRequest, onApply }: RoomCardProps) => {
       </p>
 
       {/* 태그 */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="flex space-x-2 mb-4">
         {room.tags.map((tag, index) => (
           <span
             key={index}
-            className="bg-[#fcb54e] text-white text-xs px-3 py-1 rounded-full font-medium"
+            className="bg-orange-200 text-orange-800 text-xs px-2 py-1 rounded-full"
           >
             {tag}
           </span>
@@ -36,20 +45,39 @@ const RoomCard = ({ room, onChatRequest, onApply }: RoomCardProps) => {
       </div>
 
       {/* 버튼 */}
-      <div className="flex space-x-3">
-        <button
-          onClick={() => onChatRequest(room.id)}
-          className="border border-gray-300 text-black text-xs px-4 py-2 rounded font-normal"
-        >
-          채팅 요청
-        </button>
-        <button
-          onClick={() => onApply(room.id)}
-          className="bg-black text-white text-xs px-4 py-2 rounded font-medium"
-        >
-          지원하기
-        </button>
-      </div>
+      {showButtons && (
+        <div className="flex space-x-3">
+          {isJoined ? (
+            // 속한 방: 나가기 버튼만 표시
+            <button
+              onClick={() => onLeave?.(room.id)}
+              className="bg-red-500 text-white text-xs px-4 py-2 rounded font-medium hover:bg-red-600"
+            >
+              나가기
+            </button>
+          ) : (
+            // 일반 방: 채팅 요청과 지원/취소 버튼
+            <>
+              <button
+                onClick={() => onChatRequest(room.id)}
+                className="border border-gray-300 text-black text-xs px-4 py-2 rounded font-normal"
+              >
+                채팅 요청
+              </button>
+              <button
+                onClick={() => onApply(room.id)}
+                className={`text-xs px-4 py-2 rounded font-medium ${
+                  isApplied 
+                    ? 'bg-red-500 text-white hover:bg-red-600' 
+                    : 'bg-black text-white hover:bg-gray-800'
+                }`}
+              >
+                {isApplied ? '취소하기' : '지원하기'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }

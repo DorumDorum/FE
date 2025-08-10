@@ -1,21 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, User, Edit3, Tag, MessageCircle, Phone, Calendar } from 'lucide-react'
+import { X, MessageCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-interface ApplyRoomPageProps {
+interface ChatRequestModalProps {
   onClose: () => void
   roomInfo?: {
     title: string
     dormitory: string
     roomType: string
     description: string
+    hostName?: string
   }
 }
 
-const ApplyRoomPage = ({ onClose, roomInfo }: ApplyRoomPageProps) => {
+const ChatRequestModal = ({ onClose, roomInfo }: ChatRequestModalProps) => {
   const [formData, setFormData] = useState({
-    introduction: '',
-    additionalMessage: ''
+    message: ''
   })
   
   // 드래그 관련 상태
@@ -25,15 +25,11 @@ const ApplyRoomPage = ({ onClose, roomInfo }: ApplyRoomPageProps) => {
   const startY = useRef(0)
   const currentY = useRef(0)
 
-
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    toast.success('지원서가 성공적으로 제출되었습니다!')
+    toast.success('채팅 요청이 전송되었습니다!')
     onClose()
   }
-
-
 
   // 드래그 이벤트 핸들러들
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -136,7 +132,7 @@ const ApplyRoomPage = ({ onClose, roomInfo }: ApplyRoomPageProps) => {
         
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-6 sticky top-0 bg-white pt-2">
-          <h2 className="text-xl font-bold text-black">지원서 작성</h2>
+          <h2 className="text-xl font-bold text-black">채팅 요청</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -145,41 +141,29 @@ const ApplyRoomPage = ({ onClose, roomInfo }: ApplyRoomPageProps) => {
           </button>
         </div>
 
-        {/* 방 정보 */}
+        {/* 방장 정보 */}
         {roomInfo && (
-          <div className="bg-gray-50 rounded-lg p-4 mb-6">
-            <h3 className="font-medium text-black mb-2">{roomInfo.dormitory} / {roomInfo.roomType}</h3>
+          <div className="bg-blue-50 rounded-lg p-4 mb-6">
+            <div className="flex items-center mb-2">
+              <span className="font-medium text-black">{roomInfo.hostName || '깔끔이'}</span>
+              <span className="text-sm text-gray-600 ml-2">{roomInfo.dormitory} / {roomInfo.roomType}</span>
+            </div>
             <p className="text-sm text-gray-600">{roomInfo.description}</p>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* 자기소개 */}
+          {/* 메시지 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              자기소개
+              메시지
             </label>
             <textarea
-              value={formData.introduction}
-              onChange={(e) => setFormData(prev => ({ ...prev, introduction: e.target.value }))}
+              value={formData.message}
+              onChange={(e) => setFormData(prev => ({ ...prev, message: e.target.value }))}
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-black"
               rows={4}
-              placeholder="자신을 간단히 소개해주세요"
-              required
-            />
-          </div>
-
-          {/* 추가 메시지 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              추가 메시지 (선택사항)
-            </label>
-            <textarea
-              value={formData.additionalMessage}
-              onChange={(e) => setFormData(prev => ({ ...prev, additionalMessage: e.target.value }))}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-black"
-              rows={3}
-              placeholder="룸메이트에게 전하고 싶은 말이 있다면 적어주세요"
+              placeholder="채팅을 요청하는 이유나 인사말을 적어주세요"
             />
           </div>
 
@@ -194,9 +178,12 @@ const ApplyRoomPage = ({ onClose, roomInfo }: ApplyRoomPageProps) => {
             </button>
             <button
               type="submit"
-              className="flex-1 bg-black text-white py-3 rounded-lg font-medium"
+              className="flex-1 bg-black text-white py-3 rounded-lg font-medium flex items-center justify-center gap-2"
             >
-              지원하기
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+              요청하기
             </button>
           </div>
         </form>
@@ -205,4 +192,4 @@ const ApplyRoomPage = ({ onClose, roomInfo }: ApplyRoomPageProps) => {
   )
 }
 
-export default ApplyRoomPage
+export default ChatRequestModal
