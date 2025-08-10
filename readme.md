@@ -1,246 +1,214 @@
-# Cursor Talk to Figma MCP
+# DorumDorum - 방 찾기 앱
 
-This project implements a Model Context Protocol (MCP) integration between Cursor AI and Figma, allowing Cursor to communicate with Figma for reading designs and modifying them programmatically.
+DorumDorum은 기숙사 룸메이트를 찾는 모바일 웹 애플리케이션입니다. React와 TypeScript로 구축되었으며, PWA(Progressive Web App) 기능을 지원합니다.
 
-https://github.com/user-attachments/assets/129a14d2-ed73-470f-9a4c-2240b2a4885c
+## 🏠 주요 기능
 
-## Project Structure
+- **방 찾기**: 다양한 조건의 기숙사 방을 검색하고 필터링
+- **방 만들기**: 새로운 방을 생성하고 태그를 설정
+- **지원하기**: 관심 있는 방에 지원서 제출
+- **채팅 요청**: 방장과 1:1 채팅 요청
+- **모바일 최적화**: 모바일 친화적인 UI/UX
+- **PWA 지원**: 네이티브 앱과 같은 경험 제공
 
-- `src/talk_to_figma_mcp/` - TypeScript MCP server for Figma integration
-- `src/cursor_mcp_plugin/` - Figma plugin for communicating with Cursor
-- `src/socket.ts` - WebSocket server that facilitates communication between the MCP server and Figma plugin
+## 🛠️ 기술 스택
 
-## Get Started
+- **Frontend**: React 18, TypeScript
+- **Styling**: Tailwind CSS
+- **Build Tool**: Vite
+- **Package Manager**: Bun
+- **State Management**: React Query
+- **Notifications**: React Hot Toast
+- **Icons**: Lucide React
 
-1. Install Bun if you haven't already:
+## 📁 프로젝트 구조
 
-```bash
-curl -fsSL https://bun.sh/install | bash
+```
+src/
+├── components/
+│   ├── modals/           # 모달 컴포넌트들
+│   │   ├── ChatRequestModal.tsx
+│   │   ├── CreateRoomModal.tsx
+│   │   └── ApplyRoomModal.tsx
+│   ├── ui/               # 재사용 가능한 UI 컴포넌트
+│   │   └── ConfirmModal.tsx
+│   ├── room/             # 방 관련 컴포넌트
+│   │   └── RoomCard.tsx
+│   └── forms/            # 폼 컴포넌트
+├── pages/
+│   └── RoomSearchPage.tsx  # 메인 페이지 (방 찾기)
+├── services/
+│   └── socket.ts         # WebSocket 서버
+├── types/
+│   └── room.ts           # 타입 정의
+├── styles/
+│   └── globals.css       # 전역 스타일
+├── assets/               # 이미지, 아이콘 등
+└── App.tsx               # 메인 앱 컴포넌트
 ```
 
-2. Run setup, this will also install MCP in your Cursor's active project
+## 🚀 시작하기
+
+### 필수 요구사항
+
+- Node.js 18+ 또는 Bun
+- npm, yarn, 또는 bun
+
+### 설치 및 실행
+
+1. **의존성 설치**
 
 ```bash
-bun setup
+# npm 사용
+npm install
+
+# 또는 yarn 사용
+yarn install
+
+# 또는 bun 사용
+bun install
 ```
 
-3. Start the Websocket server
+2. **개발 서버 실행**
+
+```bash
+# npm 사용
+npm run dev
+
+# 또는 yarn 사용
+yarn dev
+
+# 또는 bun 사용
+bun dev
+```
+
+3. **빌드**
+
+```bash
+# npm 사용
+npm run build
+
+# 또는 yarn 사용
+yarn build
+
+# 또는 bun 사용
+bun run build
+```
+
+4. **프리뷰**
+
+```bash
+# npm 사용
+npm run preview
+
+# 또는 yarn 사용
+yarn preview
+
+# 또는 bun 사용
+bun run preview
+```
+
+### WebSocket 서버 실행 (선택사항)
+
+채팅 기능을 사용하려면 WebSocket 서버를 별도로 실행해야 합니다:
 
 ```bash
 bun socket
 ```
 
-4. **NEW** Install Figma plugin from [Figma community page](https://www.figma.com/community/plugin/1485687494525374295/cursor-talk-to-figma-mcp-plugin) or [install locally](#figma-plugin)
+## 📱 사용법
 
-## Quick Video Tutorial
+### 방 찾기
+- 메인 페이지에서 다양한 조건의 기숙사 방을 검색할 수 있습니다
+- 방장 닉네임이나 태그로 검색 가능
+- 탭을 통해 "모집 중인 방", "내가 지원한 방", "내가 속한 방"을 구분하여 볼 수 있습니다
 
-[Video Link](https://www.linkedin.com/posts/sonnylazuardi_just-wanted-to-share-my-latest-experiment-activity-7307821553654657024-yrh8)
+### 방 만들기
+- 상단의 "방 만들기" 버튼을 클릭하여 새로운 방을 생성
+- 방 제목, 타입, 수용 인원, 설명을 입력
+- 최대 5개의 태그를 선택하여 방의 특성을 표시
 
-## Design Automation Example
+### 지원하기
+- 관심 있는 방의 "지원하기" 버튼을 클릭
+- 자기소개와 추가 메시지를 작성하여 지원서 제출
+- 지원한 방은 "내가 지원한 방" 탭에서 확인 가능
 
-**Bulk text content replacement**
+### 채팅 요청
+- 방장과 1:1 채팅을 요청할 수 있습니다
+- "채팅 요청" 버튼을 클릭하여 메시지와 함께 요청
 
-Thanks to [@dusskapark](https://github.com/dusskapark) for contributing the bulk text replacement feature. Here is the [demo video](https://www.youtube.com/watch?v=j05gGT3xfCs).
+## 🎨 UI/UX 특징
 
-**Instance Override Propagation**
-Another contribution from [@dusskapark](https://github.com/dusskapark)
-Propagate component instance overrides from a source instance to multiple target instances with a single command. This feature dramatically reduces repetitive design work when working with component instances that need similar customizations. Check out our [demo video](https://youtu.be/uvuT8LByroI).
+- **모바일 우선 디자인**: 모바일 환경에 최적화된 UI
+- **데스크톱 프리뷰**: 데스크톱에서 모바일 앱처럼 보이도록 설정
+- **드래그 모달**: 모바일에서 드래그하여 모달을 닫을 수 있음
+- **확인 모달**: 중요한 작업(지원 취소, 방 나가기)에 확인 절차 추가
+- **반응형 디자인**: 다양한 화면 크기에 대응
 
-## Manual Setup and Installation
+## 🔧 개발
 
-### MCP Server: Integration with Cursor
+### 개발 환경 설정
 
-Add the server to your Cursor MCP configuration in `~/.cursor/mcp.json`:
+1. **TypeScript 설정**
+   - `tsconfig.json`에서 TypeScript 컴파일러 옵션 설정
+   - 엄격한 타입 체크 활성화
 
-```json
-{
-  "mcpServers": {
-    "TalkToFigma": {
-      "command": "bunx",
-      "args": ["cursor-talk-to-figma-mcp@latest"]
-    }
-  }
-}
-```
+2. **Tailwind CSS 설정**
+   - `tailwind.config.js`에서 커스텀 색상 및 스타일 정의
+   - 반응형 브레이크포인트 설정
 
-### WebSocket Server
+3. **Vite 설정**
+   - `vite.config.ts`에서 빌드 옵션 및 플러그인 설정
+   - 경로 별칭 설정 (`@/` → `src/`)
 
-Start the WebSocket server:
+### 코드 구조
 
-```bash
-bun socket
-```
+- **컴포넌트**: 재사용 가능한 UI 컴포넌트들을 기능별로 분류
+- **페이지**: 실제 라우팅되는 페이지 컴포넌트
+- **타입**: TypeScript 타입 정의
+- **서비스**: API 통신 및 WebSocket 관련 로직
+- **스타일**: 전역 CSS 및 Tailwind 유틸리티
 
-### Figma Plugin
+### 모바일 최적화
 
-1. In Figma, go to Plugins > Development > New Plugin
-2. Choose "Link existing plugin"
-3. Select the `src/cursor_mcp_plugin/manifest.json` file
-4. The plugin should now be available in your Figma development plugins
+- **뷰포트 설정**: 모바일 디바이스에 최적화된 뷰포트 설정
+- **터치 이벤트**: 드래그 모달, 스와이프 제스처 지원
+- **성능 최적화**: 이미지 최적화, 코드 스플리팅 적용
 
-## Windows + WSL Guide
+## 🚀 배포
 
-1. Install bun via powershell
-
-```bash
-powershell -c "irm bun.sh/install.ps1|iex"
-```
-
-2. Uncomment the hostname `0.0.0.0` in `src/socket.ts`
-
-```typescript
-// uncomment this to allow connections in windows wsl
-hostname: "0.0.0.0",
-```
-
-3. Start the websocket
+### 빌드
 
 ```bash
-bun socket
+bun run build
 ```
 
-## Usage
+### 정적 호스팅
 
-1. Start the WebSocket server
-2. Install the MCP server in Cursor
-3. Open Figma and run the Cursor MCP Plugin
-4. Connect the plugin to the WebSocket server by joining a channel using `join_channel`
-5. Use Cursor to communicate with Figma using the MCP tools
+빌드된 파일을 Netlify, Vercel, GitHub Pages 등에 배포할 수 있습니다.
 
-## MCP Tools
+### PWA 배포
 
-The MCP server provides the following tools for interacting with Figma:
+- `manifest.json` 설정으로 PWA 기능 활성화
+- Service Worker를 통한 오프라인 지원
+- 앱 아이콘 및 스플래시 스크린 설정
 
-### Document & Selection
+## 🤝 기여하기
 
-- `get_document_info` - Get information about the current Figma document
-- `get_selection` - Get information about the current selection
-- `read_my_design` - Get detailed node information about the current selection without parameters
-- `get_node_info` - Get detailed information about a specific node
-- `get_nodes_info` - Get detailed information about multiple nodes by providing an array of node IDs
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-### Annotations
+## 📄 라이선스
 
-- `get_annotations` - Get all annotations in the current document or specific node
-- `set_annotation` - Create or update an annotation with markdown support
-- `set_multiple_annotations` - Batch create/update multiple annotations efficiently
-- `scan_nodes_by_types` - Scan for nodes with specific types (useful for finding annotation targets)
+이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 `LICENSE` 파일을 참조하세요.
 
-### Prototyping & Connections
+## 📞 연락처
 
-- `get_reactions` - Get all prototype reactions from nodes with visual highlight animation
-- `set_default_connector` - Set a copied FigJam connector as the default connector style for creating connections (must be set before creating connections)
-- `create_connections` - Create FigJam connector lines between nodes, based on prototype flows or custom mapping
+프로젝트에 대한 문의사항이 있으시면 이슈를 생성해 주세요.
 
-### Creating Elements
+---
 
-- `create_rectangle` - Create a new rectangle with position, size, and optional name
-- `create_frame` - Create a new frame with position, size, and optional name
-- `create_text` - Create a new text node with customizable font properties
-
-### Modifying text content
-
-- `scan_text_nodes` - Scan text nodes with intelligent chunking for large designs
-- `set_text_content` - Set the text content of a single text node
-- `set_multiple_text_contents` - Batch update multiple text nodes efficiently
-
-### Auto Layout & Spacing
-
-- `set_layout_mode` - Set the layout mode and wrap behavior of a frame (NONE, HORIZONTAL, VERTICAL)
-- `set_padding` - Set padding values for an auto-layout frame (top, right, bottom, left)
-- `set_axis_align` - Set primary and counter axis alignment for auto-layout frames
-- `set_layout_sizing` - Set horizontal and vertical sizing modes for auto-layout frames (FIXED, HUG, FILL)
-- `set_item_spacing` - Set distance between children in an auto-layout frame
-
-### Styling
-
-- `set_fill_color` - Set the fill color of a node (RGBA)
-- `set_stroke_color` - Set the stroke color and weight of a node
-- `set_corner_radius` - Set the corner radius of a node with optional per-corner control
-
-### Layout & Organization
-
-- `move_node` - Move a node to a new position
-- `resize_node` - Resize a node with new dimensions
-- `delete_node` - Delete a node
-- `delete_multiple_nodes` - Delete multiple nodes at once efficiently
-- `clone_node` - Create a copy of an existing node with optional position offset
-
-### Components & Styles
-
-- `get_styles` - Get information about local styles
-- `get_local_components` - Get information about local components
-- `create_component_instance` - Create an instance of a component
-- `get_instance_overrides` - Extract override properties from a selected component instance
-- `set_instance_overrides` - Apply extracted overrides to target instances
-
-### Export & Advanced
-
-- `export_node_as_image` - Export a node as an image (PNG, JPG, SVG, or PDF) - limited support on image currently returning base64 as text
-
-### Connection Management
-
-- `join_channel` - Join a specific channel to communicate with Figma
-
-### MCP Prompts
-
-The MCP server includes several helper prompts to guide you through complex design tasks:
-
-- `design_strategy` - Best practices for working with Figma designs
-- `read_design_strategy` - Best practices for reading Figma designs
-- `text_replacement_strategy` - Systematic approach for replacing text in Figma designs
-- `annotation_conversion_strategy` - Strategy for converting manual annotations to Figma's native annotations
-- `swap_overrides_instances` - Strategy for transferring overrides between component instances in Figma
-- `reaction_to_connector_strategy` - Strategy for converting Figma prototype reactions to connector lines using the output of 'get_reactions', and guiding the use 'create_connections' in sequence
-
-## Development
-
-### Building the Figma Plugin
-
-1. Navigate to the Figma plugin directory:
-
-   ```
-   cd src/cursor_mcp_plugin
-   ```
-
-2. Edit code.js and ui.html
-
-## Best Practices
-
-When working with the Figma MCP:
-
-1. Always join a channel before sending commands
-2. Get document overview using `get_document_info` first
-3. Check current selection with `get_selection` before modifications
-4. Use appropriate creation tools based on needs:
-   - `create_frame` for containers
-   - `create_rectangle` for basic shapes
-   - `create_text` for text elements
-5. Verify changes using `get_node_info`
-6. Use component instances when possible for consistency
-7. Handle errors appropriately as all commands can throw exceptions
-8. For large designs:
-   - Use chunking parameters in `scan_text_nodes`
-   - Monitor progress through WebSocket updates
-   - Implement appropriate error handling
-9. For text operations:
-   - Use batch operations when possible
-   - Consider structural relationships
-   - Verify changes with targeted exports
-10. For converting legacy annotations:
-    - Scan text nodes to identify numbered markers and descriptions
-    - Use `scan_nodes_by_types` to find UI elements that annotations refer to
-    - Match markers with their target elements using path, name, or proximity
-    - Categorize annotations appropriately with `get_annotations`
-    - Create native annotations with `set_multiple_annotations` in batches
-    - Verify all annotations are properly linked to their targets
-    - Delete legacy annotation nodes after successful conversion
-11. Visualize prototype noodles as FigJam connectors:
-
-- Use `get_reactions` to extract prototype flows,
-- set a default connector with `set_default_connector`,
-- and generate connector lines with `create_connections` for clear visual flow mapping.
-
-## License
-
-MIT
+**DorumDorum** - 기숙사 룸메이트 찾기의 새로운 경험 🏠✨
