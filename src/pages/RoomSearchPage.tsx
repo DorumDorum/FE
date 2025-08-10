@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, Plus, Bell } from 'lucide-react'
+import { Bell, Home, Users, MessageCircle, Menu, Search, Plus } from 'lucide-react'
 import RoomCard from '@/components/room/RoomCard'
 import CreateRoomPage from './CreateRoomPage'
 import ApplyRoomPage from './ApplyRoomPage'
@@ -180,24 +180,24 @@ const RoomSearchPage = () => {
         </div>
       </main>
 
-      {/* 하단 네비게이션 */}
+      {/* 하단 네비게이션 바 */}
       <nav className="bg-[#fcb44e] h-15 px-4 py-2 flex-shrink-0">
         <div className="flex items-center justify-around">
           <button className="flex flex-col items-center space-y-1">
-            <div className="w-6 h-6 bg-white rounded"></div>
+            <Home className="w-6 h-6 text-white" />
             <span className="text-white text-xs">방 찾기</span>
           </button>
           <button className="flex flex-col items-center space-y-1">
-            <div className="w-6 h-6 bg-white rounded"></div>
+            <Users className="w-6 h-6 text-black" />
             <span className="text-black text-xs">룸메 찾기</span>
           </button>
           <button className="flex flex-col items-center space-y-1 relative">
-            <div className="w-6 h-6 bg-white rounded"></div>
+            <MessageCircle className="w-6 h-6 text-black" />
             <span className="text-black text-xs">채팅</span>
             <span className="absolute -top-1 -right-1 bg-red-500 w-2 h-2 rounded-full"></span>
           </button>
           <button className="flex flex-col items-center space-y-1">
-            <div className="w-6 h-6 bg-white rounded"></div>
+            <Menu className="w-6 h-6 text-black" />
             <span className="text-black text-xs">마이페이지</span>
           </button>
         </div>
