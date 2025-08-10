@@ -1,0 +1,17 @@
+node_modules/
+.cursor/
+dist/
+docs/
+src/cursor_mcp_plugin/
+src/talk_to_figma_mcp/
+
+# Cursor related files
+.cursor/
+.cursorrules
+cursor.json
+*.cursor
+.cursor-*
+cursor_*
+
+# Build configs for other projects
+tsup.config.ts
