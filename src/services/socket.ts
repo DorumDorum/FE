@@ -103,18 +103,7 @@ const server = Bun.serve({
             channel: channelName
           }));
 
-          console.log("Sending message to client:", data.id);
-
-          ws.send(JSON.stringify({
-            type: "system",
-            message: {
-              id: data.id,
-              result: "Connected to channel: " + channelName,
-            },
-            channel: channelName
-          }));
-
-          // Notify other clients in channel
+          // Notify other clients in same channel
           channelClients.forEach((client) => {
             if (client !== ws && client.readyState === WebSocket.OPEN) {
               client.send(JSON.stringify({
@@ -124,13 +113,47 @@ const server = Bun.serve({
               }));
             }
           });
-          return;
-        }
 
-        // Handle regular messages
-        if (data.type === "message") {
+        } else if (data.type === "message") {
           const channelName = data.channel;
-          if (!channelName || typeof channelName !== "string") {
+          const message = data.message;
+          const sender = data.sender;
+
+          if (!channelName || !message || !sender) {
+            ws.send(JSON.stringify({
+              type: "error",
+              message: "Channel, message, and sender are required"
+            }));
+            return;
+          }
+
+          const channelClients = channels.get(channelName);
+          if (!channelClients) {
+            ws.send(JSON.stringify({
+              type: "error",
+              message: "Channel not found"
+            }));
+            return;
+          }
+
+          // Broadcast message to all clients in the channel
+          const messageData = {
+            type: "message",
+            channel: channelName,
+            message: message,
+            sender: sender,
+            timestamp: new Date().toISOString()
+          };
+
+          channelClients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify(messageData));
+            }
+          });
+
+        } else if (data.type === "leave") {
+          const channelName = data.channel;
+          if (!channelName) {
             ws.send(JSON.stringify({
               type: "error",
               message: "Channel name is required"
@@ -139,38 +162,74 @@ const server = Bun.serve({
           }
 
           const channelClients = channels.get(channelName);
-          if (!channelClients || !channelClients.has(ws)) {
-            ws.send(JSON.stringify({
-              type: "error",
-              message: "You must join the channel first"
-            }));
-            return;
+          if (channelClients) {
+            channelClients.delete(ws);
+
+            // Notify other clients in same channel
+            channelClients.forEach((client) => {
+              if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                  type: "system",
+                  message: "A user has left the channel",
+                  channel: channelName
+                }));
+              }
+            });
+
+            // Remove empty channels
+            if (channelClients.size === 0) {
+              channels.delete(channelName);
+            }
           }
 
-          // Broadcast to all clients in the channel
-          channelClients.forEach((client) => {
+          ws.send(JSON.stringify({
+            type: "system",
+            message: `Left channel: ${channelName}`,
+            channel: channelName
+          }));
+
+        } else {
+          ws.send(JSON.stringify({
+            type: "error",
+            message: "Unknown message type"
+          }));
+        }
+
+      } catch (error) {
+        console.error("Error processing message:", error);
+        ws.send(JSON.stringify({
+          type: "error",
+          message: "Invalid message format"
+        }));
+      }
+    },
+    close(ws: ServerWebSocket<any>) {
+      console.log("Client disconnected");
+
+      // Remove client from their channel
+      channels.forEach((clients, channelName) => {
+        if (clients.has(ws)) {
+          clients.delete(ws);
+
+          // Notify other clients in same channel
+          clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
-              console.log("Broadcasting message to client:", data.message);
               client.send(JSON.stringify({
-                type: "broadcast",
-                message: data.message,
-                sender: client === ws ? "You" : "User",
+                type: "system",
+                message: "A user has left the channel",
                 channel: channelName
               }));
             }
           });
+
+          // Remove empty channels
+          if (clients.size === 0) {
+            channels.delete(channelName);
+          }
         }
-      } catch (err) {
-        console.error("Error handling message:", err);
-      }
-    },
-    close(ws: ServerWebSocket<any>) {
-      // Remove client from their channel
-      channels.forEach((clients) => {
-        clients.delete(ws);
       });
-    }
-  }
+    },
+  },
 });
 
 console.log(`WebSocket server running on port ${server.port}`);
