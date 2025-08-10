@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import Layout from '@/components/layout/Layout'
 import HomePage from '@/pages/HomePage'
+import RoomSearchPage from '@/pages/RoomSearchPage'
 import DashboardPage from '@/pages/dashboard/DashboardPage'
 import ProfilePage from '@/pages/profile/ProfilePage'
 import SettingsPage from '@/pages/settings/SettingsPage'
@@ -11,10 +12,11 @@ import ProtectedRoute from '@/components/common/ProtectedRoute'
 
 function App() {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="h-screen bg-white">
       <Routes>
         {/* 공개 라우트 */}
         <Route path="/" element={<HomePage />} />
+        <Route path="/rooms" element={<RoomSearchPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         

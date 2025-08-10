@@ -22,7 +22,7 @@ export const useAuth = () => {
     setLoading(false)
   }, [])
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, _password: string) => {
     try {
       // 실제로는 API 호출
       const mockUser: User = {
@@ -39,7 +39,7 @@ export const useAuth = () => {
     }
   }
 
-  const register = async (name: string, email: string, password: string) => {
+  const register = async (name: string, email: string, _password: string) => {
     try {
       // 실제로는 API 호출
       const mockUser: User = {

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { User, Mail, Camera } from 'lucide-react'
+import { User, Camera } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const ProfilePage = () => {

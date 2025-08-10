@@ -1,20 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
 @layer base {
   html {
     font-family: 'Inter', system-ui, sans-serif;
+    background: white;
   }
   
   body {
-    @apply bg-gray-50 text-gray-900;
+    @apply bg-white text-gray-900;
   }
   
   * {
     @apply border-gray-200;
+  }
+
+  /* 모바일 앱 스타일 */
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: white;
+  }
+
+  #root {
+    height: 100vh;
+    max-width: 100%;
+    margin: 0 auto;
+    background: white;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* 데스크톱에서 모바일 프리뷰 */
+  @media (min-width: 768px) {
+    body {
+      background: white;
+      padding: 0;
+      overflow: auto;
+    }
+    
+    #root {
+      max-width: 390px;
+      height: 100vh;
+      border-radius: 0;
+      box-shadow: none;
+      margin: 0 auto;
+      overflow: hidden;
+    }
+  }
+
+  /* 모바일에서 전체 화면 */
+  @media (max-width: 767px) {
+    #root {
+      width: 100%;
+      max-width: none;
+    }
   }
 }
 

@@ -3,7 +3,7 @@ import { ArrowRight, Smartphone, Zap, Shield } from 'lucide-react'
 
 const HomePage = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-blue-50">
+    <div className="h-screen bg-gradient-to-br from-primary-50 to-blue-50 flex flex-col overflow-hidden">
       {/* 헤더 */}
       <header className="bg-white/80 backdrop-blur-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -28,7 +28,7 @@ const HomePage = () => {
       </header>
 
       {/* 메인 콘텐츠 */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* 히어로 섹션 */}
         <div className="text-center mb-16">
           <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
@@ -43,17 +43,17 @@ const HomePage = () => {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
-              to="/register"
+              to="/rooms"
               className="bg-primary-600 text-white px-8 py-3 rounded-lg text-lg font-medium hover:bg-primary-700 transition-colors"
             >
-              시작하기
+              방 찾기 시작하기
               <ArrowRight className="inline ml-2 h-5 w-5" />
             </Link>
             <Link
-              to="/login"
+              to="/register"
               className="border border-gray-300 text-gray-700 px-8 py-3 rounded-lg text-lg font-medium hover:bg-gray-50 transition-colors"
             >
-              로그인
+              회원가입
             </Link>
           </div>
         </div>
