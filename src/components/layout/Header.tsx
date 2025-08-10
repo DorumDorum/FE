@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Menu, X, Bell, User } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import logo from '@/assets/images/logo.svg'
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -13,8 +14,15 @@ const Header = () => {
         <div className="flex justify-between items-center h-16">
           {/* 로고 */}
           <div className="flex items-center">
-            <Link to="/" className="text-xl font-bold text-primary-600">
-              DorumDorum
+            <Link to="/" className="flex items-center">
+              <img 
+                src={logo} 
+                alt="DorumDorum" 
+                className="h-8 w-8 object-cover rounded-lg"
+              />
+              <span className="ml-2 text-xl font-bold text-primary-600">
+                DorumDorum
+              </span>
             </Link>
           </div>
 

@@ -2,12 +2,17 @@ import { useState } from 'react'
 import { Search, Plus, Bell } from 'lucide-react'
 import RoomCard from '@/components/room/RoomCard'
 import CreateRoomPage from './CreateRoomPage'
+import ApplyRoomPage from './ApplyRoomPage'
+import ChatRequestPage from './ChatRequestPage'
 import { Room } from '@/types/room'
 import toast from 'react-hot-toast'
 
 const RoomSearchPage = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [showCreateRoom, setShowCreateRoom] = useState(false)
+  const [showApplyRoom, setShowApplyRoom] = useState(false)
+  const [showChatRequest, setShowChatRequest] = useState(false)
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
   const [rooms] = useState<Room[]>([
     {
       id: '1',
@@ -83,12 +88,20 @@ const RoomSearchPage = () => {
     }
   ])
 
-  const handleChatRequest = (_roomId: string) => {
-    toast.success('채팅 요청이 전송되었습니다!')
+  const handleChatRequest = (roomId: string) => {
+    const room = rooms.find(r => r.id === roomId)
+    if (room) {
+      setSelectedRoom(room)
+      setShowChatRequest(true)
+    }
   }
 
-  const handleApply = (_roomId: string) => {
-    toast.success('지원이 완료되었습니다!')
+  const handleApply = (roomId: string) => {
+    const room = rooms.find(r => r.id === roomId)
+    if (room) {
+      setSelectedRoom(room)
+      setShowApplyRoom(true)
+    }
   }
 
   const handleCreateRoom = () => {
@@ -101,8 +114,9 @@ const RoomSearchPage = () => {
       <header className="bg-[#fcb44e] h-15 px-4 py-3 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gray-300 rounded-full"></div>
-            <span className="text-white font-medium">DorumDorum</span>
+            <div className="w-10 h-10 bg-orange-400 flex items-center justify-center">
+              <img src="/src/assets/images/logo.svg" alt="DorumDorum Logo" className="w h" />
+            </div>
           </div>
           <div className="flex items-center space-x-3">
             <div className="relative">
@@ -192,6 +206,39 @@ const RoomSearchPage = () => {
       {/* 방 만들기 모달 */}
       {showCreateRoom && (
         <CreateRoomPage onClose={() => setShowCreateRoom(false)} />
+      )}
+
+      {/* 지원서 모달 */}
+      {showApplyRoom && selectedRoom && (
+        <ApplyRoomPage 
+          onClose={() => {
+            setShowApplyRoom(false)
+            setSelectedRoom(null)
+          }}
+          roomInfo={{
+            title: selectedRoom.title,
+            dormitory: selectedRoom.title,
+            roomType: selectedRoom.roomType,
+            description: selectedRoom.description
+          }}
+        />
+      )}
+
+      {/* 채팅 요청 모달 */}
+      {showChatRequest && selectedRoom && (
+        <ChatRequestPage 
+          onClose={() => {
+            setShowChatRequest(false)
+            setSelectedRoom(null)
+          }}
+          roomInfo={{
+            title: selectedRoom.title,
+            dormitory: selectedRoom.title,
+            roomType: selectedRoom.roomType,
+            description: selectedRoom.description,
+            hostName: selectedRoom.hostName
+          }}
+        />
       )}
     </div>
   )

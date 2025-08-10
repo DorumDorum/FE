@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, Smartphone, Zap, Shield } from 'lucide-react'
+import logo from '@/assets/images/logo.svg'
 
 const HomePage = () => {
   return (
@@ -8,7 +9,16 @@ const HomePage = () => {
       <header className="bg-white/80 backdrop-blur-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="text-xl font-bold text-primary-600">DorumDorum</div>
+            <div className="flex items-center">
+              <img 
+                src={logo} 
+                alt="DorumDorum" 
+                className="h-8 w-8 object-cover rounded-lg"
+              />
+              <span className="ml-2 text-xl font-bold text-primary-600">
+                DorumDorum
+              </span>
+            </div>
             <div className="flex space-x-4">
               <Link
                 to="/login"
