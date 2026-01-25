@@ -1623,7 +1623,6 @@ const MyRoomPage = () => {
               <button
                 onClick={() => {
                   // TODO: 지원자 거절 API 호출
-                  toast.success(`${applicantToReject.name}님의 지원을 거절했습니다.`)
                   setApplicantToReject(null)
                 }}
                 className="flex-1 px-4 py-3 text-sm font-semibold text-red-600 bg-[#FEDCDC] rounded-xl hover:bg-[#FED0D0] transition-colors"
