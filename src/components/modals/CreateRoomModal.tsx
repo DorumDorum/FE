@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, User, Edit3, Tag, MessageCircle, Phone, Calendar } from 'lucide-react'
+import { X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface CreateRoomModalProps {
   onClose: () => void
+  onCreated?: () => void
 }
 
-const CreateRoomModal = ({ onClose }: CreateRoomModalProps) => {
+const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
   const [formData, setFormData] = useState({
     title: '',
     roomType: '',
@@ -16,7 +17,6 @@ const CreateRoomModal = ({ onClose }: CreateRoomModalProps) => {
   })
   
   const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const [customTag, setCustomTag] = useState('')
   
   // 드래그 관련 상태
   const [isDragging, setIsDragging] = useState(false)
@@ -25,12 +25,72 @@ const CreateRoomModal = ({ onClose }: CreateRoomModalProps) => {
   const startY = useRef(0)
   const currentY = useRef(0)
 
-  const availableTags = ['조용함', '깔끔함', '친구같은', '활발함', '게임', '밤샘', '운동', '건강', '요리', '맛집', '독서', '토론']
+  const availableTags = ['운동', '비흡연', '조용한', '새벽형', '아침형', '갓생', '늦잠']
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const mapRoomTypeToApi = (type: string) => {
+    switch (type) {
+      case '1 기숙사':
+        return 'ROOM_A'
+      case '2 기숙사':
+        return 'ROOM_B'
+      case '3 기숙사':
+        return 'ROOM_C'
+      default:
+        return undefined
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    toast.success('방이 생성되었습니다!')
-    onClose()
+    const token = localStorage.getItem('accessToken')
+    if (!token) {
+      toast.error('로그인이 필요합니다.')
+      return
+    }
+
+    const roomType = mapRoomTypeToApi(formData.roomType)
+    const capacity = Number(formData.capacity)
+    if (!roomType) {
+      toast.error('방 타입을 선택해주세요.')
+      return
+    }
+    if (Number.isNaN(capacity)) {
+      toast.error('수용 인원을 선택해주세요.')
+      return
+    }
+
+    try {
+      const res = await fetch('http://localhost:8080/api/rooms', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomType,
+          capacity,
+          title: formData.title.trim(),
+          tags: selectedTags,
+        }),
+      })
+
+      if (res.status === 401) {
+        toast.error('로그인이 필요합니다.')
+        return
+      }
+
+      if (!res.ok) {
+        throw new Error('방 생성에 실패했습니다.')
+      }
+
+      toast.success('방이 생성되었습니다!')
+      onCreated?.()
+      onClose()
+    } catch (error) {
+      console.error('[rooms] create error', error)
+      toast.error('방 생성에 실패했습니다.')
+    }
   }
 
   const handleTagToggle = (tag: string) => {
@@ -38,13 +98,6 @@ const CreateRoomModal = ({ onClose }: CreateRoomModalProps) => {
       setSelectedTags(selectedTags.filter(t => t !== tag))
     } else {
       setSelectedTags([...selectedTags, tag])
-    }
-  }
-
-  const handleAddCustomTag = () => {
-    if (customTag.trim() && !selectedTags.includes(customTag.trim())) {
-      setSelectedTags([...selectedTags, customTag.trim()])
-      setCustomTag('')
     }
   }
 
@@ -187,10 +240,9 @@ const CreateRoomModal = ({ onClose }: CreateRoomModalProps) => {
               required
             >
               <option value="">방 타입을 선택하세요</option>
-              <option value="2인실">2인실</option>
-              <option value="3인실">3인실</option>
-              <option value="4인실">4인실</option>
-              <option value="6인실">6인실</option>
+              <option value="1 기숙사">1 기숙사</option>
+              <option value="2 기숙사">2 기숙사</option>
+              <option value="3 기숙사">3 기숙사</option>
             </select>
           </div>
 
@@ -199,16 +251,17 @@ const CreateRoomModal = ({ onClose }: CreateRoomModalProps) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               수용 인원
             </label>
-            <input
-              type="number"
+            <select
               value={formData.capacity}
               onChange={(e) => setFormData(prev => ({ ...prev, capacity: e.target.value }))}
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-black"
-              placeholder="수용 인원을 입력하세요"
-              min="1"
-              max="10"
               required
-            />
+            >
+              <option value="">수용 인원을 선택하세요</option>
+              <option value="2">2명</option>
+              <option value="4">4명</option>
+              <option value="6">6명</option>
+            </select>
           </div>
 
           {/* 방 설명 */}
@@ -248,53 +301,7 @@ const CreateRoomModal = ({ onClose }: CreateRoomModalProps) => {
                 </button>
               ))}
             </div>
-            
-            {/* 커스텀 태그 추가 */}
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                value={customTag}
-                onChange={(e) => setCustomTag(e.target.value)}
-                className="flex-1 p-2 border border-gray-300 rounded-lg text-sm text-black"
-                placeholder="커스텀 태그"
-                disabled={selectedTags.length >= 5}
-              />
-              <button
-                type="button"
-                onClick={handleAddCustomTag}
-                className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300"
-                disabled={!customTag.trim() || selectedTags.length >= 5}
-              >
-                추가
-              </button>
-            </div>
           </div>
-
-          {/* 선택된 태그 표시 */}
-          {selectedTags.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                선택된 태그
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {selectedTags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="bg-orange-200 text-orange-800 text-xs px-2 py-1 rounded-full flex items-center"
-                  >
-                    {tag}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTag(tag)}
-                      className="ml-1 text-orange-600 hover:text-orange-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* 버튼 */}
           <div className="flex space-x-3 pt-4">

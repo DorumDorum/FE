@@ -9,7 +9,7 @@ interface ExtendedRoomCardProps extends RoomCardProps {
 
 const RoomCard = ({ room, onChatRequest, onApply, onLeave, showButtons = true, isApplied = false, isJoined = false }: ExtendedRoomCardProps) => {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4" style={{
+    <div className="bg-white border border-gray-200 rounded-lg p-4 animate-slide-up" style={{
       boxShadow: '0px 4px 6px 0px rgba(0, 0, 0, 0.15), 0px 2px 4px 0px rgba(0, 0, 0, 0.25)'
     }}>
       {/* 헤더 */}
@@ -56,13 +56,13 @@ const RoomCard = ({ room, onChatRequest, onApply, onLeave, showButtons = true, i
               나가기
             </button>
           ) : (
-            // 일반 방: 채팅 요청과 지원/취소 버튼
+            // 일반 방: 문의하기와 지원/취소 버튼
             <>
               <button
                 onClick={() => onChatRequest(room.id)}
                 className="border border-gray-300 text-black text-xs px-4 py-2 rounded font-normal"
               >
-                채팅 요청
+                문의하기
               </button>
               <button
                 onClick={() => onApply(room.id)}

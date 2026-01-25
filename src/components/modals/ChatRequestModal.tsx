@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, MessageCircle } from 'lucide-react'
+import { X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface ChatRequestModalProps {
@@ -27,7 +27,7 @@ const ChatRequestModal = ({ onClose, roomInfo }: ChatRequestModalProps) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    toast.success('채팅 요청이 전송되었습니다!')
+    toast.success('문의가 전송되었습니다!')
     onClose()
   }
 
@@ -132,7 +132,7 @@ const ChatRequestModal = ({ onClose, roomInfo }: ChatRequestModalProps) => {
         
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-6 sticky top-0 bg-white pt-2">
-          <h2 className="text-xl font-bold text-black">채팅 요청</h2>
+          <h2 className="text-xl font-bold text-black">문의하기</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -163,7 +163,7 @@ const ChatRequestModal = ({ onClose, roomInfo }: ChatRequestModalProps) => {
               onChange={(e) => setFormData(prev => ({ ...prev, message: e.target.value }))}
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-black"
               rows={4}
-              placeholder="채팅을 요청하는 이유나 인사말을 적어주세요"
+              placeholder="문의 내용을 적어주세요"
             />
           </div>
 
