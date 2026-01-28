@@ -47,9 +47,13 @@ const RoomGatePage = () => {
           throw new Error('서버 응답(JSON)을 파싱하지 못했습니다.')
         }
 
+        // CheckMyRoomController response body 그대로 로그
+        console.log('[CheckMyRoom] raw response body:', data)
+
         const payload = data?.result ?? data?.data ?? data
         if (payload?.isExist) {
-          navigate('/rooms/me', { replace: true })
+          const roomNo = payload?.roomNo
+          navigate('/rooms/me', { replace: true, state: { roomNo } })
           return
         }
         navigate('/rooms/search', { replace: true })

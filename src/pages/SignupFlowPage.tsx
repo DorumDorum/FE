@@ -217,15 +217,15 @@ const SignupFlowPage = () => {
         <div className="max-w-sm w-full mx-auto flex-1 flex flex-col">
           <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4 px-6">
             <p className="text-lg font-bold text-black">회원가입이 완료되었습니다!</p>
-            <p className="text-base font-medium text-black">함께할 룸메이트를 만나러 가볼까요?</p>
+            <p className="text-base font-medium text-black">로그인 후 룸메이트를 만나러 가볼까요?</p>
           </div>
           <div className="sticky bottom-0 bg-white px-6 pb-10 pt-3 max-w-sm w-full mx-auto">
             <button
               type="button"
-              onClick={() => navigate('/rooms', { replace: true })}
+              onClick={() => navigate('/login', { replace: true })}
               className="w-full py-4 rounded-xl text-base font-semibold shadow-sm transition bg-[#fcb44e] text-white active:scale-[0.99]"
             >
-              시작하기
+              로그인하러 가기
             </button>
           </div>
         </div>

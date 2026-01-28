@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Bell, Home, Users, MessageCircle, Menu, Share2, Pencil, Settings, DoorOpen } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -48,6 +48,30 @@ const MyRoomPage = () => {
     items: ChecklistItem[]
   }
 
+  // BE 룰 조회 응답 타입
+  type RuleItemCategory = 'BASIC_INFO' | 'LIFESTYLE_PATTERN' | 'ADDITIONAL_RULES'
+  type RuleItemType = 'VALUE' | 'OPTION'
+
+  type ApiRoomRule = {
+    otherNotes: string | null
+    categories: {
+      category: RuleItemCategory
+      items: {
+        label: string
+        itemType: RuleItemType
+        value: string | null
+        extraValue: string | null
+        options: {
+          text: string
+          selected: boolean
+        }[] | null
+      }[]
+    }[]
+  }
+
+  const location = useLocation()
+  const roomNoFromState = (location.state as { roomNo?: string } | null | undefined)?.roomNo
+
   const [room, setRoom] = useState<ApiRoom | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'규칙' | '지원자' | '룸메이트'>('규칙')
@@ -63,191 +87,8 @@ const MyRoomPage = () => {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false) // 방 나가기 확인
   const [applicantToAccept, setApplicantToAccept] = useState<{ id: number; name: string } | null>(null)
   const [applicantToReject, setApplicantToReject] = useState<{ id: number; name: string } | null>(null)
-  const [otherNotes, setOtherNotes] = useState(
-    `모든 선택사항은 기숙사에 함께 있을 경우를 기준으로 체크했습니다. 혼자있을 때는
-환기만 잘 하면 취식 상관없습니다. 휴지통은 화장실에 공용으로 하나 두는 것도
-좋을 것 같습니다.(상의 후 결정) 냉장고 같이 대여하실 분 구해요. 친하게 지내는
-것도 좋지만 저는 기숙사에서는 온전히 개인의 휴식 시간을 갖는 것이 중요해서
-조용히 지낼 분이면 좋을 것 같습니다. 저랑 비슷한 생각 가지고 계신 분이 있다면
-연락주세요🙋‍♀️ 참고로 야식이나 배달은 선호하지 않고 함께 운동하는건 적극환영입니다`
-  )
-  const [checklistSections, setChecklistSections] = useState<ChecklistSection[]>([
-    {
-      title: '기본 정보',
-      items: [
-        {
-          label: '거주기간',
-          options: [
-            { text: '학기(16주)', selected: true },
-            { text: '반기(24주)' },
-            { text: '계절학기' },
-          ],
-        },
-        {
-          label: '생활관',
-          options: [
-            { text: '2', selected: true },
-            { text: '3' },
-            { text: '메디컬' },
-          ],
-        },
-      ],
-    },
-    {
-      title: '생활 패턴',
-      items: [
-        { label: '취침', value: '12-1' },
-        { label: '기상', value: '7-9' },
-        {
-          label: '귀가',
-          options: [
-            { text: '유동적', selected: true },
-            { text: '고정적' },
-          ],
-          extraValue: '',
-        },
-        {
-          label: '청소',
-          options: [
-            { text: '주기적' },
-            { text: '비주기적', selected: true },
-          ],
-        },
-        {
-          label: '방에서 전화',
-          options: [
-            { text: '가능' },
-            { text: '불가능', selected: true },
-          ],
-        },
-        {
-          label: '잠귀',
-          options: [
-            { text: '밝음', selected: true },
-            { text: '어두움' },
-          ],
-        },
-        {
-          label: '잠버릇',
-          options: [
-            { text: '심함' },
-            { text: '중간', selected: true },
-            { text: '약함' },
-          ],
-        },
-        {
-          label: '코골이',
-          options: [
-            { text: '심함' },
-            { text: '중간' },
-            { text: '약함~없음', selected: true },
-          ],
-        },
-        {
-          label: '샤워시간',
-          options: [
-            { text: '아침', selected: true },
-            { text: '저녁' },
-          ],
-        },
-        {
-          label: '방에서 취식',
-          options: [
-            { text: '가능' },
-            { text: '불가능', selected: true },
-            { text: '가능+환기필수' },
-          ],
-        },
-        {
-          label: '소등',
-          options: [
-            { text: '__시 이후' },
-            { text: '한명 잘 때 알아서', selected: true },
-          ],
-          extraValue: '',
-        },
-        {
-          label: '본가 주기',
-          options: [
-            { text: '매주' },
-            { text: '2주' },
-            { text: '한달이상', selected: true },
-            { text: '거의 안 감' },
-          ],
-        },
-        {
-          label: '흡연',
-          options: [
-            { text: '연초' },
-            { text: '전자담배' },
-            { text: '비흡연', selected: true },
-          ],
-        },
-        {
-          label: '냉장고',
-          options: [
-            { text: '대여·구매·보유', selected: true },
-            { text: '협의 후 결정' },
-            { text: '필요 없음' },
-          ],
-        },
-      ],
-    },
-    {
-      title: '추가 규칙',
-      items: [
-        {
-          label: '드라이기',
-          value: '12-7시만 피해 사용해 주면 좋을 것 같습니다.(불가피하게 사용해야한다면 화장실에서)',
-        },
-        {
-          label: '이어폰',
-          options: [
-            { text: '항상', selected: true },
-            { text: '유동적' },
-          ],
-        },
-        {
-          label: '키스킨',
-          options: [
-            { text: '항상' },
-            { text: '유동적', selected: true },
-          ],
-        },
-        {
-          label: '더위',
-          options: [
-            { text: '많이 탐' },
-            { text: '중간', selected: true },
-            { text: '적게 탐' },
-          ],
-        },
-        {
-          label: '추위',
-          options: [
-            { text: '많이 탐' },
-            { text: '중간', selected: true },
-            { text: '적게 탐' },
-          ],
-        },
-        {
-          label: '공부',
-          options: [
-            { text: '기숙사 밖' },
-            { text: '기숙사 안' },
-            { text: '유동적', selected: true },
-          ],
-        },
-        {
-          label: '쓰레기통',
-          options: [
-            { text: '개별', selected: true },
-            { text: '공유' },
-          ],
-        },
-      ],
-    },
-  ])
+  const [otherNotes, setOtherNotes] = useState('')
+  const [checklistSections, setChecklistSections] = useState<ChecklistSection[]>([])
 
   const mapApiRoomTypeToDisplay = (type: string) => {
     switch (type) {
@@ -351,6 +192,95 @@ const MyRoomPage = () => {
     fetchMyRoom()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 방 규칙 조회
+  useEffect(() => {
+    // CheckMyRoomController에서 내려준 roomNo(state)를 그대로 사용한다.
+    // state에 roomNo가 없으면 규칙 조회를 수행하지 않는다.
+    if (!roomNoFromState) return
+    const effectiveRoomNo = roomNoFromState
+
+    const fetchRoomRule = async () => {
+      try {
+        const token = localStorage.getItem('accessToken')
+        if (!token) {
+          toast.error('로그인이 필요합니다.')
+          navigate('/login', { replace: true })
+          return
+        }
+
+        const params = new URLSearchParams({ roomNo: effectiveRoomNo })
+        const res = await fetch(`http://localhost:8080/api/rooms/me/rule?${params.toString()}`, {
+          credentials: 'include',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+
+        if (res.status === 401) {
+          toast.error('로그인이 필요합니다.')
+          navigate('/login', { replace: true })
+          return
+        }
+
+        const contentType = res.headers.get('content-type') ?? ''
+        const rawBody = await res.text()
+        if (!res.ok) {
+          console.error('[rooms] my room rule fetch failed', {
+            status: res.status,
+            contentType,
+            body: rawBody,
+          })
+          throw new Error('방 규칙 정보를 불러오지 못했습니다.')
+        }
+
+        let data: any
+        try {
+          data = rawBody ? JSON.parse(rawBody) : null
+        } catch (e) {
+          console.error('[rooms] my room rule parse error', { contentType, rawBody }, e)
+          throw new Error('서버 응답(JSON)을 파싱하지 못했습니다.')
+        }
+
+        const payload: ApiRoomRule | null = data?.result ?? data?.data ?? data
+        if (!payload) return
+
+        // 비고
+        setOtherNotes(payload.otherNotes ?? '')
+
+        // 카테고리 → 섹션 매핑
+        const mappedSections: ChecklistSection[] = payload.categories.map((category) => {
+          const title =
+            category.category === 'BASIC_INFO'
+              ? '기본 정보'
+              : category.category === 'LIFESTYLE_PATTERN'
+                ? '생활 패턴'
+                : '추가 규칙'
+
+          return {
+            title,
+            items: category.items.map((item) => ({
+              label: item.label,
+              // VALUE 타입이면 value 사용, OPTION 타입이면 value는 사용하지 않음
+              value: item.itemType === 'VALUE' ? item.value ?? '' : undefined,
+              extraValue: item.extraValue ?? undefined,
+              options: item.options?.map((opt) => ({
+                text: opt.text,
+                selected: opt.selected,
+              })),
+            })),
+          }
+        })
+
+        setChecklistSections(mappedSections)
+      } catch (err) {
+        console.error('[rooms] my room rule fetch error', err)
+        toast.error('방 규칙 정보를 불러오지 못했습니다.')
+      }
+    }
+
+    void fetchRoomRule()
+  }, [roomNoFromState, navigate])
 
   useEffect(() => {
     const fetchRoommates = async () => {
@@ -823,9 +753,9 @@ const MyRoomPage = () => {
                     label: '학번(학년)', 
                     value: applicant.id === 1 ? '21학번 (3학년)' : '22학번 (2학년)'
                   },
-                  { 
-                    label: '나이(만)', 
-                    value: applicant.id === 1 ? '23세' : '22세'
+                  {
+                    label: '나이(만)',
+                    value: applicant.id === 1 ? '23세' : '22세',
                   },
                   {
                     label: '거주기간',
@@ -1121,14 +1051,14 @@ const MyRoomPage = () => {
             </h3>
             {isHost ? (
               <div className="flex gap-2">
-                <button 
-                  onClick={() => setShowRoommateSettings(!showRoommateSettings)}
-                  className={`p-2 rounded-lg transition-colors ${
+              <button 
+                onClick={() => setShowRoommateSettings(!showRoommateSettings)}
+                className={`p-2 rounded-lg transition-colors ${
                     showRoommateSettings ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  <Settings className="w-5 h-5" />
-                </button>
+                }`}
+              >
+                <Settings className="w-5 h-5" />
+              </button>
                 {roommates.length === 1 && (
                   <button 
                     onClick={() => setShowLeaveConfirm(true)}
