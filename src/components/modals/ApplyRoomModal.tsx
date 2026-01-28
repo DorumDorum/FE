@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, User, Edit3, Tag, MessageCircle, Phone, Calendar } from 'lucide-react'
+import { X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface ApplyRoomModalProps {
