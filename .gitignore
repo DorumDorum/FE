@@ -15,3 +15,4 @@ cursor_*
 
 # Build configs for other projects
 tsup.config.ts
+.env
