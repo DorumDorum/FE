@@ -32,7 +32,7 @@ const BottomNavigationBar = () => {
     return `w-6 h-6 ${active ? 'text-[#3072E1]' : 'text-gray-600'}`
   }
 
-  const getButtonClass = (path: string) => {
+  const getButtonClass = () => {
     return `flex items-center justify-center`
   }
 

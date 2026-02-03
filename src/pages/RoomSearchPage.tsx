@@ -40,7 +40,7 @@ const RoomSearchPage = () => {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
-  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false) // 안 읽은 알람 여부
+  const [hasUnreadNotifications] = useState(false) // 안 읽은 알람 여부
   const [activeTab, setActiveTab] = useState<'recruiting' | 'applied' | 'joined'>('recruiting')
   
   // 체크리스트 섹션 정의 (CreateRoomModal과 동일한 구조)
@@ -416,7 +416,7 @@ const RoomSearchPage = () => {
     const diffMs = now.getTime() - target.getTime()
     const diffMin = Math.floor(diffMs / 60000)
     const diffHour = Math.floor(diffMin / 60)
-    const diffDay = Math.floor(diffHour / 24)
+    // const diffDay = Math.floor(diffHour / 24) // 사용되지 않음
 
     if (diffMin < 1) return '방금 전'
     if (diffMin < 60) return `${diffMin}분 전`

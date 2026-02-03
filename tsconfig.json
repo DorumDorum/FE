@@ -27,6 +27,6 @@
     }
   },
   "include": ["src"],
-  "exclude": ["src/socket.ts", "src/talk_to_figma_mcp", "src/cursor_mcp_plugin"],
+  "exclude": ["src/services/socket.ts", "src/talk_to_figma_mcp", "src/cursor_mcp_plugin"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

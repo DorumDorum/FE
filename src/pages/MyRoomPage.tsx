@@ -88,7 +88,7 @@ const MyRoomPage = () => {
   const [expandedApplicantIds, setExpandedApplicantIds] = useState<Set<number>>(new Set())
   const [roommateChecklists, setRoommateChecklists] = useState<Record<number, any>>({})
   const [roommateProfiles, setRoommateProfiles] = useState<Record<number, any>>({})
-  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false) // 안 읽은 알람 여부
+  const [hasUnreadNotifications] = useState(false) // 안 읽은 알람 여부
   const [showRoommateSettings, setShowRoommateSettings] = useState(false) // 룸메이트 설정 드롭다운
   const [roommateToRemove, setRoommateToRemove] = useState<{ roommateNo: number; name: string } | null>(null)
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false) // 방 나가기 확인
@@ -148,23 +148,23 @@ const MyRoomPage = () => {
     }
   }
 
-  const formatRelativeTime = (iso?: string): string => {
-    if (!iso) return ''
-    const now = new Date()
-    const target = new Date(iso)
-    const diffMs = now.getTime() - target.getTime()
-    const diffMin = Math.floor(diffMs / 60000)
-    const diffHour = Math.floor(diffMin / 60)
+  // const formatRelativeTime = (iso?: string): string => {
+  //   if (!iso) return ''
+  //   const now = new Date()
+  //   const target = new Date(iso)
+  //   const diffMs = now.getTime() - target.getTime()
+  //   const diffMin = Math.floor(diffMs / 60000)
+  //   const diffHour = Math.floor(diffMin / 60)
 
-    if (diffMin < 1) return '방금 전'
-    if (diffMin < 60) return `${diffMin}분 전`
-    if (diffHour < 24) return `${diffHour}시간 전`
+  //   if (diffMin < 1) return '방금 전'
+  //   if (diffMin < 60) return `${diffMin}분 전`
+  //   if (diffHour < 24) return `${diffHour}시간 전`
 
-    const y = target.getFullYear()
-    const m = String(target.getMonth() + 1).padStart(2, '0')
-    const d = String(target.getDate()).padStart(2, '0')
-    return `${y}-${m}-${d}`
-  }
+  //   const y = target.getFullYear()
+  //   const m = String(target.getMonth() + 1).padStart(2, '0')
+  //   const d = String(target.getDate()).padStart(2, '0')
+  //   return `${y}-${m}-${d}`
+  // }
 
   useEffect(() => {
     const fetchMyRoom = async () => {
@@ -381,29 +381,29 @@ const MyRoomPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const mapRoomRoleToDisplay = (role?: string) => {
-    switch (role) {
-      case 'HOST':
-        return '방장'
-      case 'MATE':
-        return '룸메'
-      default:
-        return role || '룸메'
-    }
-  }
+  // const mapRoomRoleToDisplay = (role?: string) => {
+  //   switch (role) {
+  //     case 'HOST':
+  //       return '방장'
+  //     case 'MATE':
+  //       return '룸메'
+  //     default:
+  //       return role || '룸메'
+  //   }
+  // }
 
-  const mapConfirmStatusToDisplay = (status?: string) => {
-    switch (status) {
-      case 'ACCEPTED':
-        return '확정'
-      case 'PENDING':
-        return '대기'
-      case 'REJECTED':
-        return '거절'
-      default:
-        return status || '대기'
-    }
-  }
+  // const mapConfirmStatusToDisplay = (status?: string) => {
+  //   switch (status) {
+  //     case 'ACCEPTED':
+  //       return '확정'
+  //     case 'PENDING':
+  //       return '대기'
+  //     case 'REJECTED':
+  //       return '거절'
+  //     default:
+  //       return status || '대기'
+  //   }
+  // }
 
   const updateChecklistValue = (sectionIndex: number, itemIndex: number, value: string) => {
     setChecklistSections((prev) =>
@@ -479,7 +479,7 @@ const MyRoomPage = () => {
   const displayCapacity = room ? `${room.capacity}인실` : ''
   const displayMembers = room ? `${room.currentMateCount}/${room.capacity}명` : ''
   const displayStatus = room ? mapApiStatusToDisplay(room.roomStatus) : ''
-  const displayCreatedAt = room ? formatRelativeTime(room.createdAt) : ''
+  // const displayCreatedAt = room ? formatRelativeTime(room.createdAt) : '' // 사용되지 않음
   const displayResidencePeriod = room ? mapResidencePeriodToDisplay(room.residencePeriod) : ''
   
   // 자신의 confirmStatus 찾기

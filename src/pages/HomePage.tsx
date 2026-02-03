@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, Share2, Calendar, ChevronRight, ChevronLeft, Menu } from 'lucide-react'
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, getDay, addMonths, subMonths, isSameDay as isSameDayCheck } from 'date-fns'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, getDay, addMonths, subMonths } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import BottomNavigationBar from '@/components/ui/BottomNavigationBar'
 
@@ -10,7 +10,7 @@ const HomePage = () => {
   const [hasRoom, setHasRoom] = useState<boolean | null>(null)
   const [room, setRoom] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false)
+  const [hasUnreadNotifications] = useState(false)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [calendarEvents, setCalendarEvents] = useState<Array<{ date: Date; title: string }>>([])
   const [loadingCalendar, setLoadingCalendar] = useState(false)

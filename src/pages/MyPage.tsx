@@ -537,20 +537,20 @@ const MyPage = () => {
             if (section.title === '기본 정보' || section.title === '생활 패턴') {
               // 이미 선택된 옵션을 다시 클릭하면 선택 해제
               if (isCurrentlySelected) {
-                return {
-                  ...item,
-                  options: item.options.map((option, oIdx) => ({
-                    ...option,
-                    selected: false,
-                  })),
-                }
+              return {
+                ...item,
+                options: item.options.map((option) => ({
+                  ...option,
+                  selected: false,
+                })),
+              }
               }
               // 새로운 옵션 선택
               return {
                 ...item,
-                options: item.options.map((option, oIdx) => ({
+                options: item.options.map((option, idx) => ({
                   ...option,
-                  selected: oIdx === optionIndex,
+                  selected: idx === optionIndex,
                 })),
               }
             }
@@ -558,9 +558,9 @@ const MyPage = () => {
             // 추가 규칙은 토글 방식
             return {
               ...item,
-              options: item.options.map((option, oIdx) => ({
+              options: item.options.map((option, idx) => ({
                 ...option,
-                selected: oIdx === optionIndex ? !option.selected : option.selected,
+                selected: idx === optionIndex ? !option.selected : option.selected,
               })),
             }
           }),
