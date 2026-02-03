@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, Home, Users, MessageCircle, Menu, Search, Plus, Filter } from 'lucide-react'
+import { Bell, Search, Plus, Filter } from 'lucide-react'
+import BottomNavigationBar from '@/components/ui/BottomNavigationBar'
 import RoomCard from '@/components/room/RoomCard'
 import CreateRoomModal from '@/components/modals/CreateRoomModal'
 import ApplyRoomModal from '@/components/modals/ApplyRoomModal'
@@ -22,15 +23,16 @@ const RoomSearchPage = () => {
     hostNickname: string
     additionalTag: string[]
     roomStatus: string
+    residencePeriod?: string // 거주기간
   }
 
   const [searchQuery, setSearchQuery] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState({
-    tags: [] as string[],
     roomType: '',
     roomSize: '',
     sort: 'recent' as 'recent' | 'capacity' | 'remaining',
+    checklist: {} as Record<string, string[]>, // 체크리스트 항목별 선택된 옵션들
   })
   const [showCreateRoom, setShowCreateRoom] = useState(false)
   const [showApplyRoom, setShowApplyRoom] = useState(false)
@@ -40,7 +42,220 @@ const RoomSearchPage = () => {
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false) // 안 읽은 알람 여부
   const [activeTab, setActiveTab] = useState<'recruiting' | 'applied' | 'joined'>('recruiting')
-  const availableTags = ['운동', '비흡연', '조용한', '새벽형', '아침형', '갓생', '늦잠']
+  
+  // 체크리스트 섹션 정의 (CreateRoomModal과 동일한 구조)
+  type ChecklistOption = {
+    text: string
+  }
+  
+  type ChecklistItem = {
+    label: string
+    value?: string
+    options?: ChecklistOption[]
+    extraValue?: string
+  }
+  
+  type ChecklistSection = {
+    title: string
+    category: 'BASIC_INFO' | 'LIFESTYLE_PATTERN' | 'ADDITIONAL_RULES'
+    items: ChecklistItem[]
+  }
+  
+  const checklistSections: ChecklistSection[] = [
+    {
+      title: '기본 정보',
+      category: 'BASIC_INFO',
+      items: [
+        {
+          label: '수용 인원',
+          options: [
+            { text: '2명' },
+            { text: '4명' },
+            { text: '6명' },
+          ],
+        },
+        {
+          label: '거주기간',
+          options: [
+            { text: '학기(16주)' },
+            { text: '반기(24주)' },
+            { text: '계절학기' },
+          ],
+        },
+        {
+          label: '생활관',
+          options: [
+            { text: '2' },
+            { text: '3' },
+            { text: '메디컬' },
+          ],
+        },
+      ],
+    },
+    {
+      title: '생활 패턴',
+      category: 'LIFESTYLE_PATTERN',
+      items: [
+        { label: '취침', value: '' },
+        { label: '기상', value: '' },
+        {
+          label: '귀가',
+          options: [
+            { text: '유동적' },
+            { text: '고정적' },
+          ],
+          extraValue: '',
+        },
+        {
+          label: '청소',
+          options: [
+            { text: '주기적' },
+            { text: '비주기적' },
+          ],
+        },
+        {
+          label: '방에서 전화',
+          options: [
+            { text: '가능' },
+            { text: '불가능' },
+          ],
+        },
+        {
+          label: '잠귀',
+          options: [
+            { text: '밝음' },
+            { text: '어두움' },
+          ],
+        },
+        {
+          label: '잠버릇',
+          options: [
+            { text: '심함' },
+            { text: '중간' },
+            { text: '약함' },
+          ],
+        },
+        {
+          label: '코골이',
+          options: [
+            { text: '심함' },
+            { text: '중간' },
+            { text: '약함~없음' },
+          ],
+        },
+        {
+          label: '샤워시간',
+          options: [
+            { text: '아침' },
+            { text: '저녁' },
+          ],
+        },
+        {
+          label: '방에서 취식',
+          options: [
+            { text: '가능' },
+            { text: '불가능' },
+            { text: '가능+환기필수' },
+          ],
+        },
+        {
+          label: '소등',
+          options: [
+            { text: '__시 이후' },
+            { text: '한명 잘 때 알아서' },
+          ],
+          extraValue: '',
+        },
+        {
+          label: '본가 주기',
+          options: [
+            { text: '매주' },
+            { text: '2주' },
+            { text: '한달이상' },
+            { text: '거의 안 감' },
+          ],
+        },
+        {
+          label: '흡연',
+          options: [
+            { text: '연초' },
+            { text: '전자담배' },
+            { text: '비흡연' },
+          ],
+        },
+        {
+          label: '냉장고',
+          options: [
+            { text: '대여·구매·보유' },
+            { text: '협의 후 결정' },
+            { text: '필요 없음' },
+          ],
+        },
+      ],
+    },
+    {
+      title: '추가 규칙',
+      category: 'ADDITIONAL_RULES',
+      items: [
+        {
+          label: '드라이기',
+          value: '',
+        },
+        {
+          label: '알람',
+          options: [
+            { text: '진동' },
+            { text: '소리' },
+          ],
+        },
+        {
+          label: '이어폰',
+          options: [
+            { text: '항상' },
+            { text: '유동적' },
+          ],
+        },
+        {
+          label: '키스킨',
+          options: [
+            { text: '항상' },
+            { text: '유동적' },
+          ],
+        },
+        {
+          label: '더위',
+          options: [
+            { text: '많이 탐' },
+            { text: '중간' },
+            { text: '적게 탐' },
+          ],
+        },
+        {
+          label: '추위',
+          options: [
+            { text: '많이 탐' },
+            { text: '중간' },
+            { text: '적게 탐' },
+          ],
+        },
+        {
+          label: '공부',
+          options: [
+            { text: '기숙사 밖' },
+            { text: '기숙사 안' },
+            { text: '유동적' },
+          ],
+        },
+        {
+          label: '쓰레기통',
+          options: [
+            { text: '개별' },
+            { text: '공유' },
+          ],
+        },
+      ],
+    },
+  ]
   
   const [recruitingRooms, setRecruitingRooms] = useState<Room[]>([])
   const [appliedRooms, setAppliedRooms] = useState<Room[]>([])
@@ -53,15 +268,27 @@ const RoomSearchPage = () => {
     joined: null,
   })
 
-  const toggleTag = (tag: string) => {
-    setFilters((prev) => ({
-      ...prev,
-      tags: prev.tags.includes(tag) ? prev.tags.filter((t) => t !== tag) : [...prev.tags, tag],
-    }))
+  const resetFilters = () => {
+    setFilters({ roomType: '', roomSize: '', sort: 'recent', checklist: {} })
   }
 
-  const resetFilters = () => {
-    setFilters({ tags: [], roomType: '', roomSize: '', sort: 'recent' })
+  const toggleChecklistOption = (itemLabel: string, option: string) => {
+    setFilters((prev) => {
+      const currentOptions = prev.checklist[itemLabel] || []
+      const newOptions = currentOptions.includes(option)
+        ? currentOptions.filter((o) => o !== option)
+        : [...currentOptions, option]
+      const updatedChecklist = { ...prev.checklist }
+      if (newOptions.length > 0) {
+        updatedChecklist[itemLabel] = newOptions
+      } else {
+        delete updatedChecklist[itemLabel]
+      }
+      return {
+        ...prev,
+        checklist: updatedChecklist,
+      }
+    })
   }
 
   const applyFilters = (list: Room[]) => {
@@ -86,10 +313,6 @@ const RoomSearchPage = () => {
       if (!Number.isNaN(size)) {
         result = result.filter((r) => r.capacity === size)
       }
-    }
-
-    if (filters.tags.length) {
-      result = result.filter((r) => r.tags.some((tag) => filters.tags.includes(tag)))
     }
 
     if (filters.sort === 'capacity') {
@@ -122,11 +345,11 @@ const RoomSearchPage = () => {
   const mapRoomTypeToApi = (type: string) => {
     switch (type) {
       case '1 기숙사':
-        return 'ROOM_A'
+        return 'TYPE_MEDICAL'
       case '2 기숙사':
-        return 'ROOM_B'
+        return 'TYPE_2'
       case '3 기숙사':
-        return 'ROOM_C'
+        return 'TYPE_1'
       default:
         return undefined
     }
@@ -134,11 +357,11 @@ const RoomSearchPage = () => {
 
   const mapApiRoomTypeToDisplay = (type: string) => {
     switch (type) {
-      case 'ROOM_A':
-        return '1 기숙사'
-      case 'ROOM_B':
+      case 'TYPE_MEDICAL':
+        return '메디컬 기숙사'
+      case 'TYPE_2':
         return '2 기숙사'
-      case 'ROOM_C':
+      case 'TYPE_1':
         return '3 기숙사'
       default:
         return type || '기숙사'
@@ -158,6 +381,20 @@ const RoomSearchPage = () => {
     }
   }
 
+  const mapResidencePeriodToDisplay = (period: string | undefined): string | undefined => {
+    if (!period) return undefined
+    switch (period) {
+      case 'SEMESTER':
+        return '학기(16주)'
+      case 'HALF_YEAR':
+        return '반기(24주)'
+      case 'SEASONAL':
+        return '계절학기'
+      default:
+        return period // 이미 한글이거나 다른 형식이면 그대로 반환
+    }
+  }
+
   const mapApiRoom = (api: ApiRoom): Room => ({
     id: String(api.roomNo),
     title: api.title || '방',
@@ -169,6 +406,7 @@ const RoomSearchPage = () => {
     tags: api.additionalTag || [],
     createdAt: formatRelativeTime(api.createdAt),
     status: mapApiStatusToDisplay(api.roomStatus),
+    residencePeriod: mapResidencePeriodToDisplay(api.residencePeriod),
   })
 
   const formatRelativeTime = (iso?: string): string => {
@@ -387,40 +625,25 @@ const RoomSearchPage = () => {
   return (
     <div className="h-screen bg-white flex flex-col overflow-hidden animate-fade-in">
       {/* 메인 콘텐츠 - 스크롤 가능 영역 */}
-      <main className="flex-1 overflow-y-auto">
-        {/* 상단 바 */}
-        <header className="bg-white h-15 px-6 py-4">
+      <main className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
+        {/* 헤더 */}
+        <header className="bg-white px-4 py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900">방 찾기</h1>
-            <div className="flex items-center space-x-3">
-              <div className="relative">
-                <Bell className="w-7 h-7 text-gray-700" />
-                {hasUnreadNotifications && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 w-2 h-2 rounded-full"></span>
-                )}
-              </div>
+            <div className="relative">
+              <Bell className="w-7 h-7 text-gray-700" />
+              {hasUnreadNotifications && (
+                <span className="absolute -top-1 -right-1 bg-red-500 w-2 h-2 rounded-full"></span>
+              )}
             </div>
           </div>
         </header>
 
         {/* 콘텐츠 */}
         <div className="px-4 pt-2 pb-4">
-        {/* 헤더 섹션 */}
-        <div className="border-b border-gray-200 pb-4">
-          <div className="flex items-center justify-between mb-2">
-            <h1 className="text-base font-bold text-black">방 찾기</h1>
-            <button
-              onClick={handleCreateRoom}
-              className="bg-black text-white px-3 py-1 rounded text-sm font-medium flex items-center space-x-1"
-            >
-              <Plus className="w-4 h-4" />
-              <span>방 만들기</span>
-            </button>
-          </div>
-          <p className="text-gray-500 text-sm mb-4">방학 중 - 매칭 진행 중</p>
           
           {/* 검색 바 */}
-          <div className="bg-gray-100 rounded-lg p-3 flex items-center space-x-2">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center space-x-2 mb-3">
             <Search className="w-4 h-4 text-gray-400" />
             <input
               type="text"
@@ -432,115 +655,127 @@ const RoomSearchPage = () => {
             <button
               type="button"
               onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center space-x-1 text-sm text-gray-700 px-2 py-1 rounded hover:bg-gray-200"
+              className={`flex items-center space-x-1 text-sm px-2 py-1 rounded-lg transition-colors ${
+                showFilters
+                  ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
             >
               <Filter className="w-4 h-4" />
               <span>필터</span>
             </button>
           </div>
 
-          {showFilters && (
-            <div className="mt-3 border border-gray-200 rounded-lg p-3 space-y-3 bg-white">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-black">필터</span>
-                <button
-                  onClick={resetFilters}
-                  className="text-xs text-gray-500 underline"
-                >
-                  초기화
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <label className="text-xs text-gray-600">방 타입</label>
-                  <select
-                    value={filters.roomType}
-                    onChange={(e) => setFilters((prev) => ({ ...prev, roomType: e.target.value }))}
-                    className="w-full border border-gray-300 rounded px-2 py-2 text-sm text-black"
-                  >
-                    <option value="">전체</option>
-                    <option value="1 기숙사">1 기숙사</option>
-                    <option value="2 기숙사">2 기숙사</option>
-                    <option value="3 기숙사">3 기숙사</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs text-gray-600">수용 인원</label>
-                  <select
-                    value={filters.roomSize}
-                    onChange={(e) => setFilters((prev) => ({ ...prev, roomSize: e.target.value }))}
-                    className="w-full border border-gray-300 rounded px-2 py-2 text-sm text-black"
-                  >
-                    <option value="">전체</option>
-                    <option value="2">2인실</option>
-                    <option value="4">4인실</option>
-                    <option value="6">6인실</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs text-gray-600">태그</label>
-                <div className="flex flex-wrap gap-2">
-                  {availableTags.map((tag) => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => toggleTag(tag)}
-                      className={`px-3 py-1 rounded-full text-xs border ${
-                        filters.tags.includes(tag)
-                          ? 'bg-orange-200 text-orange-800 border-orange-300'
-                          : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'
-                      }`}
-                    >
-                      {tag}
-                    </button>
+          <div 
+            className={`grid mb-3 ${
+              showFilters 
+                ? 'grid-rows-[1fr] opacity-100 transition-all duration-300 ease-out' 
+                : 'grid-rows-[0fr] opacity-0 transition-all duration-200 ease-in'
+            }`}
+          >
+            <div className="overflow-hidden">
+              <div className="space-y-4">
+                {/* 체크리스트 필터 */}
+                <div className="space-y-4">
+                  {checklistSections.map((section, index) => (
+                    <div key={section.category} className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-base font-bold text-black">{section.title}</h4>
+                        {index === 0 && (
+                          <button
+                            onClick={resetFilters}
+                            className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                          >
+                            초기화
+                          </button>
+                        )}
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-xl p-4">
+                        <div className="space-y-3 text-sm text-gray-700">
+                          {section.items
+                            .filter((item) => item.options && item.options.length > 0)
+                            .map((item) => {
+                              return (
+                                <div key={item.label} className="flex gap-2">
+                                  <div className="w-20 text-gray-500 shrink-0">{item.label}</div>
+                                  <div className="flex flex-wrap gap-2 flex-1">
+                                    {item.options?.map((option) => {
+                                      const isSelected = filters.checklist[item.label]?.includes(option.text) || false
+                                      return (
+                                        <button
+                                          key={option.text}
+                                          type="button"
+                                          onClick={() => toggleChecklistOption(item.label, option.text)}
+                                          className={`${
+                                            isSelected
+                                              ? 'bg-blue-50 text-blue-600 border border-blue-200 text-xs px-2 py-1 rounded-md cursor-pointer'
+                                              : 'text-gray-500 text-xs px-2 py-1 cursor-pointer border border-gray-200 rounded-md'
+                                          }`}
+                                        >
+                                          {option.text}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                        </div>
+                      </div>
+                    </div>
                   ))}
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <label className="text-xs text-gray-600">정렬</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setFilters((prev) => ({ ...prev, sort: 'recent' }))}
-                    className={`py-2 text-xs rounded border ${
-                      filters.sort === 'recent'
-                        ? 'bg-black text-white border-black'
-                        : 'bg-gray-100 text-gray-700 border-gray-200'
-                    }`}
-                  >
-                    최신순
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilters((prev) => ({ ...prev, sort: 'capacity' }))}
-                    className={`py-2 text-xs rounded border ${
-                      filters.sort === 'capacity'
-                        ? 'bg-black text-white border-black'
-                        : 'bg-gray-100 text-gray-700 border-gray-200'
-                    }`}
-                  >
-                    인원 많은순
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilters((prev) => ({ ...prev, sort: 'remaining' }))}
-                    className={`py-2 text-xs rounded border ${
-                      filters.sort === 'remaining'
-                        ? 'bg-black text-white border-black'
-                        : 'bg-gray-100 text-gray-700 border-gray-200'
-                    }`}
-                  >
-                    남은자리순
-                  </button>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-gray-700">정렬</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFilters((prev) => ({ ...prev, sort: 'recent' }))}
+                      className={`py-2 text-xs font-medium rounded-lg border transition-colors ${
+                        filters.sort === 'recent'
+                          ? 'bg-[#3072E1] text-white border-[#3072E1]'
+                          : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      최신순
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilters((prev) => ({ ...prev, sort: 'capacity' }))}
+                      className={`py-2 text-xs font-medium rounded-lg border transition-colors ${
+                        filters.sort === 'capacity'
+                          ? 'bg-[#3072E1] text-white border-[#3072E1]'
+                          : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      인원 많은순
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilters((prev) => ({ ...prev, sort: 'remaining' }))}
+                      className={`py-2 text-xs font-medium rounded-lg border transition-colors ${
+                        filters.sort === 'remaining'
+                          ? 'bg-[#3072E1] text-white border-[#3072E1]'
+                          : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      남은자리순
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          )}
+          </div>
+
+          {/* 방 만들기 버튼 */}
+          <button
+            onClick={handleCreateRoom}
+            className="w-full bg-[#3072E1] text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center space-x-2 hover:bg-[#2563E1] mb-4"
+          >
+            <Plus className="w-4 h-4" />
+            <span>방 만들기</span>
+          </button>
         </div>
 
         {/* 방 목록 */}
@@ -560,31 +795,31 @@ const RoomSearchPage = () => {
               onClick={() => setActiveTab('recruiting')}
               className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'recruiting'
-                  ? 'border-[#fcb44e] text-[#fcb44e]'
+                  ? 'border-[#3072E1] text-[#3072E1]'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               모집 중인 방
             </button>
             <button
+              onClick={() => setActiveTab('joined')}
+              className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'joined'
+                  ? 'border-[#3072E1] text-[#3072E1]'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              관심 있는 방
+            </button>
+            <button
               onClick={() => setActiveTab('applied')}
               className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'applied'
-                  ? 'border-[#fcb44e] text-[#fcb44e]'
+                  ? 'border-[#3072E1] text-[#3072E1]'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               내가 지원한 방
-            </button>
-            <button
-              onClick={() => setActiveTab('joined')}
-              className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'joined'
-                  ? 'border-[#fcb44e] text-[#fcb44e]'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              내가 속한 방
             </button>
           </div>
 
@@ -631,31 +866,10 @@ const RoomSearchPage = () => {
             </div>
           )}
         </div>
-        </div>
       </main>
 
       {/* 하단 네비게이션 바 */}
-      <nav className="bg-orange-50 border-t border-orange-100 h-15 px-4 py-2 flex-shrink-0">
-        <div className="flex items-center justify-around">
-          <button className="flex flex-col items-center space-y-1">
-            <Home className="w-6 h-6 text-orange-600" />
-            <span className="text-orange-600 text-xs font-semibold">방 찾기</span>
-          </button>
-          <button className="flex flex-col items-center space-y-1">
-            <Users className="w-6 h-6 text-gray-600" />
-            <span className="text-gray-600 text-xs">룸메 찾기</span>
-          </button>
-          <button className="flex flex-col items-center space-y-1 relative">
-            <MessageCircle className="w-6 h-6 text-gray-600" />
-            <span className="text-gray-600 text-xs">채팅</span>
-            <span className="absolute -top-1 -right-1 bg-red-500 w-2 h-2 rounded-full"></span>
-          </button>
-          <button className="flex flex-col items-center space-y-1">
-            <Menu className="w-6 h-6 text-gray-600" />
-            <span className="text-gray-600 text-xs">마이페이지</span>
-          </button>
-        </div>
-      </nav>
+      <BottomNavigationBar />
 
       {/* 방 만들기 모달 */}
       {showCreateRoom && (

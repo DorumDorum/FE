@@ -13,13 +13,27 @@ const RoomCard = ({ room, onChatRequest, onApply, onLeave, showButtons = true, i
       boxShadow: '0px 4px 6px 0px rgba(0, 0, 0, 0.15), 0px 2px 4px 0px rgba(0, 0, 0, 0.25)'
     }}>
       {/* 헤더 */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center space-x-2">
-          <span className="text-sm font-medium text-black">{room.title}</span>
+      <div className="mb-3">
+        <div className="text-sm font-medium text-black mb-1">
+          {room.title}
+        </div>
+        <div className="flex items-center space-x-1 mb-1">
           <span className="text-xs text-gray-600">{room.roomType}</span>
+          <span className="text-xs text-gray-600">{room.capacity}인실</span>
+          {room.residencePeriod && (
+            <>
+              <span className="text-xs text-gray-600">·</span>
+              <span className="text-xs text-gray-600">{room.residencePeriod}</span>
+            </>
+          )}
+          <span className="text-xs text-gray-600">·</span>
           <span className="text-xs text-gray-600">{room.currentMembers}/{room.capacity}명</span>
         </div>
-        <span className="text-xs text-gray-500">{room.createdAt}</span>
+        <div className="flex items-center space-x-1">
+          <span className="text-xs text-gray-500">{room.status === 'recruiting' ? '모집 중' : room.status === 'full' ? '인원 확정' : '모집 종료'}</span>
+          <span className="text-xs text-gray-500">·</span>
+          <span className="text-xs text-gray-500">{room.createdAt}</span>
+        </div>
       </div>
 
       {/* 설명 */}

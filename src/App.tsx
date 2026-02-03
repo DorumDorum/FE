@@ -3,6 +3,10 @@ import { Toaster } from 'react-hot-toast'
 import RoomGatePage from '@/pages/RoomGatePage'
 import RoomSearchPage from '@/pages/RoomSearchPage'
 import MyRoomPage from '@/pages/MyRoomPage'
+import MyPage from '@/pages/MyPage'
+import HomePage from '@/pages/HomePage'
+import NoticeListPage from '@/pages/NoticeListPage'
+import NoticeDetailPage from '@/pages/NoticeDetailPage'
 import SplashPage from '@/pages/SplashPage'
 import IntroPage from '@/pages/IntroPage'
 import SignupFlowPage from '@/pages/SignupFlowPage'
@@ -21,10 +25,21 @@ function App() {
         <Route path="/signup" element={<SignupFlowPage />} />
         <Route path="/login" element={<LoginPage />} />
 
+        {/* 홈 */}
+        <Route path="/home" element={<HomePage />} />
+        
+        {/* 공지사항 */}
+        <Route path="/notices" element={<NoticeListPage />} />
+        <Route path="/notices/:noticeNo" element={<NoticeDetailPage />} />
+        
         {/* 방 진입 게이트 */}
         <Route path="/rooms" element={<RoomGatePage />} />
         <Route path="/rooms/search" element={<RoomSearchPage />} />
         <Route path="/rooms/me" element={<MyRoomPage />} />
+        
+        {/* 마이페이지 */}
+        <Route path="/me" element={<MyPage />} />
+        
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       

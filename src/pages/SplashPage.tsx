@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import logo from '@/assets/images/logo.svg'
+import logo from '@/assets/images/logo.png'
 
 const SplashPage = () => {
   const navigate = useNavigate()
@@ -18,13 +18,22 @@ const SplashPage = () => {
 
   return (
     <div
-      className={`min-h-[100dvh] w-full flex flex-col items-center justify-center bg-[#fcb44e] text-white animate-fade-in ${
+      className={`min-h-[100dvh] w-full flex flex-col items-center justify-center bg-[#3072E1] text-white animate-fade-in ${
         isFadingOut ? 'animate-fade-out' : ''
       }`}
     >
-      <div className="flex flex-col items-center space-y-6">
-        <div className="w-28 h-28 bg-white/10 rounded-2xl flex items-center justify-center animate-scale-in">
-          <img src={logo} alt="DorumDorum" className="w-24 h-24" />
+       <div className="flex flex-col items-center space-y-6">
+        <div className="flex items-center justify-center animate-scale-in">
+          <img 
+            src={logo} 
+            alt="DorumDorum" 
+            className="w-28 h-28 border-0" 
+            style={{
+              border: 'none',
+              outline: 'none',
+              display: 'block',
+            }}
+          />
         </div>
         <div className="text-2xl font-bold tracking-tight animate-slide-up">도룸도룸</div>
       </div>

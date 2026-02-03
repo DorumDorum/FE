@@ -9,6 +9,7 @@ export interface Room {
   tags: string[]
   createdAt: string
   status: 'recruiting' | 'full' | 'closed'
+  residencePeriod?: string // 거주기간 (예: "학기(16주)", "반기(24주)", "계절학기")
 }
 
 export interface RoomCardProps {

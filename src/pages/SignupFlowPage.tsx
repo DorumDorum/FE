@@ -20,6 +20,9 @@ const SignupFlowPage = () => {
   const [name, setName] = useState('')
   const [studentId, setStudentId] = useState('')
   const [gender, setGender] = useState('')
+  const [major, setMajor] = useState('')
+  const [grade, setGrade] = useState('')
+  const [birthDate, setBirthDate] = useState('')
   const [password, setPassword] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -35,6 +38,9 @@ const SignupFlowPage = () => {
   const [unlockedName, setUnlockedName] = useState(false)
   const [unlockedStudentId, setUnlockedStudentId] = useState(false)
   const [unlockedGender, setUnlockedGender] = useState(false)
+  const [unlockedMajor, setUnlockedMajor] = useState(false)
+  const [unlockedGrade, setUnlockedGrade] = useState(false)
+  const [unlockedAge, setUnlockedAge] = useState(false)
   const [unlockedPassword, setUnlockedPassword] = useState(false)
   const [unlockedPasswordConfirm, setUnlockedPasswordConfirm] = useState(false)
   const [unlockedNickname, setUnlockedNickname] = useState(false)
@@ -80,8 +86,20 @@ const SignupFlowPage = () => {
   }, [studentId])
 
   useEffect(() => {
-    if (gender) setUnlockedPassword(true)
+    if (gender) setUnlockedMajor(true)
   }, [gender])
+
+  useEffect(() => {
+    if (major.trim().length > 0) setUnlockedGrade(true)
+  }, [major])
+
+  useEffect(() => {
+    if (grade.trim().length > 0) setUnlockedAge(true)
+  }, [grade])
+
+  useEffect(() => {
+    if (birthDate.trim().length > 0) setUnlockedPassword(true)
+  }, [birthDate])
 
   useEffect(() => {
     if (password.length > 0) setUnlockedPasswordConfirm(true)
@@ -98,11 +116,23 @@ const SignupFlowPage = () => {
   const showName = unlockedName
   const showStudentId = unlockedStudentId
   const showGender = unlockedGender
+  const showMajor = unlockedMajor
+  const showGrade = unlockedGrade
+  const showAge = unlockedAge
   const showPasswordField = unlockedPassword
   const showPasswordConfirmField = unlockedPasswordConfirm
   const showNickname = unlockedNickname
 
-  const canSubmit = showNickname && passwordsMatch && nickname.trim().length > 0 && !isSubmitting
+  const canSubmit = isEmailVerified && 
+                    name.trim().length > 0 && 
+                    studentId.trim().length > 0 && 
+                    gender.length > 0 && 
+                    major.trim().length > 0 && 
+                    grade.trim().length > 0 && 
+                    birthDate.trim().length > 0 && 
+                    passwordsMatch && 
+                    nickname.trim().length > 0 && 
+                    !isSubmitting
 
   // cooldown timer
   useEffect(() => {
@@ -176,6 +206,25 @@ const SignupFlowPage = () => {
       setSubmitError('')
       setIsSubmitting(true)
       try {
+        // 학번 표시 형식 생성
+        let displayStudentNoGrade = ''
+        if (studentId.trim().length >= 4) {
+          const shortYear = studentId.trim().substring(2, 4)
+          displayStudentNoGrade = grade.trim()
+            ? `${shortYear}학번 (${grade.trim()})`
+            : `${shortYear}학번`
+        } else if (grade.trim()) {
+          displayStudentNoGrade = `(${grade.trim()})`
+        }
+
+        // 나이 계산
+        const calculateAge = () => {
+          if (!birthDate.trim()) return 0
+          const birth = new Date(birthDate.trim())
+          const today = new Date()
+          return today.getFullYear() - birth.getFullYear()
+        }
+
         const res = await fetch('http://localhost:8080/api/users/sign-up', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -187,6 +236,40 @@ const SignupFlowPage = () => {
             passwordCheck: passwordConfirm,
             gender,
             studentNo: studentId,
+            major: major.trim(),
+            grade: grade.trim(),
+            birth: birthDate.trim(),
+            checklist: {
+              otherNotes: '',
+              categories: [
+                {
+                  category: 'BASIC_INFO',
+                  items: [
+                    {
+                      label: '단과대/학과',
+                      itemType: 'VALUE',
+                      value: major.trim() || '',
+                      extraValue: null,
+                      options: null,
+                    },
+                    {
+                      label: '학번(학년)',
+                      itemType: 'VALUE',
+                      value: displayStudentNoGrade,
+                      extraValue: null,
+                      options: null,
+                    },
+                    {
+                      label: '나이',
+                      itemType: 'VALUE',
+                      value: `${calculateAge()}세`,
+                      extraValue: null,
+                      options: null,
+                    },
+                  ],
+                },
+              ],
+            },
           }),
         })
         if (!res.ok) {
@@ -223,7 +306,7 @@ const SignupFlowPage = () => {
             <button
               type="button"
               onClick={() => navigate('/login', { replace: true })}
-              className="w-full py-4 rounded-xl text-base font-semibold shadow-sm transition bg-[#fcb44e] text-white active:scale-[0.99]"
+              className="w-full py-4 rounded-xl text-base font-semibold shadow-sm transition bg-[#3072E1] text-white active:scale-[0.99] hover:bg-[#2563E1]"
             >
               로그인하러 가기
             </button>
@@ -255,11 +338,14 @@ const SignupFlowPage = () => {
 
           {/* 이메일 + 인증 */}
           <div className="space-y-2">
+            <div className="flex items-center gap-2">
             <FieldLabel>이메일</FieldLabel>
+              <span className="text-xs text-gray-500">(학교 이메일만 사용 가능)</span>
+            </div>
             <RoundedInput
               value={email}
               onChange={setEmail}
-              placeholder="example@example.com"
+              placeholder="example@gachon.ac.kr"
               type="email"
               disabled={isEmailVerified}
             />
@@ -277,7 +363,7 @@ const SignupFlowPage = () => {
                 disabled={!canSendCode || cooldown > 0 || isEmailVerified || isSendingCode}
                   className={`px-3 py-3 rounded-xl text-sm font-semibold ${
                   canSendCode && cooldown === 0 && !isEmailVerified && !isSendingCode
-                      ? 'bg-[#fcb44e] text-white active:scale-[0.99]'
+                      ? 'bg-[#3072E1] text-white active:scale-[0.99] hover:bg-[#2563E1]'
                       : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                   }`}
                 >
@@ -355,7 +441,7 @@ const SignupFlowPage = () => {
                     onClick={() => setGender(opt.value)}
                     className={`flex-1 py-3 rounded-xl border text-sm font-semibold transition ${
                       gender === opt.value
-                        ? 'border-[#fcb44e] bg-orange-50 text-[#fcb44e]'
+                        ? 'border-blue-600 bg-blue-50 text-blue-600'
                         : 'border-gray-200 bg-white text-gray-700'
                     }`}
                   >
@@ -363,6 +449,57 @@ const SignupFlowPage = () => {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/*단과대/학과 */}
+          {showMajor && (
+            <div className="space-y-2 animate-slide-up" style={{ animationDelay: '0.05s' }}>
+              <FieldLabel>단과대/학과</FieldLabel>
+              <RoundedInput
+                value={major}
+                onChange={setMajor}
+                placeholder="단과대/학과를 입력하세요"
+              />
+            </div>
+          )}
+
+          {/* 학년 */}
+          {showGrade && (
+            <div className="space-y-2 animate-slide-up" style={{ animationDelay: '0.1s' }}>
+              <FieldLabel>학년</FieldLabel>
+              <div className="relative rounded-xl border border-[#e8e2dc] bg-[#f5f1ee] px-4 py-3">
+                <select
+                  value={grade}
+                  onChange={(e) => setGrade(e.target.value)}
+                  className="w-full bg-transparent outline-none text-base text-black appearance-none cursor-pointer"
+                >
+                  <option value="" className="text-gray-500">학년을 선택하세요</option>
+                  {[1, 2, 3, 4, 5, 6].map((year) => (
+                    <option key={year} value={`${year}학년`}>
+                      {year}학년
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 생년월일 */}
+          {showAge && (
+            <div className="space-y-2 animate-slide-up" style={{ animationDelay: '0.15s' }}>
+              <FieldLabel>생년월일</FieldLabel>
+              <RoundedInput
+                value={birthDate}
+                onChange={setBirthDate}
+                placeholder="YYYY-MM-DD"
+                type="date"
+              />
             </div>
           )}
 
@@ -426,7 +563,7 @@ const SignupFlowPage = () => {
                 <button
                   type="button"
                   onClick={() => setNicknameSeed((v) => v + 1)}
-                  className="text-xs text-[#fcb44e] font-semibold px-2 py-1 rounded hover:bg-orange-50 active:scale-[0.99]"
+                  className="text-xs text-blue-600 font-semibold px-2 py-1 rounded hover:bg-blue-50 active:scale-[0.99]"
                 >
                   새로고침
                 </button>
@@ -435,6 +572,7 @@ const SignupFlowPage = () => {
                 value={nickname}
                 onChange={setNickname}
                 placeholder={autoNickname}
+                maxLength={10}
               />
             </div>
           )}
@@ -451,7 +589,7 @@ const SignupFlowPage = () => {
           disabled={!canSubmit}
           className={`w-full py-4 rounded-xl text-base font-semibold shadow-sm transition ${
             canSubmit
-              ? 'bg-[#fcb44e] text-white active:scale-[0.99]'
+              ? 'bg-[#3072E1] text-white active:scale-[0.99] hover:bg-[#2563E1]'
               : 'bg-gray-200 text-gray-500 cursor-not-allowed'
           }`}
         >
@@ -475,6 +613,7 @@ const RoundedInput = ({
   type = 'text',
   inputMode,
   rightIcon,
+  maxLength,
 }: {
   value: string
   onChange: (val: string) => void
@@ -484,6 +623,7 @@ const RoundedInput = ({
   type?: string
   inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
   rightIcon?: React.ReactNode
+  maxLength?: number
 }) => (
   <div
     className={`relative rounded-xl border border-[#e8e2dc] bg-[#f5f1ee] px-4 py-3 ${disabled ? 'opacity-60' : ''} ${className}`}
@@ -495,6 +635,7 @@ const RoundedInput = ({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       disabled={disabled}
+      maxLength={maxLength}
       className={`w-full bg-transparent outline-none text-base text-black placeholder:text-gray-500 ${rightIcon ? 'pr-8' : ''}`}
     />
     {rightIcon && (

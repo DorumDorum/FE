@@ -240,13 +240,26 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
   const mapRoomTypeToApi = (dormType: string) => {
     switch (dormType) {
       case '2':
-        return 'ROOM_B'
+        return 'TYPE_2'
       case '3':
-        return 'ROOM_C'
+        return 'TYPE_1'
       case '메디컬':
-        return 'ROOM_A'
+        return 'TYPE_MEDICAL'
       default:
         return undefined
+    }
+  }
+
+  const mapResidencePeriodToEnum = (period: string): string | null => {
+    switch (period) {
+      case '학기(16주)':
+        return 'SEMESTER'
+      case '반기(24주)':
+        return 'HALF_YEAR'
+      case '계절학기':
+        return 'SEASONAL'
+      default:
+        return null
     }
   }
 
@@ -323,6 +336,11 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
     const selectedDorm = dormItem?.options?.find(opt => opt.selected)?.text
     const roomType = selectedDorm ? mapRoomTypeToApi(selectedDorm) : undefined
 
+    // 거주기간 추출 및 enum 매핑
+    const residencePeriodItem = checklistSections[0].items.find(item => item.label === '거주기간')
+    const selectedResidencePeriod = residencePeriodItem?.options?.find(opt => opt.selected)?.text
+    const residencePeriod = selectedResidencePeriod ? mapResidencePeriodToEnum(selectedResidencePeriod) : null
+
     // 규칙 데이터 구성
     const categories = checklistSections.map((section) => ({
       category: section.category,
@@ -349,6 +367,7 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
         body: JSON.stringify({
           roomType,
           capacity,
+          residencePeriod,
           title: formData.title.trim(),
           rule: {
             otherNotes: otherNotes.trim() || null,
@@ -511,7 +530,7 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
         </div>
         
         {/* 헤더 */}
-        <div className="flex items-center justify-between mb-6 sticky top-0 bg-white pt-2">
+        <div className="flex items-center justify-between mb-6 pt-2">
           <h2 className="text-xl font-bold text-black">방 만들기</h2>
           <button
             onClick={onClose}
@@ -622,13 +641,10 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
                           {/* 귀가 - 고정적 선택 시 시간 입력 */}
                           {item.label === '귀가' &&
                             item.options?.some((opt) => opt.text === '고정적' && opt.selected) && (
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                value={item.extraValue || ''}
+                              <select
+                                value={item.extraValue ?? ''}
                                 onChange={(e) => {
-                                  const numericValue = e.target.value.replace(/[^0-9]/g, '')
-                                  handleExtraValueChange(sectionIndex, itemIndex, numericValue)
+                                  handleExtraValueChange(sectionIndex, itemIndex, e.target.value)
                                   // 에러 제거
                                   if (hasError) {
                                     setErrorFields(prev => {
@@ -638,22 +654,25 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
                                     })
                                   }
                                 }}
-                                placeholder="시간 (예: 22시)"
-                                className={`border rounded px-2 py-1 text-xs text-black w-24 ${
+                                className={`border rounded px-2 py-1 text-xs text-black ${
                                   hasError ? 'border-red-400 bg-red-50' : 'border-gray-300'
                                 }`}
-                              />
+                              >
+                                <option value="">시간 선택</option>
+                                {Array.from({ length: 25 }, (_, hour) => hour).map((hour) => (
+                                  <option key={hour} value={`${hour}시`}>
+                                    {hour}시
+                                  </option>
+                                ))}
+                              </select>
                             )}
                           {/* 소등 - __시 이후 선택 시 시간 입력 */}
                           {item.label === '소등' &&
                             item.options?.some((opt) => opt.text === '__시 이후' && opt.selected) && (
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                value={item.extraValue || ''}
+                              <select
+                                value={item.extraValue ?? ''}
                                 onChange={(e) => {
-                                  const numericValue = e.target.value.replace(/[^0-9]/g, '')
-                                  handleExtraValueChange(sectionIndex, itemIndex, numericValue)
+                                  handleExtraValueChange(sectionIndex, itemIndex, e.target.value)
                                   // 에러 제거
                                   if (hasError) {
                                     setErrorFields(prev => {
@@ -663,11 +682,17 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
                                     })
                                   }
                                 }}
-                                placeholder="시간 (예: 23시)"
-                                className={`border rounded px-2 py-1 text-xs text-black w-24 ${
+                                className={`border rounded px-2 py-1 text-xs text-black ${
                                   hasError ? 'border-red-400 bg-red-50' : 'border-gray-300'
                                 }`}
-                              />
+                              >
+                                <option value="">시간 선택</option>
+                                {Array.from({ length: 25 }, (_, hour) => hour).map((hour) => (
+                                  <option key={hour} value={`${hour}시`}>
+                                    {hour}시
+                                  </option>
+                                ))}
+                              </select>
                             )}
                         </div>
                       </div>

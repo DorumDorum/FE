@@ -102,7 +102,7 @@ const LoginPage = () => {
             <RoundedInput
               value={email}
               onChange={setEmail}
-              placeholder="example@example.com"
+              placeholder="example@gachon.ac.kr"
               type="email"
             />
           </div>
@@ -139,7 +139,7 @@ const LoginPage = () => {
           disabled={!isValid || isSubmitting}
           className={`w-full py-4 rounded-xl text-base font-semibold shadow-sm transition ${
             isValid && !isSubmitting
-              ? 'bg-[#fcb44e] text-white active:scale-[0.99]'
+              ? 'bg-[#3072E1] text-white active:scale-[0.99] hover:bg-[#2563E1]'
               : 'bg-gray-200 text-gray-500 cursor-not-allowed'
           }`}
         >
