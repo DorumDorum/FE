@@ -72,7 +72,7 @@ const BottomNavigationBar = () => {
       <div className="flex items-center justify-around h-full">
         <button
           onClick={() => navigate('/home')}
-          className={getButtonClass('/home')}
+          className={getButtonClass()}
         >
           <Home className={getIconClass('/home')} />
         </button>
@@ -86,7 +86,7 @@ const BottomNavigationBar = () => {
         )}
         <button
           onClick={() => navigate('/rooms/search')}
-          className={getButtonClass('/rooms/search')}
+          className={getButtonClass()}
         >
           <Users className={getIconClass('/rooms/search')} />
         </button>
@@ -96,7 +96,7 @@ const BottomNavigationBar = () => {
         </button>
         <button
           onClick={() => navigate('/me')}
-          className={getButtonClass('/me')}
+          className={getButtonClass()}
         >
           <Menu className={getIconClass('/me')} />
         </button>

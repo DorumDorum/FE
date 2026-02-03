@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, ChevronRight, ArrowLeft, ChevronLeft } from 'lucide-react'
+import { ChevronRight, ArrowLeft, ChevronLeft } from 'lucide-react'
 import BottomNavigationBar from '@/components/ui/BottomNavigationBar'
 
 const NoticeListPage = () => {
