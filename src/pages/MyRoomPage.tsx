@@ -241,8 +241,7 @@ const MyRoomPage = () => {
           return
         }
 
-        const params = new URLSearchParams({ roomNo: effectiveRoomNo })
-        const res = await fetch(`http://localhost:8080/api/rooms/me/rule?${params.toString()}`, {
+        const res = await fetch(`http://localhost:8080/api/rooms/${effectiveRoomNo}/rule`, {
           credentials: 'include',
           headers: {
             Authorization: `Bearer ${token}`,

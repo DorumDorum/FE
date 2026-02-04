@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, Search, Plus, Filter } from 'lucide-react'
+import { Bell, Search, Plus, Filter, Star } from 'lucide-react'
 import BottomNavigationBar from '@/components/ui/BottomNavigationBar'
 import RoomCard from '@/components/room/RoomCard'
 import CreateRoomModal from '@/components/modals/CreateRoomModal'
@@ -42,10 +42,15 @@ const RoomSearchPage = () => {
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
   const [hasUnreadNotifications] = useState(false) // 안 읽은 알람 여부
   const [activeTab, setActiveTab] = useState<'recruiting' | 'applied' | 'joined'>('recruiting')
+  const [expandedRoomIds, setExpandedRoomIds] = useState<Set<string>>(new Set())
+  const [roomRules, setRoomRules] = useState<Record<string, ChecklistSection[]>>({})
+  const [roomOtherNotes, setRoomOtherNotes] = useState<Record<string, string>>({})
+  const [favoriteRoomIds, setFavoriteRoomIds] = useState<Set<string>>(new Set())
   
   // 체크리스트 섹션 정의 (CreateRoomModal과 동일한 구조)
   type ChecklistOption = {
     text: string
+    selected?: boolean
   }
   
   type ChecklistItem = {
@@ -59,6 +64,23 @@ const RoomSearchPage = () => {
     title: string
     category: 'BASIC_INFO' | 'LIFESTYLE_PATTERN' | 'ADDITIONAL_RULES'
     items: ChecklistItem[]
+  }
+
+  type ApiRoomRule = {
+    categories: Array<{
+      category: string
+      items: Array<{
+        label: string
+        itemType: 'VALUE' | 'OPTION'
+        value?: string
+        extraValue?: string
+        options?: Array<{
+          text: string
+          selected: boolean
+        }>
+      }>
+    }>
+    otherNotes?: string
   }
   
   const checklistSections: ChecklistSection[] = [
@@ -779,7 +801,7 @@ const RoomSearchPage = () => {
         </div>
 
         {/* 방 목록 */}
-        <div className="mt-4">
+        <div className="mt-4 px-4">
           {loadingTab === activeTab &&
             (activeTab === 'recruiting'
               ? recruitingRooms.length === 0
@@ -827,12 +849,287 @@ const RoomSearchPage = () => {
           {activeTab === 'recruiting' && (
             <div className="space-y-4">
               {filteredRecruitingRooms.map((room) => (
-                <RoomCard
-                  key={room.id}
-                  room={room}
-                  onChatRequest={handleChatRequest}
-                  onApply={handleApply}
-                />
+                <div key={room.id} className="bg-white border border-gray-200 rounded-xl p-5">
+                  {/* 헤더 */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-1 flex-1">
+                      <h2 className="text-base font-semibold text-black">
+                        {room.title}
+                      </h2>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const isFavorite = favoriteRoomIds.has(room.id)
+                        
+                        try {
+                          const token = localStorage.getItem('accessToken')
+                          if (!token) return
+
+                          const roomNo = typeof room.id === 'string' && room.id.startsWith('room-') 
+                            ? room.id.replace('room-', '') 
+                            : room.id
+
+                          if (isFavorite) {
+                            // 관심 있는 방에서 제거
+                            const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/like`, {
+                              method: 'DELETE',
+                              credentials: 'include',
+                              headers: {
+                                Authorization: `Bearer ${token}`,
+                              },
+                            })
+
+                            if (res.ok) {
+                              setFavoriteRoomIds((prev) => {
+                                const newSet = new Set(prev)
+                                newSet.delete(room.id)
+                                return newSet
+                              })
+                            }
+                          } else {
+                            // 관심 있는 방으로 추가
+                            const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/like`, {
+                              method: 'POST',
+                              credentials: 'include',
+                              headers: {
+                                Authorization: `Bearer ${token}`,
+                              },
+                            })
+
+                            if (res.ok) {
+                              setFavoriteRoomIds((prev) => {
+                                const newSet = new Set(prev)
+                                newSet.add(room.id)
+                                return newSet
+                              })
+                            }
+                          }
+                        } catch (err) {
+                          console.error('[room] favorite toggle error', err)
+                        }
+                      }}
+                      className="p-1 -m-1 text-gray-400 hover:text-yellow-500 transition-colors"
+                    >
+                      <Star 
+                        className={`w-5 h-5 ${favoriteRoomIds.has(room.id) ? 'fill-yellow-500/30 text-yellow-500' : ''}`}
+                      />
+                    </button>
+                  </div>
+                  
+                  {/* 방 정보 */}
+                  <div className="text-sm text-gray-600 mb-4">
+                    <div className="flex items-center space-x-1">
+                      <span>{room.roomType}</span>
+                      <span>·</span>
+                      <span>{room.capacity}인실</span>
+                      {room.residencePeriod && (
+                        <>
+                          <span>·</span>
+                          <span>{room.residencePeriod}</span>
+                        </>
+                      )}
+                      <span>·</span>
+                      <span>{room.currentMembers}/{room.capacity}명</span>
+                    </div>
+                  </div>
+                  
+                  {/* 버튼 */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={async () => {
+                        const isCurrentlyExpanded = expandedRoomIds.has(room.id)
+                        
+                        if (isCurrentlyExpanded) {
+                          // 접기
+                          setExpandedRoomIds((prev) => {
+                            const newSet = new Set(prev)
+                            newSet.delete(room.id)
+                            return newSet
+                          })
+                        } else {
+                          // 펼치기 - 방 규칙이 없으면 API 호출
+                          if (!roomRules[room.id]) {
+                            try {
+                              const token = localStorage.getItem('accessToken')
+                              if (!token) return
+
+                              // roomNo를 room.id에서 추출 (room.id가 roomNo인 경우)
+                              // room.id에서 roomNo 추출 (Room 타입의 id는 string이지만 실제로는 roomNo)
+                              const roomNo = typeof room.id === 'string' && room.id.startsWith('room-') 
+                                ? room.id.replace('room-', '') 
+                                : room.id
+
+                              // 공개 API 사용
+                              const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/rule`, {
+                                credentials: 'include',
+                                headers: {
+                                  Authorization: `Bearer ${token}`,
+                                },
+                              })
+
+                              if (res.ok) {
+                                const data = await res.json()
+                                const payload: ApiRoomRule | null = data?.result ?? data?.data ?? data
+                                
+                                if (payload && payload.categories) {
+                                  // 기타 메모 저장
+                                  if (payload.otherNotes) {
+                                    setRoomOtherNotes((prev) => ({
+                                      ...prev,
+                                      [room.id]: payload.otherNotes || '',
+                                    }))
+                                  }
+
+                                  // API 응답을 체크리스트 섹션 형식으로 변환
+                                  const checklistSections: ChecklistSection[] = payload.categories.map((category) => ({
+                                    title: category.category === 'BASIC_INFO' ? '기본 정보' 
+                                          : category.category === 'LIFESTYLE_PATTERN' ? '생활 패턴'
+                                          : '추가 규칙',
+                                    category: category.category as 'BASIC_INFO' | 'LIFESTYLE_PATTERN' | 'ADDITIONAL_RULES',
+                                    items: category.items
+                                      .map((item) => ({
+                                        label: item.label,
+                                        itemType: item.itemType,
+                                        value: item.itemType === 'VALUE' ? (item.value ?? '') : undefined,
+                                        extraValue: item.extraValue ?? undefined,
+                                        options: item.options && item.options.length > 0
+                                          ? item.options.map((opt) => ({
+                                              text: opt.text,
+                                              selected: opt.selected,
+                                            }))
+                                          : undefined,
+                                      })),
+                                  }))
+
+                                  setRoomRules((prev) => ({
+                                    ...prev,
+                                    [room.id]: checklistSections,
+                                  }))
+                                }
+                              }
+                            } catch (err) {
+                              console.error('[room] rule fetch error', err)
+                            }
+                          }
+                          
+                          // 펼치기
+                          setExpandedRoomIds((prev) => {
+                            const newSet = new Set(prev)
+                            newSet.add(room.id)
+                            return newSet
+                          })
+                        }
+                      }}
+                      className="flex items-center justify-center gap-2 border border-gray-300 bg-white text-black text-sm font-medium px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <span>{expandedRoomIds.has(room.id) ? '접기' : '체크리스트 보기'}</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedRoom(room)
+                        setShowApplyRoom(true)
+                      }}
+                      className="flex items-center justify-center gap-2 bg-blue-50 text-blue-600 border border-blue-200 text-sm font-medium px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      <span>가입 요청</span>
+                    </button>
+                  </div>
+                  
+                  {/* 방 규칙 표시 */}
+                  <div 
+                    className={`grid transition-all duration-300 ease-in-out ${
+                      expandedRoomIds.has(room.id) ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="mt-4 space-y-4 border-t border-gray-200 pt-4">
+                        {roomRules[room.id] && roomRules[room.id].length > 0 ? (
+                          <>
+                            {roomRules[room.id].map((section: ChecklistSection) => (
+                              <div key={section.title} className="space-y-3">
+                                <h4 className="text-base font-bold text-black">{section.title}</h4>
+                                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                  <div className="space-y-3 text-sm text-gray-700">
+                                    {section.items.map((item: ChecklistItem) => (
+                                      <div key={item.label} className="flex gap-2">
+                                        <div className="w-20 text-gray-500 shrink-0">{item.label}</div>
+                                        <div className={`flex flex-wrap gap-2 flex-1`}>
+                                          {item.value !== undefined && item.value !== null && item.value ? (
+                                            <span className="text-black font-medium">{item.value}</span>
+                                          ) : item.options && item.options.length > 0 ? (
+                                            <>
+                                              {item.options.map((option: ChecklistOption) => {
+                                                // 귀가/소등의 특정 옵션은 extraValue가 있을 때 별도로 표시하므로 여기서는 숨김
+                                                if (
+                                                  item.extraValue &&
+                                                  ((item.label === '소등' && option.text === '__시 이후' && option.selected) ||
+                                                    (item.label === '귀가' && option.text === '고정적' && option.selected))
+                                                ) {
+                                                  return null
+                                                }
+
+                                                return (
+                                                  <span
+                                                    key={option.text}
+                                                    className={
+                                                      option.selected
+                                                        ? `bg-blue-50 text-blue-600 border border-blue-200 text-xs px-2 py-1 rounded-md`
+                                                        : `text-gray-500 text-xs px-2 py-1`
+                                                    }
+                                                  >
+                                                    {option.text}
+                                                  </span>
+                                                )
+                                              })}
+                                              {/* 귀가/소등의 시간 정보를 별도로 표시 */}
+                                              {item.extraValue && (
+                                                <>
+                                                  {item.label === '소등' &&
+                                                    item.options?.some((opt) => opt.text === '__시 이후' && opt.selected) && (
+                                                      <span className="bg-blue-50 text-blue-600 border border-blue-200 text-xs px-2 py-1 rounded-md">
+                                                        {item.extraValue} 이후
+                                                      </span>
+                                                    )}
+                                                  {item.label === '귀가' &&
+                                                    item.options?.some((opt) => opt.text === '고정적' && opt.selected) && (
+                                                      <span className="bg-blue-50 text-blue-600 border border-blue-200 text-xs px-2 py-1 rounded-md">
+                                                        {item.extraValue} 고정적
+                                                      </span>
+                                                    )}
+                                                </>
+                                              )}
+                                            </>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            {/* 기타 메모 표시 */}
+                            {roomOtherNotes[room.id] && (
+                              <div className="space-y-3">
+                                <h4 className="text-base font-bold text-black">기타</h4>
+                                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                  <div className="text-sm text-gray-700 whitespace-pre-wrap">
+                                    {roomOtherNotes[room.id]}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        ) : expandedRoomIds.has(room.id) ? (
+                          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                            <div className="text-center py-4 text-gray-500 text-sm">
+                              등록된 체크리스트가 없습니다.
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
           )}
