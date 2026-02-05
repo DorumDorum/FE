@@ -495,14 +495,18 @@ const MyRoomPage = () => {
         <header className="bg-white h-15 px-4 py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900">방 관리</h1>
-            <div className="flex items-center space-x-3">
+            <button
+              type="button"
+              onClick={() => navigate('/notifications')}
+              className="flex items-center space-x-3"
+            >
               <div className="relative">
                 <Bell className="w-7 h-7 text-gray-700" />
                 {hasUnreadNotifications && (
                   <span className="absolute -top-1 -right-1 bg-red-500 w-2 h-2 rounded-full"></span>
                 )}
               </div>
-            </div>
+            </button>
           </div>
         </header>
 

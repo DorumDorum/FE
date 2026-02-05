@@ -11,6 +11,8 @@ import SplashPage from '@/pages/SplashPage'
 import IntroPage from '@/pages/IntroPage'
 import SignupFlowPage from '@/pages/SignupFlowPage'
 import LoginPage from '@/pages/LoginPage'
+import ChatPage from '@/pages/ChatPage'
+import NotificationsPage from '@/pages/NotificationsPage'
 import { useFcmToken } from '@/hooks/useFcmToken'
 
 function App() {
@@ -27,6 +29,12 @@ function App() {
 
         {/* 홈 */}
         <Route path="/home" element={<HomePage />} />
+        
+        {/* 채팅 */}
+        <Route path="/chats" element={<ChatPage />} />
+        
+        {/* 알림 */}
+        <Route path="/notifications" element={<NotificationsPage />} />
         
         {/* 공지사항 */}
         <Route path="/notices" element={<NoticeListPage />} />

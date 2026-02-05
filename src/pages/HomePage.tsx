@@ -231,15 +231,19 @@ const HomePage = () => {
         {/* 헤더 */}
         <header className="bg-white px-4 py-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-gray-900">홈</h1>
-            <div className="flex items-center space-x-3">
+            <h1 className="text-2xl font-bold text-gray-900">도룸도룸</h1>
+            <button
+              type="button"
+              onClick={() => navigate('/notifications')}
+              className="flex items-center space-x-3"
+            >
               <div className="relative">
                 <Bell className="w-7 h-7 text-gray-700" />
                 {hasUnreadNotifications && (
                   <span className="absolute -top-1 -right-1 bg-red-500 w-2 h-2 rounded-full"></span>
                 )}
               </div>
-            </div>
+            </button>
           </div>
         </header>
 

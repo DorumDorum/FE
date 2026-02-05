@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, Search, Plus, Filter, Star } from 'lucide-react'
 import BottomNavigationBar from '@/components/ui/BottomNavigationBar'
-import RoomCard from '@/components/room/RoomCard'
+// import RoomCard from '@/components/room/RoomCard'
 import CreateRoomModal from '@/components/modals/CreateRoomModal'
 import ApplyRoomModal from '@/components/modals/ApplyRoomModal'
 import ChatRequestModal from '@/components/modals/ChatRequestModal'
@@ -45,7 +45,7 @@ const RoomSearchPage = () => {
   const [expandedRoomIds, setExpandedRoomIds] = useState<Set<string>>(new Set())
   const [roomRules, setRoomRules] = useState<Record<string, ChecklistSection[]>>({})
   const [roomOtherNotes, setRoomOtherNotes] = useState<Record<string, string>>({})
-  const [favoriteRoomIds, setFavoriteRoomIds] = useState<Set<string>>(new Set())
+  const [hasMyRoom, setHasMyRoom] = useState<boolean | null>(null)
   
   // 체크리스트 섹션 정의 (CreateRoomModal과 동일한 구조)
   type ChecklistOption = {
@@ -364,6 +364,58 @@ const RoomSearchPage = () => {
     [joinedRooms, searchQuery, filters]
   )
 
+  // 관심 있는 방(좋아요 한 방) 목록은 별표 표시를 위해 초기에 한 번 미리 불러온다
+  useEffect(() => {
+    // 토큰 없으면 호출해도 바로 return 되므로 별도 체크는 필요 없음
+    fetchRooms('joined', { showLoading: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 내가 속한 방 존재 여부 조회
+  useEffect(() => {
+    const checkRoomExist = async () => {
+      try {
+        const token = localStorage.getItem('accessToken')
+        if (!token) {
+          setHasMyRoom(false)
+          return
+        }
+
+        const res = await fetch('http://localhost:8080/api/rooms/me/exists', {
+          credentials: 'include',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+
+        if (!res.ok) {
+          setHasMyRoom(false)
+          return
+        }
+
+        const contentType = res.headers.get('content-type') ?? ''
+        const rawBody = await res.text()
+
+        let data: any
+        try {
+          data = rawBody ? JSON.parse(rawBody) : null
+        } catch (e) {
+          console.error('[rooms] check exists parse error', { contentType, rawBody }, e)
+          setHasMyRoom(false)
+          return
+        }
+
+        const payload = data?.result ?? data?.data ?? data
+        setHasMyRoom(!!payload?.isExist)
+      } catch (err) {
+        console.error('[rooms] check exists error', err)
+        setHasMyRoom(false)
+      }
+    }
+
+    checkRoomExist()
+  }, [])
+
   const mapRoomTypeToApi = (type: string) => {
     switch (type) {
       case '1 기숙사':
@@ -476,7 +528,7 @@ const RoomSearchPage = () => {
       const relationMap = {
         recruiting: 'RECRUITING',
         applied: 'APPLIED',
-        joined: 'JOINED',
+        joined: 'LIKED', // 관심 있는 방 탭은 내가 like한 방 목록
       } as const
       params.set('relation', relationMap[relation])
 
@@ -544,7 +596,24 @@ const RoomSearchPage = () => {
       const list: ApiRoom[] = payload?.result?.items ?? payload?.items ?? payload ?? []
       const mapped = list.map(mapApiRoom)
 
-      if (relation === 'recruiting') setRecruitingRooms(mapped)
+      if (relation === 'recruiting') {
+        // 더미 방 10개 추가 (UI 테스트용)
+        const dummyRooms: Room[] = Array.from({ length: 10 }).map((_, index) => ({
+          id: `dummy-${index + 1}`,
+          title: `더미 방 ${index + 1}`,
+          roomType: index % 2 === 0 ? '2 기숙사' : '3 기숙사',
+          capacity: 2,
+          currentMembers: 1,
+          description: 'UI 테스트용 더미 방입니다.',
+          hostName: `테스트호스트${index + 1}`,
+          tags: ['더미', '테스트'],
+          createdAt: new Date().toISOString(),
+          status: 'recruiting',
+          residencePeriod: '학기(16주)',
+        }))
+
+        setRecruitingRooms([...mapped, ...dummyRooms])
+      }
       if (relation === 'applied') setAppliedRooms(mapped)
       if (relation === 'joined') setJoinedRooms(mapped)
 
@@ -588,39 +657,46 @@ const RoomSearchPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, filters.roomType, filters.roomSize, filters.sort])
 
-  const handleChatRequest = (roomId: string) => {
-    const room = recruitingRooms.find(r => r.id === roomId)
-    if (room) {
-      setSelectedRoom(room)
-      setShowChatRequest(true)
+  // 내가 속한 방이 생기면 '내가 지원한 방' 탭은 숨기므로, 그 상태에서 activeTab이 'applied'이면 기본 탭으로 돌려준다
+  useEffect(() => {
+    if (hasMyRoom && activeTab === 'applied') {
+      setActiveTab('recruiting')
     }
-  }
+  }, [hasMyRoom, activeTab])
 
-  const handleApply = (roomId: string) => {
-    const room = recruitingRooms.find(r => r.id === roomId) || appliedRooms.find(r => r.id === roomId)
-    if (room) {
-      setSelectedRoom(room)
-      if (appliedRooms.some(r => r.id === roomId)) {
-        // 이미 지원한 방이면 취소 확인 모달 표시
-        setShowCancelConfirm(true)
-      } else {
-        // 새로운 방 지원이면 지원서 모달 표시
-        setShowApplyRoom(true)
-      }
-    }
-  }
+  // const handleChatRequest = (roomId: string) => {
+  //   const room = recruitingRooms.find(r => r.id === roomId)
+  //   if (room) {
+  //     setSelectedRoom(room)
+  //     setShowChatRequest(true)
+  //   }
+  // }
+
+  // const handleApply = (roomId: string) => {
+  //   const room = recruitingRooms.find(r => r.id === roomId) || appliedRooms.find(r => r.id === roomId)
+  //   if (room) {
+  //     setSelectedRoom(room)
+  //     if (appliedRooms.some(r => r.id === roomId)) {
+  //       // 이미 지원한 방이면 취소 확인 모달 표시
+  //       setShowCancelConfirm(true)
+  //     } else {
+  //       // 새로운 방 지원이면 지원서 모달 표시
+  //       setShowApplyRoom(true)
+  //     }
+  //   }
+  // }
 
   const handleCreateRoom = () => {
     setShowCreateRoom(true)
   }
 
-  const handleLeave = (roomId: string) => {
-    const room = joinedRooms.find(r => r.id === roomId)
-    if (room) {
-      setSelectedRoom(room)
-      setShowLeaveConfirm(true)
-    }
-  }
+  // const handleLeave = (roomId: string) => {
+  //   const room = joinedRooms.find(r => r.id === roomId)
+  //   if (room) {
+  //     setSelectedRoom(room)
+  //     setShowLeaveConfirm(true)
+  //   }
+  // }
 
   const handleCancelApply = () => {
     if (selectedRoom) {
@@ -648,16 +724,22 @@ const RoomSearchPage = () => {
     <div className="h-screen bg-white flex flex-col overflow-hidden animate-fade-in">
       {/* 메인 콘텐츠 - 스크롤 가능 영역 */}
       <main className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
-        {/* 헤더 */}
-        <header className="bg-white px-4 py-4">
+        {/* 헤더 - 상단 고정 */}
+        <header className="bg-white px-4 py-4 sticky top-0 z-20">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-gray-900">방 찾기</h1>
-            <div className="relative">
-              <Bell className="w-7 h-7 text-gray-700" />
-              {hasUnreadNotifications && (
-                <span className="absolute -top-1 -right-1 bg-red-500 w-2 h-2 rounded-full"></span>
-              )}
-            </div>
+            <h1 className="text-2xl font-bold text-gray-900">룸메 찾기</h1>
+            <button
+              type="button"
+              onClick={() => navigate('/notifications')}
+              className="flex items-center space-x-3"
+            >
+              <div className="relative">
+                <Bell className="w-7 h-7 text-gray-700" />
+                {hasUnreadNotifications && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 w-2 h-2 rounded-full"></span>
+                )}
+              </div>
+            </button>
           </div>
         </header>
 
@@ -811,38 +893,42 @@ const RoomSearchPage = () => {
             <div className="text-xs text-gray-500 mb-2">불러오는 중...</div>
           )}
 
-          {/* 탭 네비게이션 */}
-          <div className="flex border-b border-gray-200 mb-4">
-            <button
-              onClick={() => setActiveTab('recruiting')}
-              className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'recruiting'
-                  ? 'border-[#3072E1] text-[#3072E1]'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              모집 중인 방
-            </button>
-            <button
-              onClick={() => setActiveTab('joined')}
-              className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'joined'
-                  ? 'border-[#3072E1] text-[#3072E1]'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              관심 있는 방
-            </button>
-            <button
-              onClick={() => setActiveTab('applied')}
-              className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'applied'
-                  ? 'border-[#3072E1] text-[#3072E1]'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              내가 지원한 방
-            </button>
+          {/* 탭 네비게이션 - 헤더 바로 아래에 고정 */}
+          <div className="sticky top-[64px] z-10 bg-white pb-2">
+            <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('recruiting')}
+                className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'recruiting'
+                    ? 'border-[#3072E1] text-[#3072E1]'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                모집 중인 방
+              </button>
+              <button
+                onClick={() => setActiveTab('joined')}
+                className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'joined'
+                    ? 'border-[#3072E1] text-[#3072E1]'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                관심 있는 방
+              </button>
+              {!hasMyRoom && (
+                <button
+                  onClick={() => setActiveTab('applied')}
+                  className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'applied'
+                      ? 'border-[#3072E1] text-[#3072E1]'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  내가 지원한 방
+                </button>
+              )}
+            </div>
           </div>
 
           {/* 탭 콘텐츠 */}
@@ -859,7 +945,7 @@ const RoomSearchPage = () => {
                     </div>
                     <button
                       onClick={async () => {
-                        const isFavorite = favoriteRoomIds.has(room.id)
+                        const isFavorite = joinedRooms.some((joined) => joined.id === room.id)
                         
                         try {
                           const token = localStorage.getItem('accessToken')
@@ -880,11 +966,8 @@ const RoomSearchPage = () => {
                             })
 
                             if (res.ok) {
-                              setFavoriteRoomIds((prev) => {
-                                const newSet = new Set(prev)
-                                newSet.delete(room.id)
-                                return newSet
-                              })
+                              // 서버 상태 기준으로 관심 있는 방 목록 재조회
+                              fetchRooms('joined')
                             }
                           } else {
                             // 관심 있는 방으로 추가
@@ -897,11 +980,8 @@ const RoomSearchPage = () => {
                             })
 
                             if (res.ok) {
-                              setFavoriteRoomIds((prev) => {
-                                const newSet = new Set(prev)
-                                newSet.add(room.id)
-                                return newSet
-                              })
+                              // 서버 상태 기준으로 관심 있는 방 목록 재조회
+                              fetchRooms('joined')
                             }
                           }
                         } catch (err) {
@@ -911,7 +991,7 @@ const RoomSearchPage = () => {
                       className="p-1 -m-1 text-gray-400 hover:text-yellow-500 transition-colors"
                     >
                       <Star 
-                        className={`w-5 h-5 ${favoriteRoomIds.has(room.id) ? 'fill-yellow-500/30 text-yellow-500' : ''}`}
+                        className={`w-5 h-5 ${joinedRooms.some((joined) => joined.id === room.id) ? 'fill-yellow-500/30 text-yellow-500' : ''}`}
                       />
                     </button>
                   </div>
@@ -934,7 +1014,7 @@ const RoomSearchPage = () => {
                   </div>
                   
                   {/* 버튼 */}
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className={`grid gap-2 ${hasMyRoom ? 'grid-cols-1' : 'grid-cols-2'}`}>
                     <button
                       onClick={async () => {
                         const isCurrentlyExpanded = expandedRoomIds.has(room.id)
@@ -1024,15 +1104,17 @@ const RoomSearchPage = () => {
                     >
                       <span>{expandedRoomIds.has(room.id) ? '접기' : '체크리스트 보기'}</span>
                     </button>
-                    <button
-                      onClick={() => {
-                        setSelectedRoom(room)
-                        setShowApplyRoom(true)
-                      }}
-                      className="flex items-center justify-center gap-2 bg-blue-50 text-blue-600 border border-blue-200 text-sm font-medium px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors"
-                    >
-                      <span>가입 요청</span>
-                    </button>
+                    {!hasMyRoom && (
+                      <button
+                        onClick={() => {
+                          setSelectedRoom(room)
+                          setShowApplyRoom(true)
+                        }}
+                        className="flex items-center justify-center gap-2 bg-blue-50 text-blue-600 border border-blue-200 text-sm font-medium px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors"
+                      >
+                        <span>가입 요청</span>
+                      </button>
+                    )}
                   </div>
                   
                   {/* 방 규칙 표시 */}
@@ -1134,16 +1216,49 @@ const RoomSearchPage = () => {
             </div>
           )}
 
-          {activeTab === 'applied' && (
+          {!hasMyRoom && activeTab === 'applied' && (
             <div className="space-y-4">
               {filteredAppliedRooms.map((room) => (
-                <RoomCard
-                  key={room.id}
-                  room={room}
-                  onChatRequest={handleChatRequest}
-                  onApply={handleApply}
-                  isApplied={true}
-                />
+                <div key={room.id} className="bg-white border border-gray-200 rounded-xl p-5">
+                  {/* 헤더 */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-1 flex-1">
+                      <h2 className="text-base font-semibold text-black">
+                        {room.title}
+                      </h2>
+                    </div>
+                  </div>
+
+                  {/* 방 정보 */}
+                  <div className="text-sm text-gray-600 mb-4">
+                    <div className="flex items-center space-x-1">
+                      <span>{room.roomType}</span>
+                      <span>·</span>
+                      <span>{room.capacity}인실</span>
+                      {room.residencePeriod && (
+                        <>
+                          <span>·</span>
+                          <span>{room.residencePeriod}</span>
+                        </>
+                      )}
+                      <span>·</span>
+                      <span>{room.currentMembers}/{room.capacity}명</span>
+                    </div>
+                  </div>
+
+                  {/* 버튼 */}
+                  <div className="grid grid-cols-1 gap-2">
+                    <button
+                      onClick={() => {
+                        setSelectedRoom(room)
+                        setShowCancelConfirm(true)
+                      }}
+                      className="flex items-center justify-center gap-2 bg-red-50 text-red-600 border border-red-200 text-sm font-medium px-3 py-2 rounded-lg hover:bg-red-100 transition-colors"
+                    >
+                      <span>지원 취소</span>
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -1151,14 +1266,283 @@ const RoomSearchPage = () => {
           {activeTab === 'joined' && (
             <div className="space-y-4">
               {filteredJoinedRooms.map((room) => (
-                <RoomCard
-                  key={room.id}
-                  room={room}
-                  onChatRequest={handleChatRequest}
-                  onApply={handleApply}
-                  onLeave={handleLeave}
-                  isJoined={true}
-                />
+                <div key={room.id} className="bg-white border border-gray-200 rounded-xl p-5">
+                  {/* 헤더 */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-1 flex-1">
+                      <h2 className="text-base font-semibold text-black">
+                        {room.title}
+                      </h2>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const isFavorite = joinedRooms.some((joined) => joined.id === room.id)
+                        
+                        try {
+                          const token = localStorage.getItem('accessToken')
+                          if (!token) return
+
+                          const roomNo = typeof room.id === 'string' && room.id.startsWith('room-') 
+                            ? room.id.replace('room-', '') 
+                            : room.id
+
+                          if (isFavorite) {
+                            // 관심 있는 방에서 제거
+                            const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/like`, {
+                              method: 'DELETE',
+                              credentials: 'include',
+                              headers: {
+                                Authorization: `Bearer ${token}`,
+                              },
+                            })
+
+                            if (res.ok) {
+                              // 서버 상태 기준으로 관심 있는 방 목록 재조회
+                              fetchRooms('joined')
+                            }
+                          } else {
+                            // 관심 있는 방으로 추가
+                            const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/like`, {
+                              method: 'POST',
+                              credentials: 'include',
+                              headers: {
+                                Authorization: `Bearer ${token}`,
+                              },
+                            })
+
+                            if (res.ok) {
+                              // 서버 상태 기준으로 관심 있는 방 목록 재조회
+                              fetchRooms('joined')
+                            }
+                          }
+                        } catch (err) {
+                          console.error('[room] favorite toggle error', err)
+                        }
+                      }}
+                      className="p-1 -m-1 text-gray-400 hover:text-yellow-500 transition-colors"
+                    >
+                      <Star 
+                        className={`w-5 h-5 ${joinedRooms.some((joined) => joined.id === room.id) ? 'fill-yellow-500/30 text-yellow-500' : ''}`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* 방 정보 */}
+                  <div className="text-sm text-gray-600 mb-4">
+                    <div className="flex items-center space-x-1">
+                      <span>{room.roomType}</span>
+                      <span>·</span>
+                      <span>{room.capacity}인실</span>
+                      {room.residencePeriod && (
+                        <>
+                          <span>·</span>
+                          <span>{room.residencePeriod}</span>
+                        </>
+                      )}
+                      <span>·</span>
+                      <span>{room.currentMembers}/{room.capacity}명</span>
+                    </div>
+                  </div>
+
+                  {/* 버튼 */}
+                  <div className={`grid gap-2 ${hasMyRoom ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                    <button
+                      onClick={async () => {
+                        const isCurrentlyExpanded = expandedRoomIds.has(room.id)
+                        
+                        if (isCurrentlyExpanded) {
+                          // 접기
+                          setExpandedRoomIds((prev) => {
+                            const newSet = new Set(prev)
+                            newSet.delete(room.id)
+                            return newSet
+                          })
+                        } else {
+                          // 펼치기 - 방 규칙이 없으면 API 호출
+                          if (!roomRules[room.id]) {
+                            try {
+                              const token = localStorage.getItem('accessToken')
+                              if (!token) return
+
+                              // roomNo를 room.id에서 추출 (room.id가 roomNo인 경우)
+                              // room.id에서 roomNo 추출 (Room 타입의 id는 string이지만 실제로는 roomNo)
+                              const roomNo = typeof room.id === 'string' && room.id.startsWith('room-') 
+                                ? room.id.replace('room-', '') 
+                                : room.id
+
+                              // 공개 API 사용
+                              const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/rule`, {
+                                credentials: 'include',
+                                headers: {
+                                  Authorization: `Bearer ${token}`,
+                                },
+                              })
+
+                              if (res.ok) {
+                                const data = await res.json()
+                                const payload: ApiRoomRule | null = data?.result ?? data?.data ?? data
+                                
+                                if (payload && payload.categories) {
+                                  // 기타 메모 저장
+                                  if (payload.otherNotes) {
+                                    setRoomOtherNotes((prev) => ({
+                                      ...prev,
+                                      [room.id]: payload.otherNotes || '',
+                                    }))
+                                  }
+
+                                  // API 응답을 체크리스트 섹션 형식으로 변환
+                                  const checklistSections: ChecklistSection[] = payload.categories.map((category) => ({
+                                    title: category.category === 'BASIC_INFO' ? '기본 정보' 
+                                          : category.category === 'LIFESTYLE_PATTERN' ? '생활 패턴'
+                                          : '추가 규칙',
+                                    category: category.category as 'BASIC_INFO' | 'LIFESTYLE_PATTERN' | 'ADDITIONAL_RULES',
+                                    items: category.items
+                                      .map((item) => ({
+                                        label: item.label,
+                                        itemType: item.itemType,
+                                        value: item.itemType === 'VALUE' ? (item.value ?? '') : undefined,
+                                        extraValue: item.extraValue ?? undefined,
+                                        options: item.options && item.options.length > 0
+                                          ? item.options.map((opt) => ({
+                                              text: opt.text,
+                                              selected: opt.selected,
+                                            }))
+                                          : undefined,
+                                      })),
+                                  }))
+
+                                  setRoomRules((prev) => ({
+                                    ...prev,
+                                    [room.id]: checklistSections,
+                                  }))
+                                }
+                              }
+                            } catch (err) {
+                              console.error('[room] rule fetch error', err)
+                            }
+                          }
+                          
+                          // 펼치기
+                          setExpandedRoomIds((prev) => {
+                            const newSet = new Set(prev)
+                            newSet.add(room.id)
+                            return newSet
+                          })
+                        }
+                      }}
+                      className="flex items-center justify-center gap-2 border border-gray-300 bg-white text-black text-sm font-medium px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <span>{expandedRoomIds.has(room.id) ? '접기' : '체크리스트 보기'}</span>
+                    </button>
+                    {!hasMyRoom && (
+                      <button
+                        onClick={() => {
+                          setSelectedRoom(room)
+                          setShowApplyRoom(true)
+                        }}
+                        className="flex items-center justify-center gap-2 bg-blue-50 text-blue-600 border border-blue-200 text-sm font-medium px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors"
+                      >
+                        <span>가입 요청</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 방 규칙 표시 */}
+                  <div 
+                    className={`grid transition-all duration-300 ease-in-out ${
+                      expandedRoomIds.has(room.id) ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="mt-4 space-y-4 border-t border-gray-200 pt-4">
+                        {roomRules[room.id] && roomRules[room.id].length > 0 ? (
+                          <>
+                            {roomRules[room.id].map((section: ChecklistSection) => (
+                              <div key={section.title} className="space-y-3">
+                                <h4 className="text-base font-bold text-black">{section.title}</h4>
+                                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                  <div className="space-y-3 text-sm text-gray-700">
+                                    {section.items.map((item: ChecklistItem) => (
+                                      <div key={item.label} className="flex gap-2">
+                                        <div className="w-20 text-gray-500 shrink-0">{item.label}</div>
+                                        <div className={`flex flex-wrap gap-2 flex-1`}>
+                                          {item.value !== undefined && item.value !== null && item.value ? (
+                                            <span className="text-black font-medium">{item.value}</span>
+                                          ) : item.options && item.options.length > 0 ? (
+                                            <>
+                                              {item.options.map((option: ChecklistOption) => {
+                                                // 귀가/소등의 특정 옵션은 extraValue가 있을 때 별도로 표시하므로 여기서는 숨김
+                                                if (
+                                                  item.extraValue &&
+                                                  ((item.label === '소등' && option.text === '__시 이후' && option.selected) ||
+                                                    (item.label === '귀가' && option.text === '고정적' && option.selected))
+                                                ) {
+                                                  return null
+                                                }
+
+                                                return (
+                                                  <span
+                                                    key={option.text}
+                                                    className={
+                                                      option.selected
+                                                        ? `bg-blue-50 text-blue-600 border border-blue-200 text-xs px-2 py-1 rounded-md`
+                                                        : `text-gray-500 text-xs px-2 py-1`
+                                                    }
+                                                  >
+                                                    {option.text}
+                                                  </span>
+                                                )
+                                              })}
+                                              {/* 귀가/소등의 시간 정보를 별도로 표시 */}
+                                              {item.extraValue && (
+                                                <>
+                                                  {item.label === '소등' &&
+                                                    item.options?.some((opt) => opt.text === '__시 이후' && opt.selected) && (
+                                                      <span className="bg-blue-50 text-blue-600 border border-blue-200 text-xs px-2 py-1 rounded-md">
+                                                        {item.extraValue} 이후
+                                                      </span>
+                                                    )}
+                                                  {item.label === '귀가' &&
+                                                    item.options?.some((opt) => opt.text === '고정적' && opt.selected) && (
+                                                      <span className="bg-blue-50 text-blue-600 border border-blue-200 text-xs px-2 py-1 rounded-md">
+                                                        {item.extraValue} 고정적
+                                                      </span>
+                                                    )}
+                                                </>
+                                              )}
+                                            </>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            {/* 기타 메모 표시 */}
+                            {roomOtherNotes[room.id] && (
+                              <div className="space-y-3">
+                                <h4 className="text-base font-bold text-black">기타</h4>
+                                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                  <div className="text-sm text-gray-700 whitespace-pre-wrap">
+                                    {roomOtherNotes[room.id]}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        ) : expandedRoomIds.has(room.id) ? (
+                          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                            <div className="text-center py-4 text-gray-500 text-sm">
+                              등록된 체크리스트가 없습니다.
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -1182,9 +1566,10 @@ const RoomSearchPage = () => {
           }}
           roomInfo={{
             title: selectedRoom.title,
-            dormitory: selectedRoom.title,
             roomType: selectedRoom.roomType,
-            description: selectedRoom.description
+            capacity: selectedRoom.capacity,
+            currentMembers: selectedRoom.currentMembers,
+            residencePeriod: selectedRoom.residencePeriod
           }}
         />
       )}

@@ -6,9 +6,10 @@ interface ApplyRoomModalProps {
   onClose: () => void
   roomInfo?: {
     title: string
-    dormitory: string
     roomType: string
-    description: string
+    capacity: number
+    currentMembers: number
+    residencePeriod?: string
   }
 }
 
@@ -122,31 +123,44 @@ const ApplyRoomModal = ({ onClose, roomInfo }: ApplyRoomModalProps) => {
         onTouchEnd={handleTouchEnd}
         onMouseDown={handleMouseDown}
       >
-        {/* 드래그 핸들 */}
-        <div className="flex justify-center mb-4">
-          <div className="w-12 h-1 bg-gray-300 rounded-full"></div>
-        </div>
-        
-        {/* 헤더 */}
-        <div className="flex items-center justify-between mb-6 sticky top-0 bg-white pt-2">
-          <h2 className="text-xl font-bold text-black">방 지원하기</h2>
+        {/* 드래그 핸들 & 닫기 버튼 */}
+        <div className="flex items-center justify-between mb-2 sticky top-0 bg-white pt-2">
+          <div className="flex-1 flex justify-center">
+            <div className="w-12 h-1 bg-gray-300 rounded-full"></div>
+          </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="ml-2 p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
             <X className="w-6 h-6" />
           </button>
         </div>
 
-        {/* 방 정보 */}
+        {/* 헤더 제목 */}
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-black">방 지원하기</h2>
+        </div>
+
+        {/* 섹션 1: 선택한 방 정보 (라벨 텍스트 없이) */}
         {roomInfo && (
-          <div className="bg-gray-50 rounded-lg p-4 mb-6">
-            <h3 className="font-medium text-black mb-2">{roomInfo.dormitory} / {roomInfo.roomType}</h3>
-            <p className="text-sm text-gray-600">{roomInfo.description}</p>
-          </div>
+          <section className="mb-6">
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+              <div className="text-base font-semibold text-black mb-2">
+                {roomInfo.title}
+              </div>
+              <div className="text-sm text-gray-500">
+                {roomInfo.roomType} · {roomInfo.capacity}인실
+                {roomInfo.residencePeriod && ` · ${roomInfo.residencePeriod}`}
+                {' · '}
+                {roomInfo.currentMembers}/{roomInfo.capacity}명
+              </div>
+            </div>
+          </section>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        {/* 섹션 2: 지원 내용 (구분선만 유지) */}
+        <section className="border-t border-gray-200 pt-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
           {/* 자기소개 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -187,12 +201,13 @@ const ApplyRoomModal = ({ onClose, roomInfo }: ApplyRoomModalProps) => {
             </button>
             <button
               type="submit"
-              className="flex-1 bg-black text-white py-3 rounded-lg font-medium"
+              className="flex-1 bg-[#3072E1] text-white py-3 rounded-lg font-medium hover:bg-[#2563E1]"
             >
               지원하기
             </button>
           </div>
         </form>
+        </section>
       </div>
     </div>
   )

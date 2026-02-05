@@ -20,6 +20,9 @@ const BottomNavigationBar = () => {
     if (path === '/rooms/search') {
       return location.pathname === '/rooms/search'
     }
+    if (path === '/chats') {
+      return location.pathname === '/chats'
+    }
     return false
   }
 
@@ -90,9 +93,15 @@ const BottomNavigationBar = () => {
         >
           <Users className={getIconClass('/rooms/search')} />
         </button>
-        <button className="flex items-center justify-center relative">
-          <MessageCircle className="w-6 h-6 text-gray-600" />
-          <span className="absolute -top-1 -right-1 bg-red-500 w-2 h-2 rounded-full"></span>
+        <button
+          onClick={() => navigate('/chats')}
+          className={getButtonClass()}
+        >
+          <div className="relative">
+            <MessageCircle className={getIconClass('/chats')} />
+            {/* TODO: 새 메시지 있으면 빨간 점 표시 */}
+            {/* <span className="absolute -top-1 -right-1 bg-red-500 w-2 h-2 rounded-full"></span> */}
+          </div>
         </button>
         <button
           onClick={() => navigate('/me')}

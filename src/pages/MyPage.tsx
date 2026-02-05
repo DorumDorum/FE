@@ -652,11 +652,15 @@ const MyPage = () => {
         <header className="bg-white px-4 py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900">마이페이지</h1>
-            <div className="flex items-center space-x-3">
+            <button
+              type="button"
+              onClick={() => navigate('/notifications')}
+              className="flex items-center space-x-3"
+            >
               <div className="relative">
                 <Bell className="w-7 h-7 text-gray-700" />
               </div>
-            </div>
+            </button>
           </div>
         </header>
         {loading && (
