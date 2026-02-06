@@ -55,24 +55,32 @@ const MyRoomPage = () => {
   }
 
   // BE 룰 조회 응답 타입
-  type RuleItemCategory = 'BASIC_INFO' | 'LIFESTYLE_PATTERN' | 'ADDITIONAL_RULES'
-  type RuleItemType = 'VALUE' | 'OPTION'
-
   type ApiRoomRule = {
     otherNotes: string | null
-    categories: {
-      category: RuleItemCategory
-      items: {
-        label: string
-        itemType: RuleItemType
-        value: string | null
-        extraValue: string | null
-        options: {
-          text: string
-          selected: boolean
-        }[] | null
-      }[]
-    }[]
+    bedtime: string
+    wakeUp: string
+    returnHome: string
+    returnHomeTime: string
+    cleaning: string
+    phoneCall: string
+    sleepLight: string
+    sleepHabit: string
+    snoring: string
+    showerTime: string
+    eating: string
+    lightsOut: string
+    lightsOutTime: string
+    homeVisit: string
+    smoking: string
+    refrigerator: string
+    hairDryer: string | null
+    alarm: string | null
+    earphone: string | null
+    keyskin: string | null
+    heat: string | null
+    cold: string | null
+    study: string | null
+    trashCan: string | null
   }
 
   const [room, setRoom] = useState<ApiRoom | null>(null)
@@ -283,39 +291,530 @@ const MyRoomPage = () => {
         // 비고
         setOtherNotes(payload.otherNotes ?? '')
 
-        // 카테고리 → 섹션 매핑
-        const mappedSections: ChecklistSection[] = payload.categories.map((category) => {
-          const title =
-            category.category === 'BASIC_INFO'
-              ? '기본 정보'
-              : category.category === 'LIFESTYLE_PATTERN'
-                ? '생활 패턴'
-                : '추가 규칙'
+        // Enum을 한글로 변환하는 함수들 (MyPage와 동일)
+        const mapReturnHomeFromEnum = (enumValue: string): { text: string; selected: boolean } => {
+          if (enumValue === 'FLEXIBLE') return { text: '유동적', selected: true }
+          if (enumValue === 'FIXED') return { text: '고정적', selected: true }
+          return { text: '유동적', selected: false }
+        }
 
-          return {
-            title,
-            category: category.category,
-            items: category.items.map((item) => {
-              // 디버깅: 취침, 기상 항목 로그
-              if (item.label === '취침' || item.label === '기상') {
-                console.log(`[${item.label}] itemType:`, item.itemType, 'value:', item.value, 'options:', item.options)
+        const mapCleaningFromEnum = (enumValue: string): { text: string; selected: boolean } => {
+          if (enumValue === 'REGULAR') return { text: '주기적', selected: true }
+          if (enumValue === 'IRREGULAR') return { text: '비주기적', selected: true }
+          return { text: '주기적', selected: false }
+        }
+
+        const mapPhoneCallFromEnum = (enumValue: string): { text: string; selected: boolean } => {
+          if (enumValue === 'ALLOWED') return { text: '가능', selected: true }
+          if (enumValue === 'NOT_ALLOWED') return { text: '불가능', selected: true }
+          return { text: '가능', selected: false }
+        }
+
+        const mapSleepLightFromEnum = (enumValue: string): { text: string; selected: boolean } => {
+          if (enumValue === 'BRIGHT') return { text: '밝음', selected: true }
+          if (enumValue === 'DARK') return { text: '어두움', selected: true }
+          return { text: '밝음', selected: false }
+        }
+
+        const mapSleepHabitFromEnum = (enumValue: string): { text: string; selected: boolean } => {
+          if (enumValue === 'SEVERE') return { text: '심함', selected: true }
+          if (enumValue === 'MODERATE') return { text: '중간', selected: true }
+          if (enumValue === 'MILD') return { text: '약함', selected: true }
+          return { text: '약함', selected: false }
+        }
+
+        const mapSnoringFromEnum = (enumValue: string): { text: string; selected: boolean } => {
+          if (enumValue === 'SEVERE') return { text: '심함', selected: true }
+          if (enumValue === 'MODERATE') return { text: '중간', selected: true }
+          if (enumValue === 'MILD_OR_NONE') return { text: '약함~없음', selected: true }
+          return { text: '약함~없음', selected: false }
+        }
+
+        const mapShowerTimeFromEnum = (enumValue: string): { text: string; selected: boolean } => {
+          if (enumValue === 'MORNING') return { text: '아침', selected: true }
+          if (enumValue === 'EVENING') return { text: '저녁', selected: true }
+          return { text: '아침', selected: false }
+        }
+
+        const mapEatingFromEnum = (enumValue: string): { text: string; selected: boolean } => {
+          if (enumValue === 'ALLOWED') return { text: '가능', selected: true }
+          if (enumValue === 'NOT_ALLOWED') return { text: '불가능', selected: true }
+          if (enumValue === 'ALLOWED_WITH_VENTILATION') return { text: '가능+환기필수', selected: true }
+          return { text: '가능', selected: false }
+        }
+
+        const mapLightsOutFromEnum = (enumValue: string): { text: string; selected: boolean } => {
+          if (enumValue === 'AFTER_TIME') return { text: '__시 이후', selected: true }
+          if (enumValue === 'WHEN_ONE_SLEEPS') return { text: '한명 잘 때 알아서', selected: true }
+          return { text: '한명 잘 때 알아서', selected: false }
+        }
+
+        const mapHomeVisitFromEnum = (enumValue: string): { text: string; selected: boolean } => {
+          if (enumValue === 'WEEKLY') return { text: '매주', selected: true }
+          if (enumValue === 'BIWEEKLY') return { text: '2주', selected: true }
+          if (enumValue === 'MONTHLY_OR_MORE') return { text: '한달이상', selected: true }
+          if (enumValue === 'RARELY') return { text: '거의 안 감', selected: true }
+          return { text: '매주', selected: false }
+        }
+
+        const mapSmokingFromEnum = (enumValue: string): { text: string; selected: boolean } => {
+          if (enumValue === 'CIGARETTE') return { text: '연초', selected: true }
+          if (enumValue === 'E_CIGARETTE') return { text: '전자담배', selected: true }
+          if (enumValue === 'NON_SMOKER') return { text: '비흡연', selected: true }
+          return { text: '비흡연', selected: false }
+        }
+
+        const mapRefrigeratorFromEnum = (enumValue: string): { text: string; selected: boolean } => {
+          if (enumValue === 'RENT_PURCHASE_OWN') return { text: '대여·구매·보유', selected: true }
+          if (enumValue === 'DECIDE_AFTER_DISCUSSION') return { text: '협의 후 결정', selected: true }
+          if (enumValue === 'NOT_NEEDED') return { text: '필요 없음', selected: true }
+          return { text: '필요 없음', selected: false }
+        }
+
+        const mapAlarmFromEnum = (enumValue: string | null): { text: string; selected: boolean } => {
+          if (enumValue === 'VIBRATION') return { text: '진동', selected: true }
+          if (enumValue === 'SOUND') return { text: '소리', selected: true }
+          return { text: '진동', selected: false }
+        }
+
+        const mapEarphoneFromEnum = (enumValue: string | null): { text: string; selected: boolean } => {
+          if (enumValue === 'ALWAYS') return { text: '항상', selected: true }
+          if (enumValue === 'FLEXIBLE') return { text: '유동적', selected: true }
+          return { text: '항상', selected: false }
+        }
+
+        const mapKeyskinFromEnum = (enumValue: string | null): { text: string; selected: boolean } => {
+          if (enumValue === 'ALWAYS') return { text: '항상', selected: true }
+          if (enumValue === 'FLEXIBLE') return { text: '유동적', selected: true }
+          return { text: '항상', selected: false }
+        }
+
+        const mapHeatFromEnum = (enumValue: string | null): { text: string; selected: boolean } => {
+          if (enumValue === 'VERY_SENSITIVE') return { text: '많이 탐', selected: true }
+          if (enumValue === 'MODERATE') return { text: '중간', selected: true }
+          if (enumValue === 'LESS_SENSITIVE') return { text: '적게 탐', selected: true }
+          return { text: '중간', selected: false }
+        }
+
+        const mapColdFromEnum = (enumValue: string | null): { text: string; selected: boolean } => {
+          if (enumValue === 'VERY_SENSITIVE') return { text: '많이 탐', selected: true }
+          if (enumValue === 'MODERATE') return { text: '중간', selected: true }
+          if (enumValue === 'LESS_SENSITIVE') return { text: '적게 탐', selected: true }
+          return { text: '중간', selected: false }
+        }
+
+        const mapStudyFromEnum = (enumValue: string | null): { text: string; selected: boolean } => {
+          if (enumValue === 'OUTSIDE_DORM') return { text: '기숙사 밖', selected: true }
+          if (enumValue === 'INSIDE_DORM') return { text: '기숙사 안', selected: true }
+          if (enumValue === 'FLEXIBLE') return { text: '유동적', selected: true }
+          return { text: '유동적', selected: false }
+        }
+
+        const mapTrashCanFromEnum = (enumValue: string | null): { text: string; selected: boolean } => {
+          if (enumValue === 'INDIVIDUAL') return { text: '개별', selected: true }
+          if (enumValue === 'SHARED') return { text: '공유', selected: true }
+          return { text: '개별', selected: false }
+        }
+
+        // 기본 템플릿 생성 (MyPage와 동일한 구조)
+        const defaultTemplate: ChecklistSection[] = [
+          {
+            title: '생활 패턴',
+            category: 'LIFESTYLE_PATTERN',
+            items: [
+              { label: '취침', itemType: 'VALUE', value: '' },
+              { label: '기상', itemType: 'VALUE', value: '' },
+              {
+                label: '귀가',
+                itemType: 'OPTION',
+                extraValue: '',
+                options: [
+                  { text: '유동적', selected: false },
+                  { text: '고정적', selected: false },
+                ],
+              },
+              {
+                label: '청소',
+                itemType: 'OPTION',
+                options: [
+                  { text: '주기적', selected: false },
+                  { text: '비주기적', selected: false },
+                ],
+              },
+              {
+                label: '방에서 전화',
+                itemType: 'OPTION',
+                options: [
+                  { text: '가능', selected: false },
+                  { text: '불가능', selected: false },
+                ],
+              },
+              {
+                label: '잠귀',
+                itemType: 'OPTION',
+                options: [
+                  { text: '밝음', selected: false },
+                  { text: '어두움', selected: false },
+                ],
+              },
+              {
+                label: '잠버릇',
+                itemType: 'OPTION',
+                options: [
+                  { text: '심함', selected: false },
+                  { text: '중간', selected: false },
+                  { text: '약함', selected: false },
+                ],
+              },
+              {
+                label: '코골이',
+                itemType: 'OPTION',
+                options: [
+                  { text: '심함', selected: false },
+                  { text: '중간', selected: false },
+                  { text: '약함~없음', selected: false },
+                ],
+              },
+              {
+                label: '샤워시간',
+                itemType: 'OPTION',
+                options: [
+                  { text: '아침', selected: false },
+                  { text: '저녁', selected: false },
+                ],
+              },
+              {
+                label: '방에서 취식',
+                itemType: 'OPTION',
+                options: [
+                  { text: '가능', selected: false },
+                  { text: '불가능', selected: false },
+                  { text: '가능+환기필수', selected: false },
+                ],
+              },
+              {
+                label: '소등',
+                itemType: 'OPTION',
+                extraValue: '',
+                options: [
+                  { text: '__시 이후', selected: false },
+                  { text: '한명 잘 때 알아서', selected: false },
+                ],
+              },
+              {
+                label: '본가 주기',
+                itemType: 'OPTION',
+                options: [
+                  { text: '매주', selected: false },
+                  { text: '2주', selected: false },
+                  { text: '한달이상', selected: false },
+                  { text: '거의 안 감', selected: false },
+                ],
+              },
+              {
+                label: '흡연',
+                itemType: 'OPTION',
+                options: [
+                  { text: '연초', selected: false },
+                  { text: '전자담배', selected: false },
+                  { text: '비흡연', selected: false },
+                ],
+              },
+              {
+                label: '냉장고',
+                itemType: 'OPTION',
+                options: [
+                  { text: '대여·구매·보유', selected: false },
+                  { text: '협의 후 결정', selected: false },
+                  { text: '필요 없음', selected: false },
+                ],
+              },
+            ],
+          },
+          {
+            title: '추가 규칙',
+            category: 'ADDITIONAL_RULES',
+            items: [
+              { label: '드라이기', itemType: 'VALUE', value: '' },
+              {
+                label: '알람',
+                itemType: 'OPTION',
+                options: [
+                  { text: '진동', selected: false },
+                  { text: '소리', selected: false },
+                ],
+              },
+              {
+                label: '이어폰',
+                itemType: 'OPTION',
+                options: [
+                  { text: '항상', selected: false },
+                  { text: '유동적', selected: false },
+                ],
+              },
+              {
+                label: '키스킨',
+                itemType: 'OPTION',
+                options: [
+                  { text: '항상', selected: false },
+                  { text: '유동적', selected: false },
+                ],
+              },
+              {
+                label: '더위',
+                itemType: 'OPTION',
+                options: [
+                  { text: '많이 탐', selected: false },
+                  { text: '중간', selected: false },
+                  { text: '적게 탐', selected: false },
+                ],
+              },
+              {
+                label: '추위',
+                itemType: 'OPTION',
+                options: [
+                  { text: '많이 탐', selected: false },
+                  { text: '중간', selected: false },
+                  { text: '적게 탐', selected: false },
+                ],
+              },
+              {
+                label: '공부',
+                itemType: 'OPTION',
+                options: [
+                  { text: '기숙사 밖', selected: false },
+                  { text: '기숙사 안', selected: false },
+                  { text: '유동적', selected: false },
+                ],
+              },
+              {
+                label: '쓰레기통',
+                itemType: 'OPTION',
+                options: [
+                  { text: '개별', selected: false },
+                  { text: '공유', selected: false },
+                ],
+              },
+            ],
+          },
+        ]
+
+        // 기본 템플릿과 API 응답을 병합
+        const mappedSections: ChecklistSection[] = defaultTemplate.map((defaultSection) => {
+          if (defaultSection.category === 'LIFESTYLE_PATTERN') {
+            const mergedItems = defaultSection.items.map((defaultItem) => {
+              if (defaultItem.label === '취침') {
+                return { ...defaultItem, value: payload.bedtime || '' }
               }
-              
-              return {
-                label: item.label,
-                itemType: item.itemType,
-                // VALUE 타입이면 value 사용, OPTION 타입이면 value는 사용하지 않음
-                value: item.itemType === 'VALUE' ? (item.value ?? '') : undefined,
-                extraValue: item.extraValue ?? undefined,
-              options: item.options && item.options.length > 0
-                ? item.options.map((opt) => ({
-                    text: opt.text,
-                    selected: opt.selected,
-                  }))
-                : undefined,
+              if (defaultItem.label === '기상') {
+                return { ...defaultItem, value: payload.wakeUp || '' }
               }
-            }),
+              if (defaultItem.label === '귀가') {
+                const mapped = mapReturnHomeFromEnum(payload.returnHome || '')
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || [],
+                  extraValue: payload.returnHomeTime || ''
+                }
+              }
+              if (defaultItem.label === '청소') {
+                const mapped = mapCleaningFromEnum(payload.cleaning || '')
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              if (defaultItem.label === '방에서 전화') {
+                const mapped = mapPhoneCallFromEnum(payload.phoneCall || '')
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              if (defaultItem.label === '잠귀') {
+                const mapped = mapSleepLightFromEnum(payload.sleepLight || '')
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              if (defaultItem.label === '잠버릇') {
+                const mapped = mapSleepHabitFromEnum(payload.sleepHabit || '')
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              if (defaultItem.label === '코골이') {
+                const mapped = mapSnoringFromEnum(payload.snoring || '')
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              if (defaultItem.label === '샤워시간') {
+                const mapped = mapShowerTimeFromEnum(payload.showerTime || '')
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              if (defaultItem.label === '방에서 취식') {
+                const mapped = mapEatingFromEnum(payload.eating || '')
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              if (defaultItem.label === '소등') {
+                const mapped = mapLightsOutFromEnum(payload.lightsOut || '')
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || [],
+                  extraValue: payload.lightsOutTime || ''
+                }
+              }
+              if (defaultItem.label === '본가 주기') {
+                const mapped = mapHomeVisitFromEnum(payload.homeVisit || '')
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              if (defaultItem.label === '흡연') {
+                const mapped = mapSmokingFromEnum(payload.smoking || '')
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              if (defaultItem.label === '냉장고') {
+                const mapped = mapRefrigeratorFromEnum(payload.refrigerator || '')
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              return defaultItem
+            })
+            return { ...defaultSection, items: mergedItems }
           }
+          if (defaultSection.category === 'ADDITIONAL_RULES') {
+            const mergedItems = defaultSection.items.map((defaultItem) => {
+              if (defaultItem.label === '드라이기') {
+                return { ...defaultItem, value: payload.hairDryer || '' }
+              }
+              if (defaultItem.label === '알람') {
+                const mapped = mapAlarmFromEnum(payload.alarm || null)
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              if (defaultItem.label === '이어폰') {
+                const mapped = mapEarphoneFromEnum(payload.earphone || null)
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              if (defaultItem.label === '키스킨') {
+                const mapped = mapKeyskinFromEnum(payload.keyskin || null)
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              if (defaultItem.label === '더위') {
+                const mapped = mapHeatFromEnum(payload.heat || null)
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              if (defaultItem.label === '추위') {
+                const mapped = mapColdFromEnum(payload.cold || null)
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              if (defaultItem.label === '공부') {
+                const mapped = mapStudyFromEnum(payload.study || null)
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              if (defaultItem.label === '쓰레기통') {
+                const mapped = mapTrashCanFromEnum(payload.trashCan || null)
+                return {
+                  ...defaultItem,
+                  options: defaultItem.options?.map(opt => ({
+                    ...opt,
+                    selected: opt.text === mapped.text
+                  })) || []
+                }
+              }
+              return defaultItem
+            })
+            return { ...defaultSection, items: mergedItems }
+          }
+          return defaultSection
         })
 
         setChecklistSections(mappedSections)
@@ -847,47 +1346,177 @@ const MyRoomPage = () => {
                         const selectedResidencePeriod = residencePeriodItem?.options?.find(opt => opt.selected)?.text
                         const residencePeriod = selectedResidencePeriod ? mapResidencePeriodToEnum(selectedResidencePeriod) : null
 
-                        // categories 변환
-                        const categories = checklistSections.map((section) => {
-                          // section.category가 있으면 사용, 없으면 title로 매핑
-                          const category: RuleItemCategory =
-                            section.category ||
-                            (section.title === '기본 정보'
-                              ? 'BASIC_INFO'
-                              : section.title === '생활 패턴'
-                                ? 'LIFESTYLE_PATTERN'
-                                : 'ADDITIONAL_RULES')
+                        // Enum 매핑 함수들 (CreateRoomModal과 동일)
+                        const mapReturnHome = (text: string): string => {
+                          if (text === '유동적') return 'FLEXIBLE'
+                          if (text === '고정적') return 'FIXED'
+                          return 'FLEXIBLE'
+                        }
 
-                          return {
-                            category,
-                            items: section.items.map((item) => {
-                              // capacity가 변경되었고 "수용 인원" 항목이면 selected 값 업데이트
-                              if (capacity && item.label === '수용 인원' && item.options) {
-                                return {
-                                  label: item.label,
-                                  itemType: item.options ? ('OPTION' as RuleItemType) : ('VALUE' as RuleItemType),
-                                  value: item.value || null,
-                                  extraValue: item.extraValue || null,
-                                  options: item.options.map((opt) => ({
-                                    text: opt.text,
-                                    selected: opt.text === `${capacity}명`,
-                                  })),
-                                }
-                              }
-                              
-                              return {
-                              label: item.label,
-                              itemType: item.options ? ('OPTION' as RuleItemType) : ('VALUE' as RuleItemType),
-                              value: item.value || null,
-                              extraValue: item.extraValue || null,
-                              options: item.options?.map((opt) => ({
-                                text: opt.text,
-                                selected: opt.selected || false,
-                              })) || null,
-                              }
-                            }),
-                          }
-                        })
+                        const mapCleaning = (text: string): string => {
+                          if (text === '주기적') return 'REGULAR'
+                          if (text === '비주기적') return 'IRREGULAR'
+                          return 'REGULAR'
+                        }
+
+                        const mapPhoneCall = (text: string): string => {
+                          if (text === '가능') return 'ALLOWED'
+                          if (text === '불가능') return 'NOT_ALLOWED'
+                          return 'ALLOWED'
+                        }
+
+                        const mapSleepLight = (text: string): string => {
+                          if (text === '밝음') return 'BRIGHT'
+                          if (text === '어두움') return 'DARK'
+                          return 'BRIGHT'
+                        }
+
+                        const mapSleepHabit = (text: string): string => {
+                          if (text === '심함') return 'SEVERE'
+                          if (text === '중간') return 'MODERATE'
+                          if (text === '약함') return 'MILD'
+                          return 'MILD'
+                        }
+
+                        const mapSnoring = (text: string): string => {
+                          if (text === '심함') return 'SEVERE'
+                          if (text === '중간') return 'MODERATE'
+                          if (text === '약함~없음') return 'MILD_OR_NONE'
+                          return 'MILD_OR_NONE'
+                        }
+
+                        const mapShowerTime = (text: string): string => {
+                          if (text === '아침') return 'MORNING'
+                          if (text === '저녁') return 'EVENING'
+                          return 'MORNING'
+                        }
+
+                        const mapEating = (text: string): string => {
+                          if (text === '가능') return 'ALLOWED'
+                          if (text === '불가능') return 'NOT_ALLOWED'
+                          if (text === '가능+환기필수') return 'ALLOWED_WITH_VENTILATION'
+                          return 'ALLOWED'
+                        }
+
+                        const mapLightsOut = (text: string): string => {
+                          if (text === '__시 이후') return 'AFTER_TIME'
+                          if (text === '한명 잘 때 알아서') return 'WHEN_ONE_SLEEPS'
+                          return 'WHEN_ONE_SLEEPS'
+                        }
+
+                        const mapHomeVisit = (text: string): string => {
+                          if (text === '매주') return 'WEEKLY'
+                          if (text === '2주') return 'BIWEEKLY'
+                          if (text === '한달이상') return 'MONTHLY_OR_MORE'
+                          if (text === '거의 안 감') return 'RARELY'
+                          return 'WEEKLY'
+                        }
+
+                        const mapSmoking = (text: string): string => {
+                          if (text === '연초') return 'CIGARETTE'
+                          if (text === '전자담배') return 'E_CIGARETTE'
+                          if (text === '비흡연') return 'NON_SMOKER'
+                          return 'NON_SMOKER'
+                        }
+
+                        const mapRefrigerator = (text: string): string => {
+                          if (text === '대여·구매·보유') return 'RENT_PURCHASE_OWN'
+                          if (text === '협의 후 결정') return 'DECIDE_AFTER_DISCUSSION'
+                          if (text === '필요 없음') return 'NOT_NEEDED'
+                          return 'NOT_NEEDED'
+                        }
+
+                        const mapAlarm = (text: string): string | null => {
+                          if (text === '진동') return 'VIBRATION'
+                          if (text === '소리') return 'SOUND'
+                          return null
+                        }
+
+                        const mapEarphone = (text: string): string | null => {
+                          if (text === '항상') return 'ALWAYS'
+                          if (text === '유동적') return 'FLEXIBLE'
+                          return null
+                        }
+
+                        const mapKeyskin = (text: string): string | null => {
+                          if (text === '항상') return 'ALWAYS'
+                          if (text === '유동적') return 'FLEXIBLE'
+                          return null
+                        }
+
+                        const mapHeat = (text: string): string | null => {
+                          if (text === '많이 탐') return 'VERY_SENSITIVE'
+                          if (text === '중간') return 'MODERATE'
+                          if (text === '적게 탐') return 'LESS_SENSITIVE'
+                          return null
+                        }
+
+                        const mapCold = (text: string): string | null => {
+                          if (text === '많이 탐') return 'VERY_SENSITIVE'
+                          if (text === '중간') return 'MODERATE'
+                          if (text === '적게 탐') return 'LESS_SENSITIVE'
+                          return null
+                        }
+
+                        const mapStudy = (text: string): string | null => {
+                          if (text === '기숙사 밖') return 'OUTSIDE_DORM'
+                          if (text === '기숙사 안') return 'INSIDE_DORM'
+                          if (text === '유동적') return 'FLEXIBLE'
+                          return null
+                        }
+
+                        const mapTrashCan = (text: string): string | null => {
+                          if (text === '개별') return 'INDIVIDUAL'
+                          if (text === '공유') return 'SHARED'
+                          return null
+                        }
+
+                        // 체크리스트 데이터 구성
+                        const lifestyleSection = checklistSections.find(s => s.category === 'LIFESTYLE_PATTERN')
+                        const additionalSection = checklistSections.find(s => s.category === 'ADDITIONAL_RULES')
+
+                        const getItemValue = (label: string) => {
+                          const item = lifestyleSection?.items.find(i => i.label === label) || additionalSection?.items.find(i => i.label === label)
+                          return item?.value || ''
+                        }
+
+                        const getSelectedOption = (label: string) => {
+                          const item = lifestyleSection?.items.find(i => i.label === label) || additionalSection?.items.find(i => i.label === label)
+                          return item?.options?.find(opt => opt.selected)?.text || null
+                        }
+
+                        const getExtraValue = (label: string) => {
+                          const item = lifestyleSection?.items.find(i => i.label === label) || additionalSection?.items.find(i => i.label === label)
+                          return item?.extraValue || ''
+                        }
+
+                        const rule = {
+                          bedtime: getItemValue('취침'),
+                          wakeUp: getItemValue('기상'),
+                          returnHome: mapReturnHome(getSelectedOption('귀가') || ''),
+                          returnHomeTime: getExtraValue('귀가'),
+                          cleaning: mapCleaning(getSelectedOption('청소') || ''),
+                          phoneCall: mapPhoneCall(getSelectedOption('방에서 전화') || ''),
+                          sleepLight: mapSleepLight(getSelectedOption('잠귀') || ''),
+                          sleepHabit: mapSleepHabit(getSelectedOption('잠버릇') || ''),
+                          snoring: mapSnoring(getSelectedOption('코골이') || ''),
+                          showerTime: mapShowerTime(getSelectedOption('샤워시간') || ''),
+                          eating: mapEating(getSelectedOption('방에서 취식') || ''),
+                          lightsOut: mapLightsOut(getSelectedOption('소등') || ''),
+                          lightsOutTime: getExtraValue('소등'),
+                          homeVisit: mapHomeVisit(getSelectedOption('본가 주기') || ''),
+                          smoking: mapSmoking(getSelectedOption('흡연') || ''),
+                          refrigerator: mapRefrigerator(getSelectedOption('냉장고') || ''),
+                          hairDryer: getItemValue('드라이기') || null,
+                          alarm: mapAlarm(getSelectedOption('알람') || ''),
+                          earphone: mapEarphone(getSelectedOption('이어폰') || ''),
+                          keyskin: mapKeyskin(getSelectedOption('키스킨') || ''),
+                          heat: mapHeat(getSelectedOption('더위') || ''),
+                          cold: mapCold(getSelectedOption('추위') || ''),
+                          study: mapStudy(getSelectedOption('공부') || ''),
+                          trashCan: mapTrashCan(getSelectedOption('쓰레기통') || ''),
+                          otherNotes: otherNotes || null,
+                        }
 
                         const params = new URLSearchParams({ roomNo: String(room.roomNo) })
                         const res = await fetch(`http://localhost:8080/api/rooms/me/rule?${params.toString()}`, {
@@ -898,8 +1527,7 @@ const MyRoomPage = () => {
                             'Content-Type': 'application/json',
                           },
                           body: JSON.stringify({
-                            otherNotes: otherNotes || null,
-                            categories,
+                            rule,
                             roomType: roomType || null,
                             capacity: capacity || null,
                             residencePeriod: residencePeriod || null,
@@ -943,31 +1571,11 @@ const MyRoomPage = () => {
                             const refreshPayload: ApiRoomRule | null = refreshData?.result ?? refreshData?.data ?? refreshData
                             if (refreshPayload) {
                               setOtherNotes(refreshPayload.otherNotes ?? '')
-                              const mappedSections: ChecklistSection[] = refreshPayload.categories.map((category) => {
-                                const title =
-                                  category.category === 'BASIC_INFO'
-                                    ? '기본 정보'
-                                    : category.category === 'LIFESTYLE_PATTERN'
-                                      ? '생활 패턴'
-                                      : '추가 규칙'
-                                return {
-                                  title,
-                                  category: category.category,
-                                  items: category.items.map((item) => ({
-                                    label: item.label,
-                                    itemType: item.itemType,
-                                    value: item.itemType === 'VALUE' ? (item.value ?? '') : undefined,
-                                    extraValue: item.extraValue ?? undefined,
-                                    options: item.options && item.options.length > 0
-                                      ? item.options.map((opt) => ({
-                                          text: opt.text,
-                                          selected: opt.selected,
-                                        }))
-                                      : undefined,
-                                  })),
-                                }
-                              })
-                              setChecklistSections(mappedSections)
+                              // fetchRoomRule과 동일한 로직 사용 (Enum 매핑 함수 재사용)
+                              // 여기서는 간단히 window.location.reload()로 처리하거나
+                              // fetchRoomRule 로직을 재사용하는 것이 좋지만,
+                              // 코드 중복을 피하기 위해 페이지 새로고침으로 처리
+                              window.location.reload()
                             }
                           }
                         }

@@ -28,8 +28,9 @@ const RoomSearchPage = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState({
-    roomType: '',
-    roomSize: '',
+    roomType: [] as string[],
+    roomSize: [] as string[],
+    residencePeriod: [] as string[],
     sort: 'recent' as 'recent' | 'capacity' | 'remaining',
     checklist: {} as Record<string, string[]>, // 체크리스트 항목별 선택된 옵션들
   })
@@ -45,6 +46,297 @@ const RoomSearchPage = () => {
   const [roomRules, setRoomRules] = useState<Record<string, ChecklistSection[]>>({})
   const [roomOtherNotes, setRoomOtherNotes] = useState<Record<string, string>>({})
   const [hasMyRoom, setHasMyRoom] = useState<boolean | null>(null)
+  
+  // Enum을 한글로 변환하는 함수들 (재사용)
+  const mapReturnHomeFromEnum = (enumValue: string): string => {
+    if (enumValue === 'FLEXIBLE') return '유동적'
+    if (enumValue === 'FIXED') return '고정적'
+    return '유동적'
+  }
+
+  const mapCleaningFromEnum = (enumValue: string): string => {
+    if (enumValue === 'REGULAR') return '주기적'
+    if (enumValue === 'IRREGULAR') return '비주기적'
+    return '주기적'
+  }
+
+  const mapPhoneCallFromEnum = (enumValue: string): string => {
+    if (enumValue === 'ALLOWED') return '가능'
+    if (enumValue === 'NOT_ALLOWED') return '불가능'
+    return '가능'
+  }
+
+  const mapSleepLightFromEnum = (enumValue: string): string => {
+    if (enumValue === 'BRIGHT') return '밝음'
+    if (enumValue === 'DARK') return '어두움'
+    return '밝음'
+  }
+
+  const mapSleepHabitFromEnum = (enumValue: string): string => {
+    if (enumValue === 'SEVERE') return '심함'
+    if (enumValue === 'MODERATE') return '중간'
+    if (enumValue === 'MILD') return '약함'
+    return '약함'
+  }
+
+  const mapSnoringFromEnum = (enumValue: string): string => {
+    if (enumValue === 'SEVERE') return '심함'
+    if (enumValue === 'MODERATE') return '중간'
+    if (enumValue === 'MILD_OR_NONE') return '약함~없음'
+    return '약함~없음'
+  }
+
+  const mapShowerTimeFromEnum = (enumValue: string): string => {
+    if (enumValue === 'MORNING') return '아침'
+    if (enumValue === 'EVENING') return '저녁'
+    return '아침'
+  }
+
+  const mapEatingFromEnum = (enumValue: string): string => {
+    if (enumValue === 'ALLOWED') return '가능'
+    if (enumValue === 'NOT_ALLOWED') return '불가능'
+    if (enumValue === 'ALLOWED_WITH_VENTILATION') return '가능+환기필수'
+    return '가능'
+  }
+
+  const mapLightsOutFromEnum = (enumValue: string): string => {
+    if (enumValue === 'AFTER_TIME') return '__시 이후'
+    if (enumValue === 'WHEN_ONE_SLEEPS') return '한명 잘 때 알아서'
+    return '한명 잘 때 알아서'
+  }
+
+  const mapHomeVisitFromEnum = (enumValue: string): string => {
+    if (enumValue === 'WEEKLY') return '매주'
+    if (enumValue === 'BIWEEKLY') return '2주'
+    if (enumValue === 'MONTHLY_OR_MORE') return '한달이상'
+    if (enumValue === 'RARELY') return '거의 안 감'
+    return '매주'
+  }
+
+  const mapSmokingFromEnum = (enumValue: string): string => {
+    if (enumValue === 'CIGARETTE') return '연초'
+    if (enumValue === 'E_CIGARETTE') return '전자담배'
+    if (enumValue === 'NON_SMOKER') return '비흡연'
+    return '비흡연'
+  }
+
+  const mapRefrigeratorFromEnum = (enumValue: string): string => {
+    if (enumValue === 'RENT_PURCHASE_OWN') return '대여·구매·보유'
+    if (enumValue === 'DECIDE_AFTER_DISCUSSION') return '협의 후 결정'
+    if (enumValue === 'NOT_NEEDED') return '필요 없음'
+    return '필요 없음'
+  }
+
+  const mapAlarmFromEnum = (enumValue: string | null): string | null => {
+    if (enumValue === 'VIBRATION') return '진동'
+    if (enumValue === 'SOUND') return '소리'
+    return null
+  }
+
+  const mapEarphoneFromEnum = (enumValue: string | null): string | null => {
+    if (enumValue === 'ALWAYS') return '항상'
+    if (enumValue === 'FLEXIBLE') return '유동적'
+    return null
+  }
+
+  const mapKeyskinFromEnum = (enumValue: string | null): string | null => {
+    if (enumValue === 'ALWAYS') return '항상'
+    if (enumValue === 'FLEXIBLE') return '유동적'
+    return null
+  }
+
+  const mapHeatFromEnum = (enumValue: string | null): string | null => {
+    if (enumValue === 'VERY_SENSITIVE') return '많이 탐'
+    if (enumValue === 'MODERATE') return '중간'
+    if (enumValue === 'LESS_SENSITIVE') return '적게 탐'
+    return null
+  }
+
+  const mapColdFromEnum = (enumValue: string | null): string | null => {
+    if (enumValue === 'VERY_SENSITIVE') return '많이 탐'
+    if (enumValue === 'MODERATE') return '중간'
+    if (enumValue === 'LESS_SENSITIVE') return '적게 탐'
+    return null
+  }
+
+  const mapStudyFromEnum = (enumValue: string | null): string | null => {
+    if (enumValue === 'OUTSIDE_DORM') return '기숙사 밖'
+    if (enumValue === 'INSIDE_DORM') return '기숙사 안'
+    if (enumValue === 'FLEXIBLE') return '유동적'
+    return null
+  }
+
+  const mapTrashCanFromEnum = (enumValue: string | null): string | null => {
+    if (enumValue === 'INDIVIDUAL') return '개별'
+    if (enumValue === 'SHARED') return '공유'
+    return null
+  }
+
+  // API 응답을 체크리스트 섹션으로 변환하는 함수
+  const convertApiRuleToChecklistSections = (payload: ApiRoomRule): ChecklistSection[] => {
+    return [
+      {
+        title: '생활 패턴',
+        category: 'LIFESTYLE_PATTERN',
+        items: [
+          { label: '취침', value: payload.bedtime || '' },
+          { label: '기상', value: payload.wakeUp || '' },
+          {
+            label: '귀가',
+            extraValue: payload.returnHomeTime || '',
+            options: [
+              { text: '유동적', selected: mapReturnHomeFromEnum(payload.returnHome || '') === '유동적' },
+              { text: '고정적', selected: mapReturnHomeFromEnum(payload.returnHome || '') === '고정적' },
+            ],
+          },
+          {
+            label: '청소',
+            options: [
+              { text: '주기적', selected: mapCleaningFromEnum(payload.cleaning || '') === '주기적' },
+              { text: '비주기적', selected: mapCleaningFromEnum(payload.cleaning || '') === '비주기적' },
+            ],
+          },
+          {
+            label: '방에서 전화',
+            options: [
+              { text: '가능', selected: mapPhoneCallFromEnum(payload.phoneCall || '') === '가능' },
+              { text: '불가능', selected: mapPhoneCallFromEnum(payload.phoneCall || '') === '불가능' },
+            ],
+          },
+          {
+            label: '잠귀',
+            options: [
+              { text: '밝음', selected: mapSleepLightFromEnum(payload.sleepLight || '') === '밝음' },
+              { text: '어두움', selected: mapSleepLightFromEnum(payload.sleepLight || '') === '어두움' },
+            ],
+          },
+          {
+            label: '잠버릇',
+            options: [
+              { text: '심함', selected: mapSleepHabitFromEnum(payload.sleepHabit || '') === '심함' },
+              { text: '중간', selected: mapSleepHabitFromEnum(payload.sleepHabit || '') === '중간' },
+              { text: '약함', selected: mapSleepHabitFromEnum(payload.sleepHabit || '') === '약함' },
+            ],
+          },
+          {
+            label: '코골이',
+            options: [
+              { text: '심함', selected: mapSnoringFromEnum(payload.snoring || '') === '심함' },
+              { text: '중간', selected: mapSnoringFromEnum(payload.snoring || '') === '중간' },
+              { text: '약함~없음', selected: mapSnoringFromEnum(payload.snoring || '') === '약함~없음' },
+            ],
+          },
+          {
+            label: '샤워시간',
+            options: [
+              { text: '아침', selected: mapShowerTimeFromEnum(payload.showerTime || '') === '아침' },
+              { text: '저녁', selected: mapShowerTimeFromEnum(payload.showerTime || '') === '저녁' },
+            ],
+          },
+          {
+            label: '방에서 취식',
+            options: [
+              { text: '가능', selected: mapEatingFromEnum(payload.eating || '') === '가능' },
+              { text: '불가능', selected: mapEatingFromEnum(payload.eating || '') === '불가능' },
+              { text: '가능+환기필수', selected: mapEatingFromEnum(payload.eating || '') === '가능+환기필수' },
+            ],
+          },
+          {
+            label: '소등',
+            extraValue: payload.lightsOutTime || '',
+            options: [
+              { text: '__시 이후', selected: mapLightsOutFromEnum(payload.lightsOut || '') === '__시 이후' },
+              { text: '한명 잘 때 알아서', selected: mapLightsOutFromEnum(payload.lightsOut || '') === '한명 잘 때 알아서' },
+            ],
+          },
+          {
+            label: '본가 주기',
+            options: [
+              { text: '매주', selected: mapHomeVisitFromEnum(payload.homeVisit || '') === '매주' },
+              { text: '2주', selected: mapHomeVisitFromEnum(payload.homeVisit || '') === '2주' },
+              { text: '한달이상', selected: mapHomeVisitFromEnum(payload.homeVisit || '') === '한달이상' },
+              { text: '거의 안 감', selected: mapHomeVisitFromEnum(payload.homeVisit || '') === '거의 안 감' },
+            ],
+          },
+          {
+            label: '흡연',
+            options: [
+              { text: '연초', selected: mapSmokingFromEnum(payload.smoking || '') === '연초' },
+              { text: '전자담배', selected: mapSmokingFromEnum(payload.smoking || '') === '전자담배' },
+              { text: '비흡연', selected: mapSmokingFromEnum(payload.smoking || '') === '비흡연' },
+            ],
+          },
+          {
+            label: '냉장고',
+            options: [
+              { text: '대여·구매·보유', selected: mapRefrigeratorFromEnum(payload.refrigerator || '') === '대여·구매·보유' },
+              { text: '협의 후 결정', selected: mapRefrigeratorFromEnum(payload.refrigerator || '') === '협의 후 결정' },
+              { text: '필요 없음', selected: mapRefrigeratorFromEnum(payload.refrigerator || '') === '필요 없음' },
+            ],
+          },
+        ],
+      },
+      {
+        title: '추가 규칙',
+        category: 'ADDITIONAL_RULES',
+        items: [
+          { label: '드라이기', value: payload.hairDryer || '' },
+          {
+            label: '알람',
+            options: [
+              { text: '진동', selected: mapAlarmFromEnum(payload.alarm) === '진동' },
+              { text: '소리', selected: mapAlarmFromEnum(payload.alarm) === '소리' },
+            ],
+          },
+          {
+            label: '이어폰',
+            options: [
+              { text: '항상', selected: mapEarphoneFromEnum(payload.earphone) === '항상' },
+              { text: '유동적', selected: mapEarphoneFromEnum(payload.earphone) === '유동적' },
+            ],
+          },
+          {
+            label: '키스킨',
+            options: [
+              { text: '항상', selected: mapKeyskinFromEnum(payload.keyskin) === '항상' },
+              { text: '유동적', selected: mapKeyskinFromEnum(payload.keyskin) === '유동적' },
+            ],
+          },
+          {
+            label: '더위',
+            options: [
+              { text: '많이 탐', selected: mapHeatFromEnum(payload.heat) === '많이 탐' },
+              { text: '중간', selected: mapHeatFromEnum(payload.heat) === '중간' },
+              { text: '적게 탐', selected: mapHeatFromEnum(payload.heat) === '적게 탐' },
+            ],
+          },
+          {
+            label: '추위',
+            options: [
+              { text: '많이 탐', selected: mapColdFromEnum(payload.cold) === '많이 탐' },
+              { text: '중간', selected: mapColdFromEnum(payload.cold) === '중간' },
+              { text: '적게 탐', selected: mapColdFromEnum(payload.cold) === '적게 탐' },
+            ],
+          },
+          {
+            label: '공부',
+            options: [
+              { text: '기숙사 밖', selected: mapStudyFromEnum(payload.study) === '기숙사 밖' },
+              { text: '기숙사 안', selected: mapStudyFromEnum(payload.study) === '기숙사 안' },
+              { text: '유동적', selected: mapStudyFromEnum(payload.study) === '유동적' },
+            ],
+          },
+          {
+            label: '쓰레기통',
+            options: [
+              { text: '개별', selected: mapTrashCanFromEnum(payload.trashCan) === '개별' },
+              { text: '공유', selected: mapTrashCanFromEnum(payload.trashCan) === '공유' },
+            ],
+          },
+        ],
+      },
+    ]
+  }
   
   // 체크리스트 섹션 정의 (CreateRoomModal과 동일한 구조)
   type ChecklistOption = {
@@ -66,20 +358,31 @@ const RoomSearchPage = () => {
   }
 
   type ApiRoomRule = {
-    categories: Array<{
-      category: string
-      items: Array<{
-        label: string
-        itemType: 'VALUE' | 'OPTION'
-        value?: string
-        extraValue?: string
-        options?: Array<{
-          text: string
-          selected: boolean
-        }>
-      }>
-    }>
-    otherNotes?: string
+    otherNotes: string | null
+    bedtime: string
+    wakeUp: string
+    returnHome: string
+    returnHomeTime: string
+    cleaning: string
+    phoneCall: string
+    sleepLight: string
+    sleepHabit: string
+    snoring: string
+    showerTime: string
+    eating: string
+    lightsOut: string
+    lightsOutTime: string
+    homeVisit: string
+    smoking: string
+    refrigerator: string
+    hairDryer: string | null
+    alarm: string | null
+    earphone: string | null
+    keyskin: string | null
+    heat: string | null
+    cold: string | null
+    study: string | null
+    trashCan: string | null
   }
   
   const checklistSections: ChecklistSection[] = [
@@ -290,11 +593,61 @@ const RoomSearchPage = () => {
   })
 
   const resetFilters = () => {
-    setFilters({ roomType: '', roomSize: '', sort: 'recent', checklist: {} })
+    setFilters({ roomType: [], roomSize: [], residencePeriod: [], sort: 'recent', checklist: {} })
   }
 
   const toggleChecklistOption = (itemLabel: string, option: string) => {
     setFilters((prev) => {
+      // 기본정보 필터는 Room 필드로 직접 매핑 (다중 선택 가능)
+      if (itemLabel === '수용 인원') {
+        const capacity = option.replace('명', '')
+        const currentSizes = prev.roomSize || []
+        const newSizes = currentSizes.includes(capacity)
+          ? currentSizes.filter((s) => s !== capacity)
+          : [...currentSizes, capacity]
+        return {
+          ...prev,
+          roomSize: newSizes,
+        }
+      }
+      
+      if (itemLabel === '거주기간') {
+        const mapResidencePeriodToFilter = (period: string): string => {
+          if (period === '학기(16주)') return 'SEMESTER'
+          if (period === '반기(24주)') return 'HALF_YEAR'
+          if (period === '계절학기') return 'SEASONAL'
+          return ''
+        }
+        const periodValue = mapResidencePeriodToFilter(option)
+        const currentPeriods = prev.residencePeriod || []
+        const newPeriods = currentPeriods.includes(periodValue)
+          ? currentPeriods.filter((p) => p !== periodValue)
+          : [...currentPeriods, periodValue]
+        return {
+          ...prev,
+          residencePeriod: newPeriods,
+        }
+      }
+      
+      if (itemLabel === '생활관') {
+        const mapDormToRoomType = (dorm: string): string => {
+          if (dorm === '2') return '2 기숙사'
+          if (dorm === '3') return '3 기숙사'
+          if (dorm === '메디컬') return '1 기숙사'
+          return ''
+        }
+        const roomTypeValue = mapDormToRoomType(option)
+        const currentTypes = prev.roomType || []
+        const newTypes = currentTypes.includes(roomTypeValue)
+          ? currentTypes.filter((t) => t !== roomTypeValue)
+          : [...currentTypes, roomTypeValue]
+        return {
+          ...prev,
+          roomType: newTypes,
+        }
+      }
+      
+      // 체크리스트 필터 (생활 패턴, 추가 규칙)
       const currentOptions = prev.checklist[itemLabel] || []
       const newOptions = currentOptions.includes(option)
         ? currentOptions.filter((o) => o !== option)
@@ -325,15 +678,67 @@ const RoomSearchPage = () => {
       )
     }
 
-    if (filters.roomType) {
-      result = result.filter((r) => r.roomType === filters.roomType)
+    if (filters.roomType.length > 0) {
+      result = result.filter((r) => filters.roomType.includes(r.roomType))
     }
 
-    if (filters.roomSize) {
-      const size = Number(filters.roomSize)
-      if (!Number.isNaN(size)) {
-        result = result.filter((r) => r.capacity === size)
+    if (filters.roomSize.length > 0) {
+      result = result.filter((r) => {
+        return filters.roomSize.some((size) => {
+          const numSize = Number(size)
+          return !Number.isNaN(numSize) && r.capacity === numSize
+        })
+      })
+    }
+
+    if (filters.residencePeriod.length > 0) {
+      const mapResidencePeriodToDisplay = (period: string | undefined): string | undefined => {
+        if (!period) return undefined
+        if (period === 'SEMESTER') return '학기(16주)'
+        if (period === 'HALF_YEAR') return '반기(24주)'
+        if (period === 'SEASONAL') return '계절학기'
+        return period
       }
+      result = result.filter((r) => {
+        const roomPeriod = mapResidencePeriodToDisplay(r.residencePeriod)
+        return filters.residencePeriod.some((period) => {
+          const targetPeriod = mapResidencePeriodToDisplay(period)
+          return roomPeriod === targetPeriod
+        })
+      })
+    }
+
+    // 체크리스트 필터: 사용자가 선택한 옵션들을 모두 만족하는 방만 남긴다
+    const checklistFilter = filters.checklist
+    const checklistKeys = Object.keys(checklistFilter)
+
+    if (checklistKeys.length > 0) {
+      result = result.filter((room) => {
+        const rules = roomRules[room.id]
+        if (!rules) {
+          // 아직 룸 규칙을 불러오지 못한 방은 필터에서 제외
+          return false
+        }
+
+        // 각 필터 항목(label)에 대해, 방의 룰에서 해당 label의 선택된 옵션이 필터에 포함된 값 중 하나라도 포함되면 됨
+        return checklistKeys.every((label) => {
+          const requiredOptions = checklistFilter[label]
+          if (!requiredOptions || requiredOptions.length === 0) return true
+
+          // 룰 섹션들에서 해당 label을 가진 항목 찾기
+          const section = rules.find((sec) => sec.items.some((item) => item.label === label))
+          if (!section) return false
+
+          const item = section.items.find((it) => it.label === label)
+          if (!item || !item.options) return false
+
+          const selectedOptionTexts = item.options.filter((opt) => opt.selected).map((opt) => opt.text)
+
+          // 고정적 / __시 이후 등은 extraValue(시간)를 무시하고 옵션 텍스트만 비교
+          // 필터에서 선택한 옵션 중 하나라도 방의 규칙에 포함되어 있으면 표시
+          return requiredOptions.some((optText) => selectedOptionTexts.includes(optText))
+        })
+      })
     }
 
     if (filters.sort === 'capacity') {
@@ -350,17 +755,17 @@ const RoomSearchPage = () => {
 
   const filteredRecruitingRooms = useMemo(
     () => applyFilters(recruitingRooms),
-    [recruitingRooms, searchQuery, filters]
+    [recruitingRooms, searchQuery, filters, roomRules]
   )
 
   const filteredAppliedRooms = useMemo(
     () => applyFilters(appliedRooms),
-    [appliedRooms, searchQuery, filters]
+    [appliedRooms, searchQuery, filters, roomRules]
   )
 
   const filteredJoinedRooms = useMemo(
     () => applyFilters(joinedRooms),
-    [joinedRooms, searchQuery, filters]
+    [joinedRooms, searchQuery, filters, roomRules]
   )
 
   // 관심 있는 방(좋아요 한 방)과 내가 지원한 방 목록은 상태 표시를 위해 초기에 한 번 미리 불러온다
@@ -370,6 +775,70 @@ const RoomSearchPage = () => {
     fetchRooms('applied', { showLoading: false })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 체크리스트 필터가 걸려 있을 때, 현재 탭의 방들에 대해 룸 규칙을 미리 로딩한다
+  useEffect(() => {
+    const checklistFilter = filters.checklist
+    const hasChecklistFilter = Object.keys(checklistFilter).length > 0
+    if (!hasChecklistFilter) return
+
+    const currentList =
+      activeTab === 'recruiting'
+        ? recruitingRooms
+        : activeTab === 'applied'
+          ? appliedRooms
+          : joinedRooms
+
+    const loadRulesForRooms = async () => {
+      const token = localStorage.getItem('accessToken')
+      if (!token) return
+
+      await Promise.all(
+        currentList
+          .filter((room) => !roomRules[room.id])
+          .map(async (room) => {
+            try {
+              const roomNo =
+                typeof room.id === 'string' && room.id.startsWith('room-')
+                  ? room.id.replace('room-', '')
+                  : room.id
+
+              const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/rule`, {
+                credentials: 'include',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              })
+
+              if (!res.ok) return
+
+              const data = await res.json()
+              const payload: ApiRoomRule | null = data?.result ?? data?.data ?? data
+              if (!payload) return
+
+              const checklistSections = convertApiRuleToChecklistSections(payload)
+
+              setRoomRules((prev) => ({
+                ...prev,
+                [room.id]: checklistSections,
+              }))
+
+              if (payload.otherNotes) {
+                setRoomOtherNotes((prev) => ({
+                  ...prev,
+                  [room.id]: payload.otherNotes || '',
+                }))
+              }
+            } catch (err) {
+              console.error('[room] rule prefetch error', err)
+            }
+          })
+      )
+    }
+
+    void loadRulesForRooms()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.checklist, activeTab, recruitingRooms, appliedRooms, joinedRooms])
 
   // 내가 속한 방 존재 여부 조회
   useEffect(() => {
@@ -531,10 +1000,25 @@ const RoomSearchPage = () => {
       } as const
       params.set('relation', relationMap[relation])
 
-      const apiRoomType = mapRoomTypeToApi(filters.roomType)
-      if (apiRoomType) params.set('type', apiRoomType)
+      // 기본정보 필터 배열의 모든 값을 API에 전송
+      if (filters.roomType.length > 0) {
+        filters.roomType.forEach((type) => {
+          const apiRoomType = mapRoomTypeToApi(type)
+          if (apiRoomType) params.append('types', apiRoomType)
+        })
+      }
 
-      if (filters.roomSize) params.set('capacity', filters.roomSize)
+      if (filters.roomSize.length > 0) {
+        filters.roomSize.forEach((size) => {
+          params.append('capacities', size)
+        })
+      }
+
+      if (filters.residencePeriod.length > 0) {
+        filters.residencePeriod.forEach((period) => {
+          params.append('residencePeriods', period)
+        })
+      }
 
       if (filters.sort === 'remaining') {
         params.set('sort', 'REMAINING')
@@ -621,6 +1105,7 @@ const RoomSearchPage = () => {
       relation: activeTab,
       roomType: filters.roomType,
       roomSize: filters.roomSize,
+      residencePeriod: filters.residencePeriod,
       sort: filters.sort,
     })
 
@@ -637,7 +1122,7 @@ const RoomSearchPage = () => {
     // 해당 탭에 데이터가 이미 있으면 UI는 그대로 두고 백그라운드로 갱신 (로딩 문구 미표시)
     fetchRooms(activeTab, { showLoading: currentList.length === 0, requestKey })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, filters.roomType, filters.roomSize, filters.sort])
+  }, [activeTab, filters.roomType, filters.roomSize, filters.residencePeriod, filters.sort])
 
   // 내가 속한 방이 생기면 '내가 지원한 방' 탭은 숨기므로, 그 상태에서 activeTab이 'applied'이면 기본 탭으로 돌려준다
   useEffect(() => {
@@ -765,18 +1250,38 @@ const RoomSearchPage = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="flex-1 bg-transparent text-sm outline-none placeholder-gray-400"
             />
-            <button
-              type="button"
-              onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center space-x-1 text-sm px-2 py-1 rounded-lg transition-colors ${
-                showFilters
-                  ? 'bg-blue-50 text-blue-600 border border-blue-200'
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <Filter className="w-4 h-4" />
-              <span>필터</span>
-            </button>
+            {(() => {
+              const hasActiveFilters =
+                filters.roomType.length > 0 ||
+                filters.roomSize.length > 0 ||
+                filters.residencePeriod.length > 0 ||
+                filters.sort !== 'recent' ||
+                Object.keys(filters.checklist).length > 0
+              
+              const isDisabled =
+                filters.roomType.length === 0 &&
+                filters.roomSize.length === 0 &&
+                filters.residencePeriod.length === 0 &&
+                filters.sort === 'recent' &&
+                Object.keys(filters.checklist).length === 0
+
+              return (
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`flex items-center space-x-1 text-sm px-2 py-1 rounded-lg transition-colors ${
+                    showFilters || hasActiveFilters
+                      ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                      : isDisabled
+                      ? 'text-gray-400 hover:bg-gray-50'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <Filter className="w-4 h-4" />
+                  <span>필터</span>
+                </button>
+              )
+            })()}
           </div>
 
           <div 
@@ -813,14 +1318,40 @@ const RoomSearchPage = () => {
                                   <div className="w-20 text-gray-500 shrink-0">{item.label}</div>
                                   <div className="flex flex-wrap gap-2 flex-1">
                                     {item.options?.map((option) => {
-                                      const isSelected = filters.checklist[item.label]?.includes(option.text) || false
+                                      // 기본정보 필터는 Room 필드로 직접 매핑되므로 선택 상태를 다르게 확인 (다중 선택)
+                                      let isOptionSelected = false
+                                      if (item.label === '수용 인원') {
+                                        const capacity = option.text.replace('명', '')
+                                        isOptionSelected = (filters.roomSize || []).includes(capacity)
+                                      } else if (item.label === '거주기간') {
+                                        const mapResidencePeriodToFilter = (period: string): string => {
+                                          if (period === '학기(16주)') return 'SEMESTER'
+                                          if (period === '반기(24주)') return 'HALF_YEAR'
+                                          if (period === '계절학기') return 'SEASONAL'
+                                          return ''
+                                        }
+                                        const periodValue = mapResidencePeriodToFilter(option.text)
+                                        isOptionSelected = (filters.residencePeriod || []).includes(periodValue)
+                                      } else if (item.label === '생활관') {
+                                        const mapDormToRoomType = (dorm: string): string => {
+                                          if (dorm === '2') return '2 기숙사'
+                                          if (dorm === '3') return '3 기숙사'
+                                          if (dorm === '메디컬') return '1 기숙사'
+                                          return ''
+                                        }
+                                        const roomTypeValue = mapDormToRoomType(option.text)
+                                        isOptionSelected = (filters.roomType || []).includes(roomTypeValue)
+                                      } else {
+                                        isOptionSelected = filters.checklist[item.label]?.includes(option.text) || false
+                                      }
+                                      
                                       return (
                                         <button
                                           key={option.text}
                                           type="button"
                                           onClick={() => toggleChecklistOption(item.label, option.text)}
                                           className={`${
-                                            isSelected
+                                            isOptionSelected
                                               ? 'bg-blue-50 text-blue-600 border border-blue-200 text-xs px-2 py-1 rounded-md cursor-pointer'
                                               : 'text-gray-500 text-xs px-2 py-1 cursor-pointer border border-gray-200 rounded-md'
                                           }`}
@@ -1060,7 +1591,7 @@ const RoomSearchPage = () => {
                                 const data = await res.json()
                                 const payload: ApiRoomRule | null = data?.result ?? data?.data ?? data
                                 
-                                if (payload && payload.categories) {
+                                if (payload) {
                                   // 기타 메모 저장
                                   if (payload.otherNotes) {
                                     setRoomOtherNotes((prev) => ({
@@ -1070,25 +1601,7 @@ const RoomSearchPage = () => {
                                   }
 
                                   // API 응답을 체크리스트 섹션 형식으로 변환
-                                  const checklistSections: ChecklistSection[] = payload.categories.map((category) => ({
-                                    title: category.category === 'BASIC_INFO' ? '기본 정보' 
-                                          : category.category === 'LIFESTYLE_PATTERN' ? '생활 패턴'
-                                          : '추가 규칙',
-                                    category: category.category as 'BASIC_INFO' | 'LIFESTYLE_PATTERN' | 'ADDITIONAL_RULES',
-                                    items: category.items
-                                      .map((item) => ({
-                                        label: item.label,
-                                        itemType: item.itemType,
-                                        value: item.itemType === 'VALUE' ? (item.value ?? '') : undefined,
-                                        extraValue: item.extraValue ?? undefined,
-                                        options: item.options && item.options.length > 0
-                                          ? item.options.map((opt) => ({
-                                              text: opt.text,
-                                              selected: opt.selected,
-                                            }))
-                                          : undefined,
-                                      })),
-                                  }))
+                                  const checklistSections = convertApiRuleToChecklistSections(payload)
 
                                   setRoomRules((prev) => ({
                                     ...prev,
@@ -1410,7 +1923,7 @@ const RoomSearchPage = () => {
                                 const data = await res.json()
                                 const payload: ApiRoomRule | null = data?.result ?? data?.data ?? data
                                 
-                                if (payload && payload.categories) {
+                                if (payload) {
                                   // 기타 메모 저장
                                   if (payload.otherNotes) {
                                     setRoomOtherNotes((prev) => ({
@@ -1420,25 +1933,7 @@ const RoomSearchPage = () => {
                                   }
 
                                   // API 응답을 체크리스트 섹션 형식으로 변환
-                                  const checklistSections: ChecklistSection[] = payload.categories.map((category) => ({
-                                    title: category.category === 'BASIC_INFO' ? '기본 정보' 
-                                          : category.category === 'LIFESTYLE_PATTERN' ? '생활 패턴'
-                                          : '추가 규칙',
-                                    category: category.category as 'BASIC_INFO' | 'LIFESTYLE_PATTERN' | 'ADDITIONAL_RULES',
-                                    items: category.items
-                                      .map((item) => ({
-                                        label: item.label,
-                                        itemType: item.itemType,
-                                        value: item.itemType === 'VALUE' ? (item.value ?? '') : undefined,
-                                        extraValue: item.extraValue ?? undefined,
-                                        options: item.options && item.options.length > 0
-                                          ? item.options.map((opt) => ({
-                                              text: opt.text,
-                                              selected: opt.selected,
-                                            }))
-                                          : undefined,
-                                      })),
-                                  }))
+                                  const checklistSections = convertApiRuleToChecklistSections(payload)
 
                                   setRoomRules((prev) => ({
                                     ...prev,

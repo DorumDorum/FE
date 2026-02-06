@@ -257,33 +257,187 @@ const CreateChecklistModal = ({ onClose, onCreated }: CreateChecklistModalProps)
     // 에러 없으면 초기화
     setErrorFields(new Set())
 
-    // 규칙 데이터 구성
-    const categories = checklistSections.map((section) => ({
-      category: section.category,
-      items: section.items.map((item) => ({
-        label: item.label,
-        itemType: item.options ? 'OPTION' : 'VALUE',
-        value: item.value || null,
-        extraValue: item.extraValue || null,
-        options: item.options?.map((opt) => ({
-          text: opt.text,
-          selected: opt.selected || false,
-        })) || null,
-      })),
-    }))
+    // Enum 매핑 함수들
+    const mapReturnHome = (text: string): string => {
+      if (text === '유동적') return 'FLEXIBLE'
+      if (text === '고정적') return 'FIXED'
+      return 'FLEXIBLE'
+    }
+
+    const mapCleaning = (text: string): string => {
+      if (text === '주기적') return 'REGULAR'
+      if (text === '비주기적') return 'IRREGULAR'
+      return 'REGULAR'
+    }
+
+    const mapPhoneCall = (text: string): string => {
+      if (text === '가능') return 'ALLOWED'
+      if (text === '불가능') return 'NOT_ALLOWED'
+      return 'ALLOWED'
+    }
+
+    const mapSleepLight = (text: string): string => {
+      if (text === '밝음') return 'BRIGHT'
+      if (text === '어두움') return 'DARK'
+      return 'BRIGHT'
+    }
+
+    const mapSleepHabit = (text: string): string => {
+      if (text === '심함') return 'SEVERE'
+      if (text === '중간') return 'MODERATE'
+      if (text === '약함') return 'MILD'
+      return 'MILD'
+    }
+
+    const mapSnoring = (text: string): string => {
+      if (text === '심함') return 'SEVERE'
+      if (text === '중간') return 'MODERATE'
+      if (text === '약함~없음') return 'MILD_OR_NONE'
+      return 'MILD_OR_NONE'
+    }
+
+    const mapShowerTime = (text: string): string => {
+      if (text === '아침') return 'MORNING'
+      if (text === '저녁') return 'EVENING'
+      return 'MORNING'
+    }
+
+    const mapEating = (text: string): string => {
+      if (text === '가능') return 'ALLOWED'
+      if (text === '불가능') return 'NOT_ALLOWED'
+      if (text === '가능+환기필수') return 'ALLOWED_WITH_VENTILATION'
+      return 'ALLOWED'
+    }
+
+    const mapLightsOut = (text: string): string => {
+      if (text === '__시 이후') return 'AFTER_TIME'
+      if (text === '한명 잘 때 알아서') return 'WHEN_ONE_SLEEPS'
+      return 'WHEN_ONE_SLEEPS'
+    }
+
+    const mapHomeVisit = (text: string): string => {
+      if (text === '매주') return 'WEEKLY'
+      if (text === '2주') return 'BIWEEKLY'
+      if (text === '한달이상') return 'MONTHLY_OR_MORE'
+      if (text === '거의 안 감') return 'RARELY'
+      return 'WEEKLY'
+    }
+
+    const mapSmoking = (text: string): string => {
+      if (text === '연초') return 'CIGARETTE'
+      if (text === '전자담배') return 'E_CIGARETTE'
+      if (text === '비흡연') return 'NON_SMOKER'
+      return 'NON_SMOKER'
+    }
+
+    const mapRefrigerator = (text: string): string => {
+      if (text === '대여·구매·보유') return 'RENT_PURCHASE_OWN'
+      if (text === '협의 후 결정') return 'DECIDE_AFTER_DISCUSSION'
+      if (text === '필요 없음') return 'NOT_NEEDED'
+      return 'NOT_NEEDED'
+    }
+
+    const mapAlarm = (text: string): string | null => {
+      if (text === '진동') return 'VIBRATION'
+      if (text === '소리') return 'SOUND'
+      return null
+    }
+
+    const mapEarphone = (text: string): string | null => {
+      if (text === '항상') return 'ALWAYS'
+      if (text === '유동적') return 'FLEXIBLE'
+      return null
+    }
+
+    const mapKeyskin = (text: string): string | null => {
+      if (text === '항상') return 'ALWAYS'
+      if (text === '유동적') return 'FLEXIBLE'
+      return null
+    }
+
+    const mapHeat = (text: string): string | null => {
+      if (text === '많이 탐') return 'VERY_SENSITIVE'
+      if (text === '중간') return 'MODERATE'
+      if (text === '적게 탐') return 'LESS_SENSITIVE'
+      return null
+    }
+
+    const mapCold = (text: string): string | null => {
+      if (text === '많이 탐') return 'VERY_SENSITIVE'
+      if (text === '중간') return 'MODERATE'
+      if (text === '적게 탐') return 'LESS_SENSITIVE'
+      return null
+    }
+
+    const mapStudy = (text: string): string | null => {
+      if (text === '기숙사 밖') return 'OUTSIDE_DORM'
+      if (text === '기숙사 안') return 'INSIDE_DORM'
+      if (text === '유동적') return 'FLEXIBLE'
+      return null
+    }
+
+    const mapTrashCan = (text: string): string | null => {
+      if (text === '개별') return 'INDIVIDUAL'
+      if (text === '공유') return 'SHARED'
+      return null
+    }
+
+    // 체크리스트 데이터 구성
+    const lifestyleSection = checklistSections.find(s => s.category === 'LIFESTYLE_PATTERN')
+    const additionalSection = checklistSections.find(s => s.category === 'ADDITIONAL_RULES')
+
+    const getItemValue = (label: string) => {
+      const item = lifestyleSection?.items.find(i => i.label === label) || additionalSection?.items.find(i => i.label === label)
+      return item?.value || ''
+    }
+
+    const getSelectedOption = (label: string) => {
+      const item = lifestyleSection?.items.find(i => i.label === label) || additionalSection?.items.find(i => i.label === label)
+      return item?.options?.find(opt => opt.selected)?.text || null
+    }
+
+    const getExtraValue = (label: string) => {
+      const item = lifestyleSection?.items.find(i => i.label === label) || additionalSection?.items.find(i => i.label === label)
+      return item?.extraValue || ''
+    }
+
+    const requestBody = {
+      bedtime: getItemValue('취침'),
+      wakeUp: getItemValue('기상'),
+      returnHome: mapReturnHome(getSelectedOption('귀가') || ''),
+      returnHomeTime: getExtraValue('귀가'),
+      cleaning: mapCleaning(getSelectedOption('청소') || ''),
+      phoneCall: mapPhoneCall(getSelectedOption('방에서 전화') || ''),
+      sleepLight: mapSleepLight(getSelectedOption('잠귀') || ''),
+      sleepHabit: mapSleepHabit(getSelectedOption('잠버릇') || ''),
+      snoring: mapSnoring(getSelectedOption('코골이') || ''),
+      showerTime: mapShowerTime(getSelectedOption('샤워시간') || ''),
+      eating: mapEating(getSelectedOption('방에서 취식') || ''),
+      lightsOut: mapLightsOut(getSelectedOption('소등') || ''),
+      lightsOutTime: getExtraValue('소등'),
+      homeVisit: mapHomeVisit(getSelectedOption('본가 주기') || ''),
+      smoking: mapSmoking(getSelectedOption('흡연') || ''),
+      refrigerator: mapRefrigerator(getSelectedOption('냉장고') || ''),
+      hairDryer: getItemValue('드라이기') || null,
+      alarm: mapAlarm(getSelectedOption('알람') || ''),
+      earphone: mapEarphone(getSelectedOption('이어폰') || ''),
+      keyskin: mapKeyskin(getSelectedOption('키스킨') || ''),
+      heat: mapHeat(getSelectedOption('더위') || ''),
+      cold: mapCold(getSelectedOption('추위') || ''),
+      study: mapStudy(getSelectedOption('공부') || ''),
+      trashCan: mapTrashCan(getSelectedOption('쓰레기통') || ''),
+      otherNotes: otherNotes.trim() || null,
+    }
 
     try {
       const res = await fetch('http://localhost:8080/api/users/me/checklist', {
-        method: 'PUT',
+        method: 'POST',
         credentials: 'include',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          otherNotes: otherNotes.trim() || null,
-          categories,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (res.status === 401) {
