@@ -60,7 +60,7 @@ const LoginPage = () => {
           throw new Error('토큰이 없습니다. 관리자에게 문의해주세요.')
         }
 
-        navigate('/rooms', { replace: true })
+        navigate('/home', { replace: true })
       } catch (err) {
         if (err instanceof Error) {
           const msg = !err.message || err.message === 'null' || err.message === 'undefined'

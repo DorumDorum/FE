@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Edit2, LogOut, Bell, Pencil } from 'lucide-react'
 import BottomNavigationBar from '../components/ui/BottomNavigationBar'
+import CreateChecklistModal from '../components/modals/CreateChecklistModal'
 // import toast from 'react-hot-toast' // 토스트 알림 비활성화
 
 const MyPage = () => {
@@ -31,6 +32,8 @@ const MyPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isEditingChecklist, setIsEditingChecklist] = useState(false)
   const [isSavingChecklist, setIsSavingChecklist] = useState(false)
+  const [showCreateChecklistModal, setShowCreateChecklistModal] = useState(false)
+  const [hasChecklist, setHasChecklist] = useState<boolean | null>(null)
   type ChecklistOption = {
     text: string
     selected?: boolean
@@ -328,11 +331,14 @@ const MyPage = () => {
 
           const payload: any = data?.result ?? data?.data ?? data
           
-          // API 응답이 없거나 빈 경우 기본 템플릿 사용
+          // API 응답이 없거나 빈 경우 체크리스트 없음으로 표시
           if (!payload || !payload.categories || payload.categories.length === 0) {
-            setMyChecklist(defaultTemplate)
+            setHasChecklist(false)
+            setMyChecklist([])
             return
           }
+          
+          setHasChecklist(true)
 
           // 기본 템플릿과 API 응답을 병합
           const mergedSections: ChecklistSection[] = defaultTemplate.map((defaultSection) => {
@@ -391,19 +397,122 @@ const MyPage = () => {
           })
 
           setMyChecklist(mergedSections)
+          setHasChecklist(true)
+        } else if (res.status === 404) {
+          // 404면 체크리스트 없음
+          setHasChecklist(false)
+          setMyChecklist([])
         } else {
-          // API 호출 실패 시 기본 템플릿 사용
-          setMyChecklist(defaultTemplate)
+          // API 호출 실패 시 체크리스트 없음으로 표시
+          setHasChecklist(false)
+          setMyChecklist([])
         }
       } catch (err) {
         console.error('[users] my checklist fetch error', err)
-        // 에러 발생 시 기본 템플릿 사용
-        setMyChecklist(createDefaultChecklistTemplate())
+        // 에러 발생 시 체크리스트 없음으로 표시
+        setHasChecklist(false)
+        setMyChecklist([])
       }
     }
 
     void fetchMyChecklist()
   }, [])
+
+  // 체크리스트 등록 후 다시 불러오기
+  const handleChecklistCreated = () => {
+    // 체크리스트 다시 불러오기
+    const fetchMyChecklist = async () => {
+      try {
+        const token = localStorage.getItem('accessToken')
+        if (!token) return
+
+        const defaultTemplate = createDefaultChecklistTemplate()
+
+        const res = await fetch('http://localhost:8080/api/users/me/checklist', {
+          credentials: 'include',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+
+        if (res.ok) {
+          const rawBody = await res.text()
+          let data: any
+          try {
+            data = rawBody ? JSON.parse(rawBody) : null
+          } catch (e) {
+            setMyChecklist(defaultTemplate)
+            setHasChecklist(true)
+            return
+          }
+
+          const payload: any = data?.result ?? data?.data ?? data
+          
+          if (!payload || !payload.categories || payload.categories.length === 0) {
+            setHasChecklist(false)
+            setMyChecklist([])
+            return
+          }
+          
+          setHasChecklist(true)
+
+          const mergedSections: ChecklistSection[] = defaultTemplate.map((defaultSection) => {
+            const apiCategory = payload.categories.find(
+              (cat: any) => cat.category === defaultSection.category
+            )
+
+            if (!apiCategory) {
+              return defaultSection
+            }
+
+            const mergedItems = defaultSection.items.map((defaultItem) => {
+              const apiItem = apiCategory.items?.find(
+                (item: any) => item.label === defaultItem.label && item.label !== '거주기간' && item.label !== '생활관'
+              )
+
+              if (!apiItem) {
+                return defaultItem
+              }
+
+              if (defaultItem.itemType === 'VALUE') {
+                return {
+                  ...defaultItem,
+                  value: apiItem.value ?? defaultItem.value ?? '',
+                }
+              } else {
+                const mergedOptions = defaultItem.options?.map((defaultOption) => {
+                  const apiOption = apiItem.options?.find(
+                    (opt: any) => opt.text === defaultOption.text
+                  )
+                  return {
+                    ...defaultOption,
+                    selected: apiOption?.selected ?? false,
+                  }
+                }) ?? []
+
+                return {
+                  ...defaultItem,
+                  extraValue: apiItem.extraValue ?? defaultItem.extraValue ?? '',
+                  options: mergedOptions,
+                }
+              }
+            })
+
+            return {
+              ...defaultSection,
+              items: mergedItems,
+            }
+          })
+
+          setMyChecklist(mergedSections)
+        }
+      } catch (err) {
+        console.error('[users] my checklist fetch error', err)
+      }
+    }
+
+    void fetchMyChecklist()
+  }
 
   const handleEdit = () => {
     if (profile) {
@@ -829,7 +938,11 @@ const MyPage = () => {
                   {isSavingChecklist ? '저장 중...' : isEditingChecklist ? '저장' : '편집'}
                 </button>
               </div>
-              {myChecklist.length > 0 ? (
+              {hasChecklist === null ? (
+                <div className="text-sm text-gray-500 text-center py-8">
+                  체크리스트 정보를 불러오는 중...
+                </div>
+              ) : hasChecklist && myChecklist.length > 0 ? (
                 <div className="space-y-4">
                   {myChecklist.map((section, index) => (
                     <div key={section.title} className="space-y-3">
@@ -970,8 +1083,14 @@ const MyPage = () => {
                 ))}
                 </div>
               ) : (
-                <div className="text-sm text-gray-500 text-center py-8">
-                  체크리스트 정보를 불러오는 중...
+                <div className="text-center py-8 space-y-4">
+                  <p className="text-sm text-gray-500">등록된 체크리스트가 없습니다.</p>
+                  <button
+                    onClick={() => setShowCreateChecklistModal(true)}
+                    className="bg-[#3072E1] text-white px-6 py-2 rounded-lg font-medium hover:bg-[#2563E1] transition-colors"
+                  >
+                    등록하기
+                  </button>
                 </div>
               )}
             </div>
@@ -996,6 +1115,14 @@ const MyPage = () => {
 
       {/* 하단 네비게이션 바 */}
       <BottomNavigationBar />
+
+      {/* 체크리스트 등록 모달 */}
+      {showCreateChecklistModal && (
+        <CreateChecklistModal
+          onClose={() => setShowCreateChecklistModal(false)}
+          onCreated={handleChecklistCreated}
+        />
+      )}
     </div>
   )
 }

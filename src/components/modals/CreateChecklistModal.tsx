@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { X } from 'lucide-react'
 
-interface CreateRoomModalProps {
+interface CreateChecklistModalProps {
   onClose: () => void
   onCreated?: () => void
 }
@@ -21,49 +20,14 @@ type ChecklistItem = {
 
 type ChecklistSection = {
   title: string
-  category: 'BASIC_INFO' | 'LIFESTYLE_PATTERN' | 'ADDITIONAL_RULES'
+  category: 'LIFESTYLE_PATTERN' | 'ADDITIONAL_RULES'
   items: ChecklistItem[]
 }
 
-const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
-  const navigate = useNavigate()
-  const [formData, setFormData] = useState({
-    title: '',
-  })
-  
+const CreateChecklistModal = ({ onClose, onCreated }: CreateChecklistModalProps) => {
   const [otherNotes, setOtherNotes] = useState('')
   const [errorFields, setErrorFields] = useState<Set<string>>(new Set())
   const [checklistSections, setChecklistSections] = useState<ChecklistSection[]>([
-    {
-      title: '기본 정보',
-      category: 'BASIC_INFO',
-      items: [
-        {
-          label: '수용 인원',
-          options: [
-            { text: '2명', selected: false },
-            { text: '4명', selected: false },
-            { text: '6명', selected: false },
-          ],
-        },
-        {
-          label: '거주기간',
-          options: [
-            { text: '학기(16주)', selected: false },
-            { text: '반기(24주)', selected: false },
-            { text: '계절학기', selected: false },
-          ],
-        },
-        {
-          label: '생활관',
-          options: [
-            { text: '2', selected: false },
-            { text: '3', selected: false },
-            { text: '메디컬', selected: false },
-          ],
-        },
-      ],
-    },
     {
       title: '생활 패턴',
       category: 'LIFESTYLE_PATTERN',
@@ -236,32 +200,6 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
   const startY = useRef(0)
   const currentY = useRef(0)
 
-  const mapRoomTypeToApi = (dormType: string) => {
-    switch (dormType) {
-      case '2':
-        return 'TYPE_2'
-      case '3':
-        return 'TYPE_1'
-      case '메디컬':
-        return 'TYPE_MEDICAL'
-      default:
-        return undefined
-    }
-  }
-
-  const mapResidencePeriodToEnum = (period: string): string | null => {
-    switch (period) {
-      case '학기(16주)':
-        return 'SEMESTER'
-      case '반기(24주)':
-        return 'HALF_YEAR'
-      case '계절학기':
-        return 'SEASONAL'
-      default:
-        return null
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const token = localStorage.getItem('accessToken')
@@ -271,11 +209,6 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
 
     // 에러 필드 초기화
     const newErrorFields = new Set<string>()
-
-    // 방 이름 검사
-    if (!formData.title || formData.title.trim() === '') {
-      newErrorFields.add('title')
-    }
 
     // 모든 항목 유효성 검사 (추가 규칙 제외)
     checklistSections.forEach((section, sectionIndex) => {
@@ -324,21 +257,6 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
     // 에러 없으면 초기화
     setErrorFields(new Set())
 
-    // 수용 인원 추출
-    const capacityItem = checklistSections[0].items.find(item => item.label === '수용 인원')
-    const selectedCapacity = capacityItem?.options?.find(opt => opt.selected)?.text.replace('명', '')
-    const capacity = selectedCapacity ? Number(selectedCapacity) : 0
-
-    // 생활관 추출 및 방 타입 매핑
-    const dormItem = checklistSections[0].items.find(item => item.label === '생활관')
-    const selectedDorm = dormItem?.options?.find(opt => opt.selected)?.text
-    const roomType = selectedDorm ? mapRoomTypeToApi(selectedDorm) : undefined
-
-    // 거주기간 추출 및 enum 매핑
-    const residencePeriodItem = checklistSections[0].items.find(item => item.label === '거주기간')
-    const selectedResidencePeriod = residencePeriodItem?.options?.find(opt => opt.selected)?.text
-    const residencePeriod = selectedResidencePeriod ? mapResidencePeriodToEnum(selectedResidencePeriod) : null
-
     // 규칙 데이터 구성
     const categories = checklistSections.map((section) => ({
       category: section.category,
@@ -355,22 +273,16 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
     }))
 
     try {
-      const res = await fetch('http://localhost:8080/api/rooms', {
-        method: 'POST',
+      const res = await fetch('http://localhost:8080/api/users/me/checklist', {
+        method: 'PUT',
         credentials: 'include',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          roomType,
-          capacity,
-          residencePeriod,
-          title: formData.title.trim(),
-          rule: {
-            otherNotes: otherNotes.trim() || null,
-            categories,
-          },
+          otherNotes: otherNotes.trim() || null,
+          categories,
         }),
       })
 
@@ -379,15 +291,13 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
       }
 
       if (!res.ok) {
-        console.error('[rooms] create failed', res.status)
+        console.error('[users] checklist create failed', res.status)
         return
       }
-
       onCreated?.()
-      // 방 생성 후 방 관리 페이지로 이동
-      navigate('/rooms/me', { replace: true })
+      onClose()
     } catch (error) {
-      console.error('[rooms] create error', error)
+      console.error('[users] checklist create error', error)
     }
   }
 
@@ -527,7 +437,7 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
         
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-6 pt-2">
-          <h2 className="text-xl font-bold text-black">방 만들기</h2>
+          <h2 className="text-xl font-bold text-black">체크리스트 등록</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -537,32 +447,6 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* 방 이름 */}
-          <div className="space-y-3">
-            <h3 className="text-base font-bold text-black">방 이름</h3>
-            <div className={`bg-white rounded-xl p-4 ${
-              errorFields.has('title') ? 'border border-red-400 bg-red-50' : 'border border-gray-200'
-            }`}>
-            <input
-              type="text"
-              value={formData.title}
-                onChange={(e) => {
-                  setFormData(prev => ({ ...prev, title: e.target.value }))
-                  // 에러 제거
-                  if (errorFields.has('title')) {
-                    setErrorFields(prev => {
-                      const newSet = new Set(prev)
-                      newSet.delete('title')
-                      return newSet
-                    })
-                  }
-                }}
-                className="w-full text-base text-black outline-none bg-transparent"
-                placeholder="방 이름을 입력하세요"
-            />
-          </div>
-          </div>
-
           {/* 규칙 체크리스트 */}
           <div className="space-y-4">
             {checklistSections.map((section, sectionIndex) => (
@@ -725,9 +609,9 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
             </button>
             <button
               type="submit"
-              className="flex-1 bg-black text-white py-3 rounded-lg font-medium"
+              className="flex-1 bg-[#3072E1] text-white py-3 rounded-lg font-medium hover:bg-[#2563E1]"
             >
-              방 만들기
+              저장
             </button>
           </div>
         </form>
@@ -736,4 +620,4 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
   )
 }
 
-export default CreateRoomModal
+export default CreateChecklistModal

@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
 
 const RoomGatePage = () => {
   const navigate = useNavigate()
@@ -10,7 +9,6 @@ const RoomGatePage = () => {
       try {
         const token = localStorage.getItem('accessToken')
         if (!token) {
-          toast.error('로그인이 필요합니다.')
           navigate('/login', { replace: true })
           return
         }
@@ -23,7 +21,6 @@ const RoomGatePage = () => {
         })
 
         if (res.status === 401) {
-          toast.error('로그인이 필요합니다.')
           navigate('/login', { replace: true })
           return
         }
@@ -36,7 +33,8 @@ const RoomGatePage = () => {
             contentType,
             body: rawBody,
           })
-          throw new Error('방 존재 여부를 확인하지 못했습니다.')
+          navigate('/rooms/search', { replace: true })
+          return
         }
 
         let data: any
@@ -59,7 +57,6 @@ const RoomGatePage = () => {
         navigate('/rooms/search', { replace: true })
       } catch (err) {
         console.error('[rooms] check exists error', err)
-        toast.error('방 존재 여부를 확인하지 못했습니다.')
         navigate('/rooms/search', { replace: true })
       }
     }

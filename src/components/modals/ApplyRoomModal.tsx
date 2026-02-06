@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
 import { X } from 'lucide-react'
-import toast from 'react-hot-toast'
 
 interface ApplyRoomModalProps {
   onClose: () => void
@@ -11,13 +10,17 @@ interface ApplyRoomModalProps {
     currentMembers: number
     residencePeriod?: string
   }
+  roomId?: string
+  onSuccess?: () => void
 }
 
-const ApplyRoomModal = ({ onClose, roomInfo }: ApplyRoomModalProps) => {
+const ApplyRoomModal = ({ onClose, roomInfo, roomId, onSuccess }: ApplyRoomModalProps) => {
   const [formData, setFormData] = useState({
     introduction: '',
     additionalMessage: ''
   })
+  const [introError, setIntroError] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   
   // 드래그 관련 상태
   const [isDragging, setIsDragging] = useState(false)
@@ -26,10 +29,46 @@ const ApplyRoomModal = ({ onClose, roomInfo }: ApplyRoomModalProps) => {
   const startY = useRef(0)
   const currentY = useRef(0)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    toast.success('지원서가 제출되었습니다!')
-    onClose()
+    
+    if (!roomId) return
+
+    if (!formData.introduction.trim()) {
+      setIntroError(true)
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const token = localStorage.getItem('accessToken')
+      if (!token) {
+        onClose()
+        return
+      }
+
+      const res = await fetch(`http://localhost:8080/api/rooms/${roomId}/join-request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          introduction: formData.introduction.trim(),
+          additionalMessage: formData.additionalMessage?.trim() || null
+        })
+      })
+
+      if (!res.ok) {
+        return
+      }
+      onSuccess?.()
+      onClose()
+    } catch (err) {
+      console.error('[rooms] apply room error', err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   // 드래그 이벤트 핸들러들
@@ -168,12 +207,24 @@ const ApplyRoomModal = ({ onClose, roomInfo }: ApplyRoomModalProps) => {
             </label>
             <textarea
               value={formData.introduction}
-              onChange={(e) => setFormData(prev => ({ ...prev, introduction: e.target.value }))}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-black"
+              onChange={(e) => {
+                const value = e.target.value
+                setFormData(prev => ({ ...prev, introduction: value }))
+                if (introError && value.trim()) {
+                  setIntroError(false)
+                }
+              }}
+              className={`w-full p-3 rounded-lg focus:outline-none transition-all text-black ${
+                introError
+                  ? 'border border-red-500 focus:ring-2 focus:ring-red-500'
+                  : 'border border-gray-300 focus:ring-2 focus:ring-primary-500'
+              }`}
               rows={4}
               placeholder="자신을 간단히 소개해주세요"
-              required
             />
+            {introError && (
+              <p className="mt-1 text-xs text-red-500">자기소개를 입력해주세요.</p>
+            )}
           </div>
 
           {/* 추가 메시지 */}
@@ -201,9 +252,14 @@ const ApplyRoomModal = ({ onClose, roomInfo }: ApplyRoomModalProps) => {
             </button>
             <button
               type="submit"
-              className="flex-1 bg-[#3072E1] text-white py-3 rounded-lg font-medium hover:bg-[#2563E1]"
+              disabled={isSubmitting}
+              className={`flex-1 py-3 rounded-lg font-medium ${
+                isSubmitting
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-[#3072E1] text-white hover:bg-[#2563E1]'
+              }`}
             >
-              지원하기
+              {isSubmitting ? '전송 중...' : '지원하기'}
             </button>
           </div>
         </form>

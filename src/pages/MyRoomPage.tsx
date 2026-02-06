@@ -93,8 +93,8 @@ const MyRoomPage = () => {
   const [roommateToRemove, setRoommateToRemove] = useState<{ roommateNo: number; name: string } | null>(null)
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false) // 방 나가기 확인
   const [showHostLeaveAlert, setShowHostLeaveAlert] = useState(false) // 방장 나가기 알림
-  const [applicantToAccept, setApplicantToAccept] = useState<{ id: number; name: string; requestNo: number } | null>(null)
-  const [applicantToReject, setApplicantToReject] = useState<{ id: number; name: string; requestNo: number } | null>(null)
+  const [applicantToAccept, setApplicantToAccept] = useState<{ id: number; name: string; requestNo: string } | null>(null)
+  const [applicantToReject, setApplicantToReject] = useState<{ id: number; name: string; requestNo: string } | null>(null)
   const [applicants, setApplicants] = useState<Array<{
     id: number
     name: string
@@ -102,8 +102,12 @@ const MyRoomPage = () => {
     date: string
     intro: string
     message: string
-    requestNo: number
+    requestNo: string
+    userNo: string
   }>>([])
+  const [applicantsLoading, setApplicantsLoading] = useState(false)
+  const [applicantChecklists, setApplicantChecklists] = useState<Record<string, ChecklistSection[]>>({}) // userNo를 키로 사용
+  const [applicantOtherNotes, setApplicantOtherNotes] = useState<Record<string, string>>({}) // userNo를 키로 사용
   const [showConfirmAssignment, setShowConfirmAssignment] = useState(false) // 방 배정 확정 확인
   const [otherNotes, setOtherNotes] = useState('')
   const [checklistSections, setChecklistSections] = useState<ChecklistSection[]>([])
@@ -225,10 +229,10 @@ const MyRoomPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 방 규칙 조회
+  // 방 규칙 조회 (규칙 탭에 들어올 때마다 최신 상태로 재조회)
   useEffect(() => {
-    // room이 로드되지 않았으면 규칙 조회를 수행하지 않는다.
-    if (!room?.roomNo) return
+    // room이 로드되지 않았거나 현재 탭이 '규칙'이 아니면 조회하지 않는다.
+    if (!room?.roomNo || activeTab !== '규칙') return
     // roomNo가 문자열 또는 숫자일 수 있으므로 항상 문자열로 변환
     const effectiveRoomNo = String(room.roomNo)
 
@@ -322,8 +326,9 @@ const MyRoomPage = () => {
     }
 
     void fetchRoomRule()
-  }, [room?.roomNo, navigate])
+  }, [room?.roomNo, navigate, activeTab])
 
+  // 룸메이트 조회 (룸메이트 탭에 들어올 때마다 최신 상태로 재조회)
   useEffect(() => {
     const fetchRoommates = async () => {
       try {
@@ -376,9 +381,94 @@ const MyRoomPage = () => {
       }
     }
 
+    // 현재 탭이 '룸메이트'가 아니라면 조회하지 않는다.
+    if (activeTab !== '룸메이트') return
+
     fetchRoommates()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [activeTab])
+
+  // 지원자 목록 조회 (지원자 탭에 들어올 때마다, 또는 방 정보가 로드됐을 때 최신 상태로 재조회)
+  useEffect(() => {
+    // 현재 탭이 '지원자'가 아니면 조회하지 않는다.
+    if (activeTab !== '지원자') return
+    // room이 아직 로드되지 않았으면, room이 준비된 이후에 다시 실행된다.
+    if (!room?.roomNo) return
+
+    const effectiveRoomNo = String(room.roomNo)
+
+    const fetchApplicants = async () => {
+      try {
+        setApplicantsLoading(true)
+        const token = localStorage.getItem('accessToken')
+        if (!token) {
+          navigate('/login', { replace: true })
+          return
+        }
+
+        const res = await fetch(`http://localhost:8080/api/rooms/${effectiveRoomNo}/applications`, {
+          credentials: 'include',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+
+        if (res.status === 401) {
+          navigate('/login', { replace: true })
+          return
+        }
+
+        const contentType = res.headers.get('content-type') ?? ''
+        const rawBody = await res.text()
+        if (!res.ok) {
+          console.error('[rooms] applicants fetch failed', {
+            status: res.status,
+            contentType,
+            body: rawBody,
+          })
+          throw new Error('지원자 정보를 불러오지 못했습니다.')
+        }
+
+        let data: any
+        try {
+          data = rawBody ? JSON.parse(rawBody) : null
+        } catch (e) {
+          console.error('[rooms] applicants parse error', { contentType, rawBody }, e)
+          throw new Error('서버 응답(JSON)을 파싱하지 못했습니다.')
+        }
+
+        const payload = data?.result ?? data?.data ?? data
+        const applications: any[] = Array.isArray(payload) ? payload : []
+
+        // API 응답을 프론트엔드 형식으로 매핑
+        const mapped = applications.map((app, index) => {
+          // createdAt을 날짜 문자열로 변환
+          const createdAt = app.createdAt ? new Date(app.createdAt).toISOString().split('T')[0] : ''
+          
+          return {
+            id: index + 1, // 임시 ID (userNo를 기반으로 할 수도 있음)
+            name: app.name || '',
+            dept: app.major || '',
+            date: createdAt,
+            intro: app.introduction || '',
+            message: app.additionalMessage || '',
+            requestNo: String(app.requestNo || ''), // requestNo를 String으로 유지
+            userNo: app.userNo || ''
+          }
+        })
+
+        setApplicants(mapped)
+      } catch (err) {
+        console.error('[rooms] applicants fetch error', err)
+        setApplicants([])
+      } finally {
+        setApplicantsLoading(false)
+      }
+    }
+
+    void fetchApplicants()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, room?.roomNo])
 
   // const mapRoomRoleToDisplay = (role?: string) => {
   //   switch (role) {
@@ -1071,7 +1161,11 @@ const MyRoomPage = () => {
         {/* 지원자 섹션 */}
         <div className="mt-4 space-y-4">
           <h3 className="text-base font-bold text-black">지원자 목록 ({applicants.length}명)</h3>
-          {applicants.length === 0 ? (
+          {applicantsLoading ? (
+            <div className="text-center py-8 text-gray-500 text-sm">
+              불러오는 중...
+            </div>
+          ) : applicants.length === 0 ? (
             <div className="text-center py-8 text-gray-500 text-sm">
               지원자가 없습니다.
             </div>
@@ -1082,203 +1176,99 @@ const MyRoomPage = () => {
             const toggleApplicantChecklist = () => {
               setExpandedApplicantIds((prev) => {
                 const newSet = new Set(prev)
-                if (newSet.has(applicant.id)) {
-                  newSet.delete(applicant.id)
-                } else {
+                const willExpand = !newSet.has(applicant.id)
+
+                if (willExpand) {
                   newSet.add(applicant.id)
+
+                  // 체크리스트를 항상 최신 상태로 보기 위해, 펼칠 때마다 해당 지원자의 체크리스트를 새로 로드
+                  const loadChecklist = async () => {
+                    try {
+                      const token = localStorage.getItem('accessToken')
+                      if (!token) {
+                        navigate('/login', { replace: true })
+                        return
+                      }
+
+                      const res = await fetch(`http://localhost:8080/api/users/${applicant.userNo}/checklist`, {
+                        credentials: 'include',
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                        },
+                      })
+
+                      if (!res.ok) {
+                        console.error('[rooms] applicant checklist fetch failed', applicant.userNo, res.status)
+                        return
+                      }
+
+                      const contentType = res.headers.get('content-type') ?? ''
+                      const rawBody = await res.text()
+
+                      let data: any
+                      try {
+                        data = rawBody ? JSON.parse(rawBody) : null
+                      } catch (e) {
+                        console.error('[rooms] applicant checklist parse error', { contentType, rawBody }, e)
+                        return
+                      }
+
+                      const payload: any = data?.result ?? data?.data ?? data
+                      if (!payload) return
+
+                      const sections: ChecklistSection[] = (payload.categories || []).map((cat: any) => {
+                        let title = ''
+                        if (cat.category === 'BASIC_INFO') title = '기본 정보'
+                        else if (cat.category === 'LIFESTYLE_PATTERN') title = '생활 패턴'
+                        else if (cat.category === 'ADDITIONAL_RULES') title = '추가 규칙'
+                        else title = cat.category
+
+                        return {
+                          title,
+                          category: cat.category,
+                          items: (cat.items || []).map((item: any) => ({
+                            label: item.label,
+                            itemType: item.itemType,
+                            value: item.value || undefined,
+                            extraValue: item.extraValue || undefined,
+                            options: item.options
+                              ? item.options.map((opt: any) => ({
+                                  text: opt.text,
+                                  selected: opt.selected || false,
+                                }))
+                              : undefined,
+                          })),
+                        }
+                      })
+
+                      setApplicantChecklists((prev) => ({
+                        ...prev,
+                        [applicant.userNo]: sections,
+                      }))
+
+                      if (payload.otherNotes) {
+                        setApplicantOtherNotes((prev) => ({
+                          ...prev,
+                          [applicant.userNo]: payload.otherNotes,
+                        }))
+                      }
+                    } catch (err) {
+                      console.error('[rooms] applicant checklist fetch error', applicant.userNo, err)
+                    }
+                  }
+
+                  void loadChecklist()
+                } else {
+                  newSet.delete(applicant.id)
                 }
+
                 return newSet
               })
             }
             
-            // 더미 체크리스트 데이터
-            const applicantChecklist = [
-              {
-                title: '기본 정보',
-                items: [
-                  { 
-                    label: '단과대/학과', 
-                    value: applicant.id === 1 ? '공과대학 기계공학과' : '경영대학 경영학과'
-                  },
-                  { 
-                    label: '학번(학년)', 
-                    value: applicant.id === 1 ? '21학번 (3학년)' : '22학번 (2학년)'
-                  },
-                  {
-                    label: '나이',
-                    value: applicant.id === 1 ? '23세' : '22세',
-                  },
-                  {
-                    label: '거주기간',
-                    options: [
-                      { text: '학기(16주)', selected: true },
-                      { text: '반기(24주)', selected: false },
-                      { text: '계절학기', selected: false },
-                    ],
-                  },
-                  {
-                    label: '생활관',
-                    options: [
-                      { text: '2', selected: true },
-                      { text: '3', selected: false },
-                      { text: '메디컬', selected: false },
-                    ],
-                  },
-                ],
-              },
-              {
-                title: '생활 패턴',
-                items: [
-                  { label: '취침', value: '12-1' },
-                  { label: '기상', value: '7-9' },
-                  {
-                    label: '귀가',
-                    options: [
-                      { text: '유동적', selected: true },
-                      { text: '고정적', selected: false },
-                    ],
-                  },
-                  {
-                    label: '청소',
-                    options: [
-                      { text: '주기적', selected: false },
-                      { text: '비주기적', selected: true },
-                    ],
-                  },
-                  {
-                    label: '방에서 전화',
-                    options: [
-                      { text: '가능', selected: false },
-                      { text: '불가능', selected: true },
-                    ],
-                  },
-                  {
-                    label: '잠귀',
-                    options: [
-                      { text: '밝음', selected: true },
-                      { text: '어두움', selected: false },
-                    ],
-                  },
-                  {
-                    label: '잠버릇',
-                    options: [
-                      { text: '심함', selected: false },
-                      { text: '중간', selected: true },
-                      { text: '약함', selected: false },
-                    ],
-                  },
-                  {
-                    label: '코골이',
-                    options: [
-                      { text: '심함', selected: false },
-                      { text: '중간', selected: false },
-                      { text: '약함~없음', selected: true },
-                    ],
-                  },
-                  {
-                    label: '샤워시간',
-                    options: [
-                      { text: '아침', selected: true },
-                      { text: '저녁', selected: false },
-                    ],
-                  },
-                  {
-                    label: '방에서 취식',
-                    options: [
-                      { text: '가능', selected: false },
-                      { text: '불가능', selected: true },
-                      { text: '가능+환기필수', selected: false },
-                    ],
-                  },
-                  {
-                    label: '소등',
-                    options: [
-                      { text: '__시 이후', selected: false },
-                      { text: '한명 잘 때 알아서', selected: true },
-                    ],
-                  },
-                  {
-                    label: '본가 주기',
-                    options: [
-                      { text: '매주', selected: false },
-                      { text: '2주', selected: false },
-                      { text: '한달이상', selected: true },
-                      { text: '거의 안 감', selected: false },
-                    ],
-                  },
-                  {
-                    label: '흡연',
-                    options: [
-                      { text: '연초', selected: false },
-                      { text: '전자담배', selected: false },
-                      { text: '비흡연', selected: true },
-                    ],
-                  },
-                  {
-                    label: '냉장고',
-                    options: [
-                      { text: '대여·구매·보유', selected: true },
-                      { text: '협의 후 결정', selected: false },
-                      { text: '필요 없음', selected: false },
-                    ],
-                  },
-                ],
-              },
-              {
-                title: '추가 규칙',
-                items: [
-                  {
-                    label: '드라이기',
-                    value: '12-7시만 피해 사용해 주면 좋을 것 같습니다.',
-                  },
-                  {
-                    label: '이어폰',
-                    options: [
-                      { text: '항상', selected: true },
-                      { text: '유동적', selected: false },
-                    ],
-                  },
-                  {
-                    label: '키스킨',
-                    options: [
-                      { text: '항상', selected: false },
-                      { text: '유동적', selected: true },
-                    ],
-                  },
-                  {
-                    label: '더위',
-                    options: [
-                      { text: '많이 탐', selected: false },
-                      { text: '중간', selected: true },
-                      { text: '적게 탐', selected: false },
-                    ],
-                  },
-                  {
-                    label: '추위',
-                    options: [
-                      { text: '많이 탐', selected: false },
-                      { text: '중간', selected: true },
-                      { text: '적게 탐', selected: false },
-                    ],
-                  },
-                  {
-                    label: '공부',
-                    options: [
-                      { text: '기숙사 밖', selected: false },
-                      { text: '기숙사 안', selected: false },
-                      { text: '유동적', selected: true },
-                    ],
-                  },
-                  {
-                    label: '쓰레기통',
-                    options: [
-                      { text: '개별', selected: true },
-                      { text: '공유', selected: false },
-                    ],
-                  },
-                ],
-              },
-            ]
+            // 실제 체크리스트 데이터 사용
+            const applicantChecklist = applicantChecklists[applicant.userNo] || []
+            const applicantOtherNote = applicantOtherNotes[applicant.userNo] || ''
             
             return (
             <div key={applicant.id} className="bg-white border border-gray-200 rounded-xl p-4">
@@ -1334,57 +1324,61 @@ const MyRoomPage = () => {
                 </div>
               </div>
               
-              <div 
-                className={`grid transition-all duration-300 ease-in-out ${
-                  isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                }`}
-              >
-                <div className="overflow-hidden">
-                  <div className="mt-4 space-y-4 border-t border-gray-200 pt-4">
-                    {applicantChecklist.map((section) => (
-                      <div key={section.title}>
-                        <h4 className="text-base font-bold text-black mb-2">{section.title}</h4>
-                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                          <div className="space-y-3 text-sm text-gray-700">
-                            {section.items.map((item) => (
-                              <div key={item.label} className="flex gap-2">
-                                <div className="w-20 text-gray-500 shrink-0">{item.label}</div>
-                                <div className={`flex flex-wrap gap-2`}>
-                                  {'value' in item && item.value ? (
-                                    <span className="text-black font-medium">{item.value}</span>
-                                  ) : (
-                                    item.options?.map((option) => (
-                                      <span
-                                        key={option.text}
-                                        className={
-                                          option.selected
-                                            ? `bg-blue-50 text-blue-600 border border-blue-200 text-xs px-2 py-1 rounded-md`
-                                            : `text-gray-400 text-xs px-2 py-1`
-                                        }
-                                      >
-                                        {option.text}
-                                      </span>
-                                    ))
-                                  )}
+              {isExpanded && (
+                <div className="mt-4 space-y-4 border-t border-gray-200 pt-4">
+                  {applicantChecklist.length > 0 ? (
+                    <>
+                      {applicantChecklist.map((section) => (
+                        <div key={section.title}>
+                          <h4 className="text-base font-bold text-black mb-2">{section.title}</h4>
+                          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                            <div className="space-y-3 text-sm text-gray-700">
+                              {section.items.map((item) => (
+                                <div key={item.label} className="flex gap-2">
+                                  <div className="w-20 text-gray-500 shrink-0">{item.label}</div>
+                                  <div className={`flex flex-wrap gap-2`}>
+                                    {'value' in item && item.value ? (
+                                      <span className="text-black font-medium">{item.value}</span>
+                                    ) : (
+                                      item.options?.map((option) => (
+                                        <span
+                                          key={option.text}
+                                          className={
+                                            option.selected
+                                              ? `bg-blue-50 text-blue-600 border border-blue-200 text-xs px-2 py-1 rounded-md`
+                                              : `text-gray-400 text-xs px-2 py-1`
+                                          }
+                                        >
+                                          {option.text}
+                                        </span>
+                                      ))
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              ))}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                    
-                    <div>
-                      <h4 className="text-base font-bold text-black mb-2">기타</h4>
-                      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                        <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                          조용하고 깔끔한 환경을 선호합니다. 서로 배려하며 생활했으면 좋겠습니다.
-                        </p>
-                      </div>
+                      ))}
+                      
+                      {applicantOtherNote && (
+                        <div>
+                          <h4 className="text-base font-bold text-black mb-2">기타</h4>
+                          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                            <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                              {applicantOtherNote}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 text-sm">
+                      체크리스트가 없습니다.
                     </div>
-                  </div>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
             )
           }))}
@@ -1915,22 +1909,8 @@ const MyRoomPage = () => {
                     // 지원자 목록에서 제거
                     setApplicants((prev) => prev.filter((app) => app.id !== applicantToAccept.id))
                     setApplicantToAccept(null)
-                    // toast.success(`${applicantToAccept.name}님의 지원을 수락했습니다.`)
-                    
-                    // 룸메이트 목록 새로고침
-                    if (room?.roomNo) {
-                      const params = new URLSearchParams({ roomNo: String(room.roomNo) })
-                      const roommatesRes = await fetch(`http://localhost:8080/api/rooms/me/roommates?${params}`, {
-                        headers: { Authorization: `Bearer ${token}` },
-                        credentials: 'include',
-                      })
-                      if (roommatesRes.ok) {
-                        const roommatesData = await roommatesRes.json()
-                        if (roommatesData.isSuccess && roommatesData.result) {
-                          setRoommates(roommatesData.result)
-                        }
-                      }
-                    }
+                    // 전체 페이지를 새로고침하여 방 정보/룸메이트/지원자 목록을 모두 최신 상태로 갱신
+                    window.location.reload()
                   } catch (error) {
                     console.error('지원자 수락 실패:', error)
                     // toast.error('지원자 수락에 실패했습니다.')
@@ -1991,7 +1971,8 @@ const MyRoomPage = () => {
                     // 지원자 목록에서 제거
                     setApplicants((prev) => prev.filter((app) => app.id !== applicantToReject.id))
                     setApplicantToReject(null)
-                    // toast.success(`${applicantToReject.name}님의 지원을 거절했습니다.`)
+                    // 전체 페이지를 새로고침하여 방 정보/룸메이트/지원자 목록을 모두 최신 상태로 갱신
+                    window.location.reload()
                   } catch (error) {
                     console.error('지원자 거절 실패:', error)
                     // toast.error('지원자 거절에 실패했습니다.')

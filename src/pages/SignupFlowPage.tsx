@@ -389,7 +389,7 @@ const SignupFlowPage = () => {
                 disabled={!canVerify || isVerifyingCode}
                 className={`w-full py-3 rounded-xl text-sm font-semibold ${
                   canVerify && !isVerifyingCode
-                    ? 'bg-black text-white active:scale-[0.99]'
+                    ? 'bg-[#3072E1] text-white active:scale-[0.99] hover:bg-[#2563E1]'
                     : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
               >

@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
 import { X } from 'lucide-react'
-import toast from 'react-hot-toast'
 
 interface ChatRequestModalProps {
   onClose: () => void
@@ -27,7 +26,6 @@ const ChatRequestModal = ({ onClose, roomInfo }: ChatRequestModalProps) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    toast.success('문의가 전송되었습니다!')
     onClose()
   }
 

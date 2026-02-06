@@ -8,7 +8,6 @@ import ApplyRoomModal from '@/components/modals/ApplyRoomModal'
 import ChatRequestModal from '@/components/modals/ChatRequestModal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { Room } from '@/types/room'
-import toast from 'react-hot-toast'
 
 const RoomSearchPage = () => {
   const navigate = useNavigate()
@@ -364,10 +363,11 @@ const RoomSearchPage = () => {
     [joinedRooms, searchQuery, filters]
   )
 
-  // 관심 있는 방(좋아요 한 방) 목록은 별표 표시를 위해 초기에 한 번 미리 불러온다
+  // 관심 있는 방(좋아요 한 방)과 내가 지원한 방 목록은 상태 표시를 위해 초기에 한 번 미리 불러온다
   useEffect(() => {
     // 토큰 없으면 호출해도 바로 return 되므로 별도 체크는 필요 없음
     fetchRooms('joined', { showLoading: false })
+    fetchRooms('applied', { showLoading: false })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -516,7 +516,6 @@ const RoomSearchPage = () => {
     try {
       const token = localStorage.getItem('accessToken')
       if (!token) {
-        toast.error('로그인이 필요합니다.')
         navigate('/login')
         if (loadingDelayTimerRef.current) window.clearTimeout(loadingDelayTimerRef.current)
         loadingDelayTimerRef.current = null
@@ -566,7 +565,6 @@ const RoomSearchPage = () => {
         elapsedMs,
       })
       if (res.status === 401) {
-        toast.error('로그인이 필요합니다.')
         navigate('/login')
         return
       }
@@ -597,22 +595,7 @@ const RoomSearchPage = () => {
       const mapped = list.map(mapApiRoom)
 
       if (relation === 'recruiting') {
-        // 더미 방 10개 추가 (UI 테스트용)
-        const dummyRooms: Room[] = Array.from({ length: 10 }).map((_, index) => ({
-          id: `dummy-${index + 1}`,
-          title: `더미 방 ${index + 1}`,
-          roomType: index % 2 === 0 ? '2 기숙사' : '3 기숙사',
-          capacity: 2,
-          currentMembers: 1,
-          description: 'UI 테스트용 더미 방입니다.',
-          hostName: `테스트호스트${index + 1}`,
-          tags: ['더미', '테스트'],
-          createdAt: new Date().toISOString(),
-          status: 'recruiting',
-          residencePeriod: '학기(16주)',
-        }))
-
-        setRecruitingRooms([...mapped, ...dummyRooms])
+        setRecruitingRooms(mapped)
       }
       if (relation === 'applied') setAppliedRooms(mapped)
       if (relation === 'joined') setJoinedRooms(mapped)
@@ -624,7 +607,6 @@ const RoomSearchPage = () => {
         filters,
         requestKey: opts?.requestKey,
       }, err)
-      toast.error('방 목록을 불러오지 못했습니다.')
     } finally {
       if (opts?.showLoading) {
         if (loadingDelayTimerRef.current) window.clearTimeout(loadingDelayTimerRef.current)
@@ -699,23 +681,50 @@ const RoomSearchPage = () => {
   // }
 
   const handleCancelApply = () => {
-    if (selectedRoom) {
-      // 지원 취소 로직 (실제로는 API 호출)
-      console.log('지원 취소:', selectedRoom.id)
-      toast.success('지원이 취소되었습니다.')
-      // 여기에 지원 취소 API 호출 및 상태 업데이트 로직 추가
+    const doCancel = async () => {
+      if (!selectedRoom) return
+
+      try {
+        const token = localStorage.getItem('accessToken')
+        if (!token) {
+          navigate('/login')
+          return
+        }
+
+        // room.id는 프론트에서 사용하는 문자열 ID이지만, 실제로는 roomNo이므로 그대로 사용
+        const roomNo = typeof selectedRoom.id === 'string' && selectedRoom.id.startsWith('room-')
+          ? selectedRoom.id.replace('room-', '')
+          : selectedRoom.id
+
+        const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/join-request`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => '')
+          console.error('[rooms] cancel apply failed', { status: res.status, body: text })
+          return
+        }
+
+        // 서버 상태 기준으로 내가 지원한 방 목록을 다시 불러와서 상태 동기화
+        await fetchRooms('applied', { showLoading: false })
+      } catch (err) {
+        console.error('[rooms] cancel apply error', err)
+      } finally {
+        setShowCancelConfirm(false)
+        setSelectedRoom(null)
+      }
     }
-    setShowCancelConfirm(false)
-    setSelectedRoom(null)
+
+    void doCancel()
   }
 
   const handleConfirmLeave = () => {
-    if (selectedRoom) {
-      // 방 나가기 로직 (실제로는 API 호출)
-      console.log('방 나가기:', selectedRoom.id)
-      toast.success('방에서 나갔습니다.')
-      // 여기에 방 나가기 API 호출 및 상태 업데이트 로직 추가
-    }
+    // TODO: 방 나가기 API 연동 시 구현
     setShowLeaveConfirm(false)
     setSelectedRoom(null)
   }
@@ -1105,15 +1114,34 @@ const RoomSearchPage = () => {
                       <span>{expandedRoomIds.has(room.id) ? '접기' : '체크리스트 보기'}</span>
                     </button>
                     {!hasMyRoom && (
-                      <button
-                        onClick={() => {
-                          setSelectedRoom(room)
-                          setShowApplyRoom(true)
-                        }}
-                        className="flex items-center justify-center gap-2 bg-blue-50 text-blue-600 border border-blue-200 text-sm font-medium px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors"
-                      >
-                        <span>가입 요청</span>
-                      </button>
+                      (() => {
+                        const alreadyApplied = appliedRooms.some((applied) => applied.id === room.id)
+
+                        if (alreadyApplied) {
+                          return (
+                            <button
+                              type="button"
+                              disabled
+                              className="flex items-center justify-center gap-2 bg-gray-100 text-gray-400 border border-gray-200 text-sm font-medium px-3 py-2 rounded-lg cursor-not-allowed"
+                            >
+                              <span>가입 요청 완료</span>
+                            </button>
+                          )
+                        }
+
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedRoom(room)
+                              setShowApplyRoom(true)
+                            }}
+                            className="flex items-center justify-center gap-2 bg-blue-50 text-blue-600 border border-blue-200 text-sm font-medium px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors"
+                          >
+                            <span>가입 요청</span>
+                          </button>
+                        )
+                      })()
                     )}
                   </div>
                   
@@ -1436,15 +1464,34 @@ const RoomSearchPage = () => {
                       <span>{expandedRoomIds.has(room.id) ? '접기' : '체크리스트 보기'}</span>
                     </button>
                     {!hasMyRoom && (
-                      <button
-                        onClick={() => {
-                          setSelectedRoom(room)
-                          setShowApplyRoom(true)
-                        }}
-                        className="flex items-center justify-center gap-2 bg-blue-50 text-blue-600 border border-blue-200 text-sm font-medium px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors"
-                      >
-                        <span>가입 요청</span>
-                      </button>
+                      (() => {
+                        const alreadyApplied = appliedRooms.some((applied) => applied.id === room.id)
+
+                        if (alreadyApplied) {
+                          return (
+                            <button
+                              type="button"
+                              disabled
+                              className="flex items-center justify-center gap-2 bg-gray-100 text-gray-400 border border-gray-200 text-sm font-medium px-3 py-2 rounded-lg cursor-not-allowed"
+                            >
+                              <span>가입 요청 완료</span>
+                            </button>
+                          )
+                        }
+
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedRoom(room)
+                              setShowApplyRoom(true)
+                            }}
+                            className="flex items-center justify-center gap-2 bg-blue-50 text-blue-600 border border-blue-200 text-sm font-medium px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors"
+                          >
+                            <span>가입 요청</span>
+                          </button>
+                        )
+                      })()
                     )}
                   </div>
 
@@ -1570,6 +1617,11 @@ const RoomSearchPage = () => {
             capacity: selectedRoom.capacity,
             currentMembers: selectedRoom.currentMembers,
             residencePeriod: selectedRoom.residencePeriod
+          }}
+          roomId={selectedRoom.id}
+          onSuccess={() => {
+            // 가입 요청 성공 후 목록 새로고침
+            void fetchRooms(activeTab, { showLoading: false })
           }}
         />
       )}
