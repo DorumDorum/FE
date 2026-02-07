@@ -1107,8 +1107,19 @@ const MyRoomPage = () => {
           </div>
         )}
         {!loading && !room && (
-          <div className="text-sm text-gray-500 flex items-center justify-center py-10">
-            내 방 정보를 찾을 수 없습니다.
+          <div className="flex flex-col items-center justify-center min-h-[calc(100vh-300px)] px-4">
+            <p className="text-lg font-medium text-gray-700 mb-2">
+              속한 방이 없습니다
+            </p>
+            <p className="text-sm text-gray-500 mb-6">
+              룸메를 찾아보세요
+            </p>
+            <button
+              onClick={() => navigate('/rooms/search')}
+              className="bg-[#3072E1] text-white px-6 py-2 rounded-lg font-medium hover:bg-[#2563E1] active:scale-[0.99] transition-colors"
+            >
+              룸메 찾기
+            </button>
           </div>
         )}
         {!loading && room && (

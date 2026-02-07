@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Edit2, LogOut, Bell, Pencil } from 'lucide-react'
+import { LogOut, Bell, Pencil } from 'lucide-react'
 import BottomNavigationBar from '../components/ui/BottomNavigationBar'
 import CreateChecklistModal from '../components/modals/CreateChecklistModal'
 // import toast from 'react-hot-toast' // 토스트 알림 비활성화
@@ -23,6 +23,7 @@ const MyPage = () => {
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'프로필' | '체크리스트'>('프로필')
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({
     nickname: '',
@@ -476,7 +477,18 @@ const MyPage = () => {
                   return { ...defaultItem, value: payload.wakeUp || '' }
                 }
                 if (defaultItem.label === '귀가') {
-                  const mapped = mapReturnHomeFromEnum(payload.returnHome || '')
+                  const returnHomeValue = payload.returnHome
+                  if (!returnHomeValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || [],
+                      extraValue: ''
+                    }
+                  }
+                  const mapped = mapReturnHomeFromEnum(returnHomeValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -487,7 +499,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '청소') {
-                  const mapped = mapCleaningFromEnum(payload.cleaning || '')
+                  const cleaningValue = payload.cleaning
+                  if (!cleaningValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapCleaningFromEnum(cleaningValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -497,7 +519,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '방에서 전화') {
-                  const mapped = mapPhoneCallFromEnum(payload.phoneCall || '')
+                  const phoneCallValue = payload.phoneCall
+                  if (!phoneCallValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapPhoneCallFromEnum(phoneCallValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -507,7 +539,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '잠귀') {
-                  const mapped = mapSleepLightFromEnum(payload.sleepLight || '')
+                  const sleepLightValue = payload.sleepLight
+                  if (!sleepLightValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapSleepLightFromEnum(sleepLightValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -517,7 +559,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '잠버릇') {
-                  const mapped = mapSleepHabitFromEnum(payload.sleepHabit || '')
+                  const sleepHabitValue = payload.sleepHabit
+                  if (!sleepHabitValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapSleepHabitFromEnum(sleepHabitValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -527,7 +579,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '코골이') {
-                  const mapped = mapSnoringFromEnum(payload.snoring || '')
+                  const snoringValue = payload.snoring
+                  if (!snoringValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapSnoringFromEnum(snoringValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -537,7 +599,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '샤워시간') {
-                  const mapped = mapShowerTimeFromEnum(payload.showerTime || '')
+                  const showerTimeValue = payload.showerTime
+                  if (!showerTimeValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapShowerTimeFromEnum(showerTimeValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -547,7 +619,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '방에서 취식') {
-                  const mapped = mapEatingFromEnum(payload.eating || '')
+                  const eatingValue = payload.eating
+                  if (!eatingValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapEatingFromEnum(eatingValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -557,7 +639,18 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '소등') {
-                  const mapped = mapLightsOutFromEnum(payload.lightsOut || '')
+                  const lightsOutValue = payload.lightsOut
+                  if (!lightsOutValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || [],
+                      extraValue: ''
+                    }
+                  }
+                  const mapped = mapLightsOutFromEnum(lightsOutValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -568,7 +661,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '본가 주기') {
-                  const mapped = mapHomeVisitFromEnum(payload.homeVisit || '')
+                  const homeVisitValue = payload.homeVisit
+                  if (!homeVisitValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapHomeVisitFromEnum(homeVisitValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -578,7 +681,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '흡연') {
-                  const mapped = mapSmokingFromEnum(payload.smoking || '')
+                  const smokingValue = payload.smoking
+                  if (!smokingValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapSmokingFromEnum(smokingValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -588,7 +701,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '냉장고') {
-                  const mapped = mapRefrigeratorFromEnum(payload.refrigerator || '')
+                  const refrigeratorValue = payload.refrigerator
+                  if (!refrigeratorValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapRefrigeratorFromEnum(refrigeratorValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -607,7 +730,17 @@ const MyPage = () => {
                   return { ...defaultItem, value: payload.hairDryer || '' }
                 }
                 if (defaultItem.label === '알람') {
-                  const mapped = mapAlarmFromEnum(payload.alarm || null)
+                  const alarmValue = payload.alarm
+                  if (!alarmValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapAlarmFromEnum(alarmValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -617,7 +750,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '이어폰') {
-                  const mapped = mapEarphoneFromEnum(payload.earphone || null)
+                  const earphoneValue = payload.earphone
+                  if (!earphoneValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapEarphoneFromEnum(earphoneValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -627,7 +770,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '키스킨') {
-                  const mapped = mapKeyskinFromEnum(payload.keyskin || null)
+                  const keyskinValue = payload.keyskin
+                  if (!keyskinValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapKeyskinFromEnum(keyskinValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -637,7 +790,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '더위') {
-                  const mapped = mapHeatFromEnum(payload.heat || null)
+                  const heatValue = payload.heat
+                  if (!heatValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapHeatFromEnum(heatValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -647,7 +810,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '추위') {
-                  const mapped = mapColdFromEnum(payload.cold || null)
+                  const coldValue = payload.cold
+                  if (!coldValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapColdFromEnum(coldValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -657,7 +830,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '공부') {
-                  const mapped = mapStudyFromEnum(payload.study || null)
+                  const studyValue = payload.study
+                  if (!studyValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapStudyFromEnum(studyValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -667,7 +850,17 @@ const MyPage = () => {
                   }
                 }
                 if (defaultItem.label === '쓰레기통') {
-                  const mapped = mapTrashCanFromEnum(payload.trashCan || null)
+                  const trashCanValue = payload.trashCan
+                  if (!trashCanValue) {
+                    return {
+                      ...defaultItem,
+                      options: defaultItem.options?.map(opt => ({
+                        ...opt,
+                        selected: false
+                      })) || []
+                    }
+                  }
+                  const mapped = mapTrashCanFromEnum(trashCanValue)
                   return {
                     ...defaultItem,
                     options: defaultItem.options?.map(opt => ({
@@ -1118,176 +1311,195 @@ const MyPage = () => {
         )}
 
         {!loading && profile && (
-          <div className="px-4 pt-2 pb-4 space-y-6">
-            {/* 프로필 카드 */}
-            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-bold text-gray-900">프로필 정보</h2>
-                {!isEditing && (
-                  <button
-                    onClick={handleEdit}
-                    className="flex items-center gap-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg px-2 py-1 hover:bg-gray-50"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                    편집
-                  </button>
-                )}
+          <div className="pb-4">
+            {/* 프로필 헤더 섹션 */}
+            <div className="px-4 pt-6 pb-4">
+              <div className="flex flex-col items-center">
+                {/* 큰 아바타 */}
+                <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center text-3xl font-bold text-gray-700 shadow-md mb-4">
+                  {profile.name?.[0] || 'U'}
+                </div>
+                {/* 닉네임과 이메일 */}
+                <div className="text-center mb-4">
+                  <div className="text-2xl font-bold text-gray-900 mb-1">
+                    {profile.nickname || profile.name}
+                  </div>
+                  <div className="text-sm text-gray-500">{profile.email}</div>
+                </div>
               </div>
-
-              {!isEditing ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-xl text-gray-600">
-                      {profile.name?.[0] || 'U'}
-                    </div>
-                    <div>
-                      <div className="text-lg font-semibold text-black">
-                        {profile.nickname || profile.name}
-                      </div>
-                      <div className="text-sm text-gray-500">{profile.email}</div>
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-gray-200">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="text-xs text-gray-500">이름</div>
-                        <div className="text-sm font-medium text-black truncate">{profile.name}</div>
-                      </div>
-
-                      <div>
-                        <div className="text-xs text-gray-500">성별</div>
-                        <div className="text-sm font-medium text-black">{mapGenderToDisplay(profile.gender)}</div>
-                      </div>
-
-                      {profile.studentNo && (
-                        <div>
-                          <div className="text-xs text-gray-500">학번</div>
-                          <div className="text-sm font-medium text-black truncate">{profile.studentNo}</div>
-                        </div>
-                      )}
-
-                      {profile.major && (
-                        <div>
-                          <div className="text-xs text-gray-500">전공</div>
-                          <div className="text-sm font-medium text-black truncate">{profile.major}</div>
-                        </div>
-                      )}
-
-                      {profile.grade && (
-                        <div>
-                          <div className="text-xs text-gray-500">학년</div>
-                          <div className="text-sm font-medium text-black">{profile.grade}</div>
-                        </div>
-                      )}
-
-                      {profile.age !== undefined && profile.age !== null && (
-                        <div>
-                          <div className="text-xs text-gray-500">나이</div>
-                          <div className="text-sm font-medium text-black">{profile.age}세</div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      닉네임
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.nickname}
-                      onChange={(e) => setEditForm({ ...editForm, nickname: e.target.value })}
-                      maxLength={10}
-                      className="w-full px-4 py-3 rounded-xl border border-[#e8e2dc] bg-[#f5f1ee] text-base text-black focus:outline-none focus:ring-2 focus:ring-[#fcb44e]"
-                      placeholder="닉네임을 입력하세요"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      학년
-                    </label>
-                    <select
-                      value={editForm.grade}
-                      onChange={(e) => setEditForm({ ...editForm, grade: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl border border-[#e8e2dc] bg-[#f5f1ee] text-base text-black focus:outline-none focus:ring-2 focus:ring-[#fcb44e] appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22currentColor%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpolyline points=%226 9 12 15 18 9%22%3E%3C/polyline%3E%3C/svg%3E')] bg-no-repeat bg-right pr-10"
-                      style={{ backgroundPosition: 'right 0.75rem center', backgroundSize: '1.5em 1.5em' }}
-                    >
-                      <option value="">학년을 선택하세요</option>
-                      <option value="1학년">1학년</option>
-                      <option value="2학년">2학년</option>
-                      <option value="3학년">3학년</option>
-                      <option value="4학년">4학년</option>
-                      <option value="5학년">5학년</option>
-                      <option value="6학년">6학년</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      전공
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.major}
-                      onChange={(e) => setEditForm({ ...editForm, major: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl border border-[#e8e2dc] bg-[#f5f1ee] text-base text-black focus:outline-none focus:ring-2 focus:ring-[#fcb44e]"
-                      placeholder="전공을 입력하세요"
-                    />
-                  </div>
-
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      onClick={() => setIsEditing(false)}
-                      className="flex-1 py-3 rounded-xl text-base font-semibold border border-gray-300 text-gray-700 hover:bg-gray-50"
-                    >
-                      취소
-                    </button>
-                    <button
-                      onClick={handleSave}
-                      disabled={isSubmitting || !editForm.nickname.trim() || !editForm.grade.trim() || !editForm.major.trim()}
-                      className="flex-1 py-3 rounded-xl text-base font-semibold bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {isSubmitting ? '저장 중...' : '저장'}
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* 나의 체크리스트 */}
-            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-gray-900">나의 체크리스트</h2>
+            {/* 탭 */}
+            <div className="flex justify-between text-sm text-gray-500 px-4 border-b border-gray-200">
+              {(['프로필', '체크리스트'] as ('프로필' | '체크리스트')[]).map((tab) => (
                 <button
-                  className="flex items-center gap-1 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={() => {
-                    if (!isEditingChecklist) {
-                      setIsEditingChecklist(true)
-                    } else {
-                      handleSaveChecklist()
-                    }
-                  }}
-                  disabled={isSavingChecklist}
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`flex-1 py-3 font-medium ${
+                    activeTab === tab ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'
+                  }`}
                 >
-                  <Pencil className="w-4 h-4" />
-                  {isSavingChecklist ? '저장 중...' : isEditingChecklist ? '저장' : '편집'}
+                  {tab}
                 </button>
-              </div>
-              {hasChecklist === null ? (
-                <div className="text-sm text-gray-500 text-center py-8">
-                  체크리스트 정보를 불러오는 중...
-                </div>
-              ) : hasChecklist && myChecklist.length > 0 ? (
-                <div className="space-y-4">
-                  {myChecklist.map((section, index) => (
-                    <div key={section.title} className="space-y-3">
-                      <h4 className="text-base font-bold text-black">{section.title}</h4>
+              ))}
+            </div>
+
+            {/* 프로필 탭 */}
+            {activeTab === '프로필' && (
+              <div className="px-4 pt-4">
+                <div className="mt space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-base font-bold text-black">프로필 정보</h4>
+                      {!isEditing && (
+                        <button
+                          onClick={handleEdit}
+                          className="flex items-center gap-1 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg px-2 py-1 hover:bg-gray-50 transition-colors"
+                        >
+                          <Pencil className="w-4 h-4" />
+                          편집
+                        </button>
+                      )}
+                    </div>
                     <div className="bg-white border border-gray-200 rounded-xl p-4">
-                      <div className="space-y-3 text-sm text-gray-700">
+                      {!isEditing ? (
+                        <div className="grid grid-cols-2 gap-4 text-sm text-gray-700">
+                          <div>
+                            <div className="text-xs text-gray-500 mb-1">이름</div>
+                            <div className="text-sm font-medium text-black truncate">{profile.name}</div>
+                          </div>
+
+                          <div>
+                            <div className="text-xs text-gray-500 mb-1">성별</div>
+                            <div className="text-sm font-medium text-black">{mapGenderToDisplay(profile.gender)}</div>
+                          </div>
+
+                          {profile.studentNo && (
+                            <div>
+                              <div className="text-xs text-gray-500 mb-1">학번</div>
+                              <div className="text-sm font-medium text-black truncate">{profile.studentNo}</div>
+                            </div>
+                          )}
+
+                          {profile.major && (
+                            <div>
+                              <div className="text-xs text-gray-500 mb-1">전공</div>
+                              <div className="text-sm font-medium text-black truncate">{profile.major}</div>
+                            </div>
+                          )}
+
+                          {profile.grade && (
+                            <div>
+                              <div className="text-xs text-gray-500 mb-1">학년</div>
+                              <div className="text-sm font-medium text-black">{profile.grade}</div>
+                            </div>
+                          )}
+
+                          {profile.age !== undefined && profile.age !== null && (
+                            <div>
+                              <div className="text-xs text-gray-500 mb-1">나이</div>
+                              <div className="text-sm font-medium text-black">{profile.age}세</div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-4 text-sm text-gray-700">
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">닉네임</label>
+                            <input
+                              type="text"
+                              value={editForm.nickname}
+                              onChange={(e) => setEditForm({ ...editForm, nickname: e.target.value })}
+                              maxLength={10}
+                              className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="닉네임을 입력하세요"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">학년</label>
+                            <select
+                              value={editForm.grade}
+                              onChange={(e) => setEditForm({ ...editForm, grade: e.target.value })}
+                              className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22currentColor%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpolyline points=%226 9 12 15 18 9%22%3E%3C/polyline%3E%3C/svg%3E')] bg-no-repeat bg-right pr-10"
+                              style={{ backgroundPosition: 'right 0.75rem center', backgroundSize: '1.5em 1.5em' }}
+                            >
+                              <option value="">학년을 선택하세요</option>
+                              <option value="1학년">1학년</option>
+                              <option value="2학년">2학년</option>
+                              <option value="3학년">3학년</option>
+                              <option value="4학년">4학년</option>
+                              <option value="5학년">5학년</option>
+                              <option value="6학년">6학년</option>
+                            </select>
+                          </div>
+
+                          <div className="col-span-2">
+                            <label className="block text-xs text-gray-500 mb-1">전공</label>
+                            <input
+                              type="text"
+                              value={editForm.major}
+                              onChange={(e) => setEditForm({ ...editForm, major: e.target.value })}
+                              className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="전공을 입력하세요"
+                            />
+                          </div>
+
+                          <div className="col-span-2 flex gap-3 pt-2">
+                            <button
+                              onClick={() => setIsEditing(false)}
+                              className="flex-1 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50"
+                            >
+                              취소
+                            </button>
+                            <button
+                              onClick={handleSave}
+                              disabled={isSubmitting || !editForm.nickname.trim() || !editForm.grade.trim() || !editForm.major.trim()}
+                              className="flex-1 py-2 rounded-lg text-sm font-medium bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {isSubmitting ? '저장 중...' : '저장'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 체크리스트 탭 */}
+            {(activeTab as string) === '체크리스트' && (
+              <div className="px-4 pt-4">
+                {hasChecklist === null ? (
+                  <div className="text-sm text-gray-500 text-center py-8">
+                    체크리스트 정보를 불러오는 중...
+                  </div>
+                ) : hasChecklist && myChecklist.length > 0 ? (
+                  <div className="mt space-y-4">
+                    {myChecklist.map((section, index) => (
+                      <div key={section.title} className="space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="text-base font-bold text-black">{section.title}</h4>
+                          {index === 0 && (
+                            <button
+                              className="flex items-center gap-1 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                              onClick={() => {
+                                if (!isEditingChecklist) {
+                                  setIsEditingChecklist(true)
+                                } else {
+                                  handleSaveChecklist()
+                                }
+                              }}
+                              disabled={isSavingChecklist}
+                            >
+                              <Pencil className="w-4 h-4" />
+                              {isSavingChecklist ? '저장 중...' : isEditingChecklist ? '저장' : '편집'}
+                            </button>
+                          )}
+                        </div>
+                        <div className="bg-white border border-gray-200 rounded-xl p-4">
+                          <div className="space-y-3 text-sm text-gray-700">
                         {section.items.map((item, itemIndex) => {
                           // 기본 정보 섹션은 수정 불가능 (이미 제거됨)
                           const isBasicInfo = false
@@ -1416,10 +1628,10 @@ const MyPage = () => {
                             </div>
                           )
                         })}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
                 </div>
               ) : (
                 <div className="text-center py-8 space-y-4">
@@ -1432,16 +1644,19 @@ const MyPage = () => {
                   </button>
                 </div>
               )}
-            </div>
+              </div>
+            )}
 
             {/* 로그아웃 버튼 */}
-            <button
-              onClick={handleLogout}
-              className="w-full py-4 rounded-xl text-base font-semibold border border-red-300 text-red-600 bg-red-50 hover:bg-red-100 flex items-center justify-center gap-2"
-            >
-              <LogOut className="w-5 h-5" />
-              로그아웃
-            </button>
+            <div className="px-4 pt-8">
+              <button
+                onClick={handleLogout}
+                className="w-full py-4 rounded-xl text-base font-semibold border border-red-300 text-red-600 bg-red-50 hover:bg-red-100 flex items-center justify-center gap-2"
+              >
+                <LogOut className="w-5 h-5" />
+                로그아웃
+              </button>
+            </div>
           </div>
         )}
 

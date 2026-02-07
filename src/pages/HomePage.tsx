@@ -311,12 +311,17 @@ const HomePage = () => {
           )}
 
           {!loading && !hasRoom && (
-            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-              <div className="text-center">
-                <p className="text-gray-600 mb-4">아직 속한 방이 없습니다.</p>
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+              <div className="flex flex-col items-center justify-center py-6">
+                <p className="text-base font-medium text-gray-700 mb-1.5">
+                  속한 방이 없습니다
+                </p>
+                <p className="text-xs text-gray-500 mb-4">
+                  룸메를 찾아보세요
+                </p>
                 <button
                   onClick={() => navigate('/rooms/search')}
-                  className="bg-blue-50 text-blue-600 border border-blue-200 rounded-lg px-6 py-2 text-sm font-medium hover:bg-blue-100"
+                  className="bg-[#3072E1] text-white px-5 py-1.5 rounded-lg text-sm font-medium hover:bg-[#2563E1] active:scale-[0.99] transition-colors"
                 >
                   룸메 찾기
                 </button>

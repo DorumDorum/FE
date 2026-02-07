@@ -79,14 +79,12 @@ const BottomNavigationBar = () => {
         >
           <Home className={getIconClass('/home')} />
         </button>
-        {hasRoom && (
-          <button
-            onClick={() => navigate('/rooms/me')}
-            className={getRoomManagementButtonClass()}
-          >
-            <Building2 className={getRoomManagementIconClass()} />
-          </button>
-        )}
+        <button
+          onClick={() => navigate('/rooms/me')}
+          className={getRoomManagementButtonClass()}
+        >
+          <Building2 className={getRoomManagementIconClass()} />
+        </button>
         <button
           onClick={() => navigate('/rooms/search')}
           className={getButtonClass()}
