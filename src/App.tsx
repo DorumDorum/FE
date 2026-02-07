@@ -11,12 +11,18 @@ import IntroPage from '@/pages/IntroPage'
 import SignupFlowPage from '@/pages/SignupFlowPage'
 import LoginPage from '@/pages/LoginPage'
 import ChatPage from '@/pages/ChatPage'
+import ChatRoomPage from '@/pages/ChatRoomPage'
+import ChatRequestsPage from '@/pages/ChatRequestsPage'
 import NotificationsPage from '@/pages/NotificationsPage'
 import { useFcmToken } from '@/hooks/useFcmToken'
+import { useChatConnections } from '@/hooks/useChatConnections'
 
 function App() {
   // 앱 시작 시 한 번 FCM 토큰을 수집하고 서버에 등록
   useFcmToken()
+
+  // 채팅 SSE/WebSocket 연결 관리 (로그인 후)
+  useChatConnections()
 
   return (
     <div className="h-screen bg-white">
@@ -31,6 +37,8 @@ function App() {
         
         {/* 채팅 */}
         <Route path="/chats" element={<ChatPage />} />
+        <Route path="/chats/:roomId" element={<ChatRoomPage />} />
+        <Route path="/chats/requests" element={<ChatRequestsPage />} />
         
         {/* 알림 */}
         <Route path="/notifications" element={<NotificationsPage />} />
