@@ -14,6 +14,9 @@ export const useFcmToken = () => {
       try {
         if (typeof window === 'undefined') return
         if (!('Notification' in window)) return
+        // 비로그인 상태에서는 서버에 디바이스 토큰을 등록하지 않는다.
+        // (로그아웃 뒤에도 FCM 토큰이 남는 이슈 방지)
+        if (!localStorage.getItem('accessToken')) return
 
         // HTTPS 필요(로컬호스트 제외)
         const isLocalhost = window.location.hostname === 'localhost'
@@ -41,6 +44,7 @@ export const useFcmToken = () => {
 
         if (!token) return
 
+        // 서버에 "현재 로그인 사용자" 기준으로 토큰 등록
         await sendFirebaseToken(token)
         localStorage.setItem('fcmToken', token)
 
@@ -63,7 +67,6 @@ const setupForegroundMessageHandler = (messaging: any) => {
   onMessage(messaging, (payload) => {
     console.log('[FCM] Foreground message received:', payload)
 
-    const title = payload.notification?.title || '새 알림'
     const body = payload.notification?.body || ''
 
     // 채팅 메시지인 경우

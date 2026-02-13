@@ -970,10 +970,29 @@ const MyPage = () => {
     }
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
-    navigate('/login', { replace: true })
+  const handleLogout = async () => {
+    try {
+      // 서버 로그아웃을 먼저 호출해 백엔드 저장소의 세션/토큰/FCM 상태를 정리한다.
+      // (클라이언트만 토큰 삭제하면 서버에 디바이스 토큰이 남을 수 있음)
+      // 1) 백엔드 로그아웃 API 호출 (DELETE /api/users/logout)
+      const { logout, clearClientLogoutState } = await import('@/services/auth')
+      await logout()
+
+      // 2) 로그아웃 성공 후 클라이언트 정리 (SSE/WS/FCM/localStorage)
+      await clearClientLogoutState()
+      navigate('/login', { replace: true })
+    } catch (error) {
+      console.error('[Logout] Failed to logout:', error)
+
+      // 서버 호출 실패 시에도 클라이언트는 정리해서 세션을 종료
+      try {
+        const { clearClientLogoutState } = await import('@/services/auth')
+        await clearClientLogoutState()
+      } catch (cleanupError) {
+        console.error('[Logout] Failed to clear client state:', cleanupError)
+      }
+      navigate('/login', { replace: true })
+    }
   }
 
   const mapGenderToDisplay = (gender: string) => {
