@@ -2,9 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Send } from 'lucide-react'
 import { useChatStore } from '@/store/chatStore'
-import { loadMessages, decideChatRequest, leaveMessageRoom, deleteMessageRoom } from '@/services/chat/chatApi'
+import {
+  loadMessages,
+  loadMessageRoomParticipants,
+  decideChatRequest,
+  leaveMessageRoom,
+  deleteMessageRoom,
+} from '@/services/chat/chatApi'
 import { stompChatClient } from '@/services/chat/stompClient'
-import type { ChatMessage } from '@/types/chat'
+import type { ChatMessage, ChatParticipant } from '@/types/chat'
 import { MessageRoomStatus, MessageRequestDecision, MessageType } from '@/types/chat'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -32,9 +38,11 @@ const ChatRoomPage = () => {
     messagesByRoom,
     messageCursors,
     hasMoreMessages,
+    participantsByRoom,
     setMessages,
     addMessage,
     prependMessages,
+    setRoomParticipants,
     setCurrentRoomId,
     resetUnreadCount,
     wsConnectionStatus,
@@ -45,6 +53,8 @@ const ChatRoomPage = () => {
 
   const currentRoomId = roomId // string 그대로 사용
   const messages = currentRoomId ? messagesByRoom.get(currentRoomId) || [] : []
+  // 이 방 참여자 정보 캐시 (입장/새로고침 때 해당 방만 갱신)
+  const participantMap = currentRoomId ? participantsByRoom.get(currentRoomId) : undefined
   const currentRoom = currentRoomId ? rooms.find((room) => room.messageRoomNo === currentRoomId) : null
   const isApproved = currentRoom?.roomStatus === MessageRoomStatus.APPROVED
   const isRequested = currentRoom?.roomStatus === MessageRoomStatus.REQUESTED
@@ -59,8 +69,9 @@ const ChatRoomPage = () => {
     setCurrentRoomId(currentRoomId)
     resetUnreadCount(currentRoomId)
     
-    // 메시지 로드
-    loadInitialMessages()
+    // 입장할 때 메시지와 참여자 API를 함께 호출해 초기 렌더링 데이터를 맞춘다.
+    // (참여자 캐시는 roomId 단위로 덮어써서 재입장/새로고침 시 최신화)
+    void loadRoomData(currentRoomId)
 
     // WebSocket 연결 시작
     const accessToken = localStorage.getItem('accessToken')
@@ -188,22 +199,59 @@ const ChatRoomPage = () => {
     }
   }, [currentRoomId, resetUnreadCount, setCurrentRoomId, setWsConnectionStatus])
 
+  const prefetchProfileImages = (participants: ChatParticipant[]) => {
+    participants.forEach((participant) => {
+      // 현재는 대부분 null이지만, URL이 생기면 브라우저 캐시에 미리 적재한다.
+      if (!participant.profileImageUrl) return
+      const image = new Image()
+      image.src = participant.profileImageUrl
+    })
+  }
+
+  const refreshRoomParticipants = async (targetRoomId: string) => {
+    try {
+      const participants = await loadMessageRoomParticipants(targetRoomId)
+      const mappedParticipants: ChatParticipant[] = participants.map((participant) => ({
+        userId: participant.userId,
+        name: participant.name,
+        studentNo: participant.studentNo,
+        major: participant.major,
+        age: participant.age,
+        profileImageUrl: participant.profileImageUrl,
+      }))
+
+      // roomId별 캐시를 통째로 교체해 stale 데이터가 남지 않게 한다.
+      setRoomParticipants(targetRoomId, mappedParticipants)
+      prefetchProfileImages(mappedParticipants)
+    } catch (error) {
+      console.error('Failed to load room participants:', error)
+    }
+  }
+
+  const loadRoomData = async (targetRoomId: string) => {
+    // 네트워크 대기 시간을 줄이기 위해 병렬 호출
+    await Promise.all([
+      loadInitialMessages(targetRoomId),
+      refreshRoomParticipants(targetRoomId),
+    ])
+  }
+
   // 메시지 추가 시 자동 스크롤
   useEffect(() => {
     scrollToBottom()
   }, [messages.length])
 
-  const loadInitialMessages = async () => {
-    if (!currentRoomId) return
+  const loadInitialMessages = async (targetRoomId: string) => {
+    if (!targetRoomId) return
 
     try {
       setIsLoadingMessages(true)
       setIsInitialLoad(true)
-      const data = await loadMessages(currentRoomId, undefined, 50)
+      const data = await loadMessages(targetRoomId, undefined, 50)
       
       const chatMessages: ChatMessage[] = data.messages.map((msg) => ({
         messageNo: msg.messageNo,
-        messageRoomNo: currentRoomId,
+        messageRoomNo: targetRoomId,
         senderNo: msg.senderNo,
         senderName: msg.senderName,
         content: msg.content,
@@ -217,7 +265,7 @@ const ChatRoomPage = () => {
         new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
       )
 
-      setMessages(currentRoomId, sortedMessages, data.nextCursor, data.hasMore)
+      setMessages(targetRoomId, sortedMessages, data.nextCursor, data.hasMore)
       
       // 초기 로드 후 스크롤을 맨 아래로 (즉시)
       setTimeout(() => {
@@ -546,9 +594,15 @@ const ChatRoomPage = () => {
                     } rounded-lg px-4 py-2 shadow-sm`}
                   >
                     {!message.isLocal && (
-                      <p className="text-xs font-semibold mb-1 text-gray-600">
-                        {message.senderName}
-                      </p>
+                      <div className="mb-1 flex items-center gap-2">
+                        <span className="text-xs font-semibold text-gray-600">
+                          {participantMap?.get(message.senderNo)?.name || message.senderName}
+                        </span>
+                        {/* studentNo는 확정 방에서만 내려오므로, null일 때도 공간을 유지해 레이아웃을 고정한다. */}
+                        <span className="inline-block min-w-[72px] text-xs text-gray-400">
+                          {participantMap?.get(message.senderNo)?.studentNo || '\u00A0'}
+                        </span>
+                      </div>
                     )}
                     <p className="text-sm whitespace-pre-wrap break-words">
                       {message.content}

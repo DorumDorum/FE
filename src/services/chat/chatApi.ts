@@ -5,6 +5,7 @@ import type {
   LoadMessageRoomResponse,
   CursorPage,
   LoadMessagesResponse,
+  LoadMessageRoomParticipantResponse,
 } from '@/types/chat'
 import { MessageRequestDecision } from '@/types/chat'
 
@@ -68,6 +69,21 @@ export const loadMessages = async (
     result: LoadMessagesResponse
   }>(`/api/message-rooms/${roomId}/messages`, { params })
   
+  return response.data.result
+}
+
+/**
+ * 특정 채팅방의 참여자 목록 조회
+ * GET /api/chat/rooms/{roomId}/participants
+ */
+export const loadMessageRoomParticipants = async (
+  roomId: string
+): Promise<LoadMessageRoomParticipantResponse[]> => {
+  const response = await apiClient.get<{
+    success: boolean
+    result: LoadMessageRoomParticipantResponse[]
+  }>(`/api/chat/rooms/${roomId}/participants`)
+
   return response.data.result
 }
 

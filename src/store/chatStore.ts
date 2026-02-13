@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   ChatRoom,
   ChatMessage,
+  ChatParticipant,
   MessageRequestCreatedEvent,
 } from '@/types/chat'
 import { ConnectionStatus } from '@/types/chat'
@@ -20,6 +21,8 @@ interface ChatState {
   messagesByRoom: Map<string, ChatMessage[]> // number → string
   messageCursors: Map<string, string | null> // number → string
   hasMoreMessages: Map<string, boolean> // number → string
+  // 방별 참여자 캐시 (roomId -> (userId -> participant))
+  participantsByRoom: Map<string, Map<string, ChatParticipant>>
 
   // WebSocket/SSE 연결 상태
   wsConnectionStatus: ConnectionStatus
@@ -40,6 +43,8 @@ interface ChatState {
   setMessages: (roomId: string, messages: ChatMessage[], cursor: string | null, hasMore: boolean) => void // number → string
   addMessage: (roomId: string, message: ChatMessage) => void // number → string
   prependMessages: (roomId: string, messages: ChatMessage[]) => void // number → string
+  setRoomParticipants: (roomId: string, participants: ChatParticipant[]) => void
+  clearRoomParticipants: (roomId: string) => void
 
   setWsConnectionStatus: (status: ConnectionStatus) => void
   setSseConnected: (connected: boolean) => void
@@ -64,12 +69,13 @@ const initialState = {
   messagesByRoom: new Map(),
   messageCursors: new Map(),
   hasMoreMessages: new Map(),
+  participantsByRoom: new Map(),
   wsConnectionStatus: ConnectionStatus.DISCONNECTED,
   sseConnected: false,
   pendingRequests: [],
 }
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>((set) => ({
   ...initialState,
 
   setRooms: (rooms, cursor, hasMore) =>
@@ -85,9 +91,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     })),
 
   removeRoom: (roomId) =>
-    set((state) => ({
-      rooms: state.rooms.filter((room) => room.messageRoomNo !== roomId),
-    })),
+    set((state) => {
+      const newParticipantsByRoom = new Map(state.participantsByRoom)
+      // 방 목록에서 제거될 때 참여자 캐시도 정리해 메모리/오염 방지
+      newParticipantsByRoom.delete(roomId)
+
+      return {
+        rooms: state.rooms.filter((room) => room.messageRoomNo !== roomId),
+        participantsByRoom: newParticipantsByRoom,
+      }
+    }),
 
   updateRoom: (roomId, updates) =>
     set((state) => ({
@@ -151,6 +164,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return { messagesByRoom: newMessagesByRoom }
     }),
 
+  setRoomParticipants: (roomId, participants) =>
+    set((state) => {
+      const newParticipantsByRoom = new Map(state.participantsByRoom)
+      const participantMap = new Map<string, ChatParticipant>()
+
+      participants.forEach((participant) => {
+        // 렌더링 시 O(1) 조회를 위해 userId 키 맵 형태로 저장
+        participantMap.set(participant.userId, participant)
+      })
+
+      // 재입장/새로고침 시 해당 roomId 캐시를 최신 응답으로 교체
+      newParticipantsByRoom.set(roomId, participantMap)
+
+      return { participantsByRoom: newParticipantsByRoom }
+    }),
+
+  clearRoomParticipants: (roomId) =>
+    set((state) => {
+      const newParticipantsByRoom = new Map(state.participantsByRoom)
+      newParticipantsByRoom.delete(roomId)
+      return { participantsByRoom: newParticipantsByRoom }
+    }),
+
   setWsConnectionStatus: (status) =>
     set({ wsConnectionStatus: status }),
 
@@ -194,6 +230,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     messagesByRoom: new Map(),
     messageCursors: new Map(),
     hasMoreMessages: new Map(),
+    participantsByRoom: new Map(),
     wsConnectionStatus: ConnectionStatus.DISCONNECTED,
     sseConnected: false,
     pendingRequests: [],

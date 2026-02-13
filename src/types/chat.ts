@@ -68,6 +68,16 @@ export interface LoadMessagesResponse {
   hasMore: boolean
 }
 
+// 채팅방 참여자 조회 응답
+export interface LoadMessageRoomParticipantResponse {
+  profileImageUrl: string | null
+  userId: string
+  name: string
+  studentNo: string | null
+  major: string | null
+  age: number
+}
+
 // ===== WebSocket Types =====
 
 // STOMP 메시지 전송 (SEND /pub/rooms/{roomId})
@@ -149,6 +159,15 @@ export interface ChatRoom {
   lastMessageAt: string
   isRequester: boolean
   unreadCount?: number
+}
+
+export interface ChatParticipant {
+  userId: string
+  name: string
+  studentNo: string | null
+  major: string | null
+  age: number
+  profileImageUrl: string | null
 }
 
 // WebSocket 연결 상태
