@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { sseNotificationClient } from '@/services/chat/sseClient'
 import { useChatStore } from '@/store/chatStore'
-import toast from 'react-hot-toast'
+import { extractMessageRoomId, showChatNavigationToast } from '@/services/chat/chatNotification'
 import type {
   MessageSentEvent,
   MessageRequestCreatedEvent,
@@ -18,6 +18,7 @@ import { ConnectionStatus } from '@/types/chat'
  */
 export const useChatConnections = () => {
   const location = useLocation()
+  const navigate = useNavigate()
   const {
     currentRoomId,
     addPendingRequest,
@@ -101,11 +102,13 @@ export const useChatConnections = () => {
     // 읽지 않은 메시지 카운트 증가
     incrementUnreadCount(event.roomId)
 
-    // 알림 표시
-    toast('새로운 메시지가 도착했습니다', {
+    showChatNavigationToast({
+      title: `${event.senderName}님의 새 메시지`,
+      description: event.content,
       icon: '💬',
-      duration: 3000,
-      position: 'top-center',
+      roomId: extractMessageRoomId(event as Record<string, any>),
+      navigate,
+      duration: 4000,
     })
   }
 
@@ -115,9 +118,12 @@ export const useChatConnections = () => {
 
     addPendingRequest(event)
 
-    toast.success(`${event.senderName}님이 채팅 요청을 보냈습니다`, {
-      duration: 4000,
-      position: 'top-center',
+    showChatNavigationToast({
+      title: `${event.senderName}님이 채팅 요청을 보냈습니다`,
+      icon: '📩',
+      roomId: extractMessageRoomId(event as Record<string, any>),
+      navigate,
+      duration: 4500,
     })
   }
 
@@ -132,10 +138,12 @@ export const useChatConnections = () => {
         ? '채팅 요청이 수락되었습니다!'
         : '채팅 요청이 거절되었습니다.'
 
-    toast(message, {
+    showChatNavigationToast({
+      title: message,
       icon: event.decision === 'APPROVE' ? '✅' : '❌',
-      duration: 3000,
-      position: 'top-center',
+      roomId: extractMessageRoomId(event as Record<string, any>),
+      navigate,
+      duration: 4000,
     })
 
     // 수락된 경우 채팅방 목록 갱신 필요 (실제로는 refetch)

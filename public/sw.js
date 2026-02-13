@@ -29,7 +29,12 @@ self.addEventListener('push', (event) => {
         const image = notification.image;
         const icon = notification.icon || '/vite.svg';
         const badge = notification.badge || '/vite.svg';
-        const clickAction = data.clickAction || notification.clickAction || '/';
+        const messageRoomId =
+          data.messageRoomId || data.messageRoomNo || data.roomId || data.roomNo;
+        const clickAction =
+          data.clickAction ||
+          notification.clickAction ||
+          (messageRoomId ? `/chats/${messageRoomId}` : '/');
         const tag = data.tag || notification.tag || 'dorumdorum';
 
         await self.registration.showNotification(title, {

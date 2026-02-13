@@ -1,12 +1,15 @@
 import { useEffect } from 'react'
 import { getToken, onMessage } from 'firebase/messaging'
+import { useNavigate } from 'react-router-dom'
 import { getFirebaseMessaging } from '@/lib/firebase'
 import { sendFirebaseToken } from '@/services/notification'
-import toast from 'react-hot-toast'
+import { extractMessageRoomId, showChatNavigationToast } from '@/services/chat/chatNotification'
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY
 
 export const useFcmToken = () => {
+  const navigate = useNavigate()
+
   useEffect(() => {
     // 앱 진입 시 한 번 실행:
     // 1) 알림 권한 요청 → 2) 서비스워커 준비 → 3) FCM 토큰 발급 → 4) 서버로 전송
@@ -49,55 +52,81 @@ export const useFcmToken = () => {
         localStorage.setItem('fcmToken', token)
 
         // 포그라운드 메시지 수신 핸들러 등록
-        setupForegroundMessageHandler(messaging)
+        const unsubscribeForeground = setupForegroundMessageHandler(messaging, navigate)
+        return unsubscribeForeground
       } catch (error) {
         console.error('FCM 토큰 등록 실패', error)
       }
+
+      return undefined
     }
 
-    registerToken()
-  }, [])
+    let unsubscribeForegroundMessage: (() => void) | undefined
+    void registerToken().then((unsubscribe) => {
+      unsubscribeForegroundMessage = unsubscribe
+    })
+
+    return () => {
+      if (unsubscribeForegroundMessage) {
+        unsubscribeForegroundMessage()
+      }
+    }
+  }, [navigate])
 }
 
 /**
  * 앱이 포그라운드(활성 상태)일 때 FCM 메시지를 받으면
  * 토스트 알림으로 표시
  */
-const setupForegroundMessageHandler = (messaging: any) => {
-  onMessage(messaging, (payload) => {
+const setupForegroundMessageHandler = (messaging: any, navigate: ReturnType<typeof useNavigate>) => {
+  return onMessage(messaging, (payload) => {
     console.log('[FCM] Foreground message received:', payload)
 
     const body = payload.notification?.body || ''
+    const roomId = extractMessageRoomId(payload.data)
 
     // 채팅 메시지인 경우
     if (payload.data?.type === 'chat.message') {
-      toast(body, {
+      showChatNavigationToast({
+        title: payload.notification?.title || '새로운 메시지가 도착했습니다',
+        description: body,
         icon: '💬',
+        roomId,
+        navigate,
         duration: 4000,
-        position: 'top-center',
       })
     }
     // 채팅 요청인 경우
     else if (payload.data?.type === 'chat.request.created') {
-      toast.success(body, {
-        duration: 4000,
-        position: 'top-center',
+      showChatNavigationToast({
+        title: payload.notification?.title || '새로운 채팅 요청이 도착했습니다',
+        description: body,
+        icon: '📩',
+        roomId,
+        navigate,
+        duration: 4500,
       })
     }
     // 채팅 요청 결정인 경우
     else if (payload.data?.type === 'chat.request.decided') {
       const decision = payload.data?.decision
-      toast(body, {
+      showChatNavigationToast({
+        title: payload.notification?.title || body || '채팅 요청 상태가 변경되었습니다',
+        description: body,
         icon: decision === 'APPROVE' ? '✅' : '❌',
-        duration: 3000,
-        position: 'top-center',
+        roomId,
+        navigate,
+        duration: 4000,
       })
     }
     // 일반 알림
     else {
-      toast(body, {
-        duration: 3000,
-        position: 'top-center',
+      showChatNavigationToast({
+        title: payload.notification?.title || '새 알림',
+        description: body,
+        roomId,
+        navigate,
+        duration: 3500,
       })
     }
   })

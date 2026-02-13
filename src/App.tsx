@@ -16,6 +16,7 @@ import ChatRequestsPage from '@/pages/ChatRequestsPage'
 import NotificationsPage from '@/pages/NotificationsPage'
 import { useFcmToken } from '@/hooks/useFcmToken'
 import { useChatConnections } from '@/hooks/useChatConnections'
+import { Toaster } from 'react-hot-toast'
 
 function App() {
   // 앱 시작 시 한 번 FCM 토큰을 수집하고 서버에 등록
@@ -26,6 +27,15 @@ function App() {
 
   return (
     <div className="h-screen bg-white">
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            marginTop: '8px',
+          },
+        }}
+      />
       <Routes>
         <Route path="/" element={<SplashPage />} />
         <Route path="/intro" element={<IntroPage />} />
