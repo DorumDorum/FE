@@ -45,8 +45,10 @@ class StompChatClient {
         Authorization: `Bearer ${accessToken}`,
       },
       reconnectDelay: this.reconnectDelay,
-      heartbeatIncoming: 4000,
-      heartbeatOutgoing: 4000,
+      // 백엔드 WebSocketConfig(25s/25s)와 동일하게 맞춘다.
+      // 이 heartbeat는 프로토콜 생존 신호이며 presence ping을 대체하지 않는다.
+      heartbeatIncoming: 25000,
+      heartbeatOutgoing: 25000,
       debug: (str) => {
         if (import.meta.env.DEV) {
           console.log('[STOMP Debug]', str)
@@ -195,6 +197,29 @@ class StompChatClient {
     })
 
     console.log('[STOMP] Presence leave sent for room', roomId)
+  }
+
+  /**
+   * Presence ping 전송 (채팅방에서 활동 신호)
+   * SEND /pub/presence/ping
+   *
+   * 주의:
+   * - STOMP heartbeat와 목적이 다름
+   * - heartbeat: 연결 생존 확인
+   * - app-level ping: onWsActivity를 발생시켜 TTL/lastSeen 갱신
+   */
+  sendPing(): void {
+    if (!this.client?.connected) {
+      console.warn('[STOMP] Not connected, cannot send ping')
+      return
+    }
+
+    this.client.publish({
+      destination: '/pub/presence/ping',
+      body: '',
+    })
+
+    console.log('[STOMP] Presence ping sent')
   }
 
   /**

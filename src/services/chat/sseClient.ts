@@ -8,6 +8,8 @@ import { SseEventName } from '@/types/chat'
 type SseEventHandler<T = any> = (data: T) => void
 
 interface SseEventHandlers {
+  [SseEventName.CONNECTED]: SseEventHandler<any>[]
+  [SseEventName.HEARTBEAT]: SseEventHandler<any>[]
   [SseEventName.CHAT_MESSAGE]: SseEventHandler<MessageSentEvent>[]
   [SseEventName.CHAT_REQUEST_CREATED]: SseEventHandler<MessageRequestCreatedEvent>[]
   [SseEventName.CHAT_REQUEST_DECIDED]: SseEventHandler<MessageRequestDecidedEvent>[]
@@ -16,6 +18,8 @@ interface SseEventHandlers {
 class SseNotificationClient {
   private eventSource: EventSource | null = null
   private handlers: SseEventHandlers = {
+    [SseEventName.CONNECTED]: [],
+    [SseEventName.HEARTBEAT]: [],
     [SseEventName.CHAT_MESSAGE]: [],
     [SseEventName.CHAT_REQUEST_CREATED]: [],
     [SseEventName.CHAT_REQUEST_DECIDED]: [],
@@ -120,6 +124,19 @@ class SseNotificationClient {
 
   private registerEventListeners(): void {
     if (!this.eventSource) return
+
+    // connected 이벤트
+    this.eventSource.addEventListener(SseEventName.CONNECTED, (event: MessageEvent) => {
+      console.log('[SSE] Connected event received')
+      this.notifyHandlers(SseEventName.CONNECTED, {})
+    })
+
+    // heartbeat 이벤트 (수신만, 응답 불필요)
+    this.eventSource.addEventListener(SseEventName.HEARTBEAT, (event: MessageEvent) => {
+      // 로깅은 너무 많아질 수 있으므로 필요시에만 활성화
+      // console.log('[SSE] Heartbeat received')
+      this.notifyHandlers(SseEventName.HEARTBEAT, {})
+    })
 
     // chat.message 이벤트
     this.eventSource.addEventListener(SseEventName.CHAT_MESSAGE, (event: MessageEvent) => {

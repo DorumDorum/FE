@@ -38,9 +38,11 @@ const ChatPage = () => {
   }
 
   const handleRoomClick = (roomId: string, roomStatus: MessageRoomStatus) => { // number → string
-    if (roomStatus === MessageRoomStatus.APPROVED) {
-      navigate(`/chats/${roomId}`)
+    if (roomStatus === MessageRoomStatus.DELETED) {
+      return
     }
+    // APPROVED/REQUESTED는 들어가서 상태 안내 노출
+    navigate(`/chats/${roomId}`)
   }
 
   const formatTime = (dateString: string) => {

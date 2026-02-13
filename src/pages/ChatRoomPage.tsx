@@ -2,24 +2,33 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Send } from 'lucide-react'
 import { useChatStore } from '@/store/chatStore'
-import { loadMessages } from '@/services/chat/chatApi'
+import { loadMessages, decideChatRequest, leaveMessageRoom, deleteMessageRoom } from '@/services/chat/chatApi'
 import { stompChatClient } from '@/services/chat/stompClient'
 import type { ChatMessage } from '@/types/chat'
+import { MessageRoomStatus, MessageRequestDecision, MessageType } from '@/types/chat'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
+import ConfirmModal from '@/components/ui/ConfirmModal'
 
 const ChatRoomPage = () => {
   const { roomId } = useParams<{ roomId: string }>()
   const navigate = useNavigate()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  // 채팅방 화면 체류 중 앱 레벨 ping 타이머를 보관한다.
+  // (STOMP heartbeat와 별개로 presence TTL 갱신 목적)
+  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   
   const [inputMessage, setInputMessage] = useState('')
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(true) // 초기 로딩 플래그
+  const [showLeaveModal, setShowLeaveModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [isActionLoading, setIsActionLoading] = useState(false)
 
   const {
+    rooms,
     messagesByRoom,
     messageCursors,
     hasMoreMessages,
@@ -29,12 +38,21 @@ const ChatRoomPage = () => {
     setCurrentRoomId,
     resetUnreadCount,
     wsConnectionStatus,
+    setWsConnectionStatus,
+    updateRoom,
+    removeRoom,
   } = useChatStore()
 
   const currentRoomId = roomId // string 그대로 사용
   const messages = currentRoomId ? messagesByRoom.get(currentRoomId) || [] : []
+  const currentRoom = currentRoomId ? rooms.find((room) => room.messageRoomNo === currentRoomId) : null
+  const isApproved = currentRoom?.roomStatus === MessageRoomStatus.APPROVED
+  const isRequested = currentRoom?.roomStatus === MessageRoomStatus.REQUESTED
+  const isRequester = currentRoom?.isRequester === true
+  const canSendMessage = isApproved
 
-  // 방 입장 시 초기화
+  // 방 입장 시 초기화 + WebSocket 세션 생성.
+  // 정책: WS는 채팅방 화면에 있을 때만 유지한다.
   useEffect(() => {
     if (!currentRoomId) return
 
@@ -44,12 +62,29 @@ const ChatRoomPage = () => {
     // 메시지 로드
     loadInitialMessages()
 
-    // WebSocket 구독 및 Presence 신호
+    // WebSocket 연결 시작
+    const accessToken = localStorage.getItem('accessToken')
+    if (!accessToken) {
+      console.error('[ChatRoom] No access token, cannot connect WebSocket')
+      return
+    }
+
+    console.log('[ChatRoom] Connecting WebSocket...')
+
+    // 연결 상태를 스토어에 반영 (채팅방 내부에서만 관리)
+    const unsubscribeStatus = stompChatClient.onConnectionStatusChange((status) => {
+      setWsConnectionStatus(status)
+      console.log('[ChatRoom] WebSocket status:', status)
+    })
+
+    stompChatClient.connect()
+
+    // 서버 이벤트(MessageSentEvent)를 화면용 ChatMessage 형태로 변환.
+    // 본인 메시지는 낙관적 업데이트가 이미 들어가 있으므로 중복 반영하지 않는다.
     const handleNewMessage = (message: any) => {
       console.log('[WebSocket] Received message:', message)
       
       // JWT 토큰에서 userId 추출
-      const accessToken = localStorage.getItem('accessToken')
       let currentUserId: string | null = null
       
       if (accessToken) {
@@ -96,21 +131,62 @@ const ChatRoomPage = () => {
       scrollToBottom()
     }
 
-    // WebSocket이 연결되어 있으면 구독
-    if (stompChatClient.isConnected()) {
-      stompChatClient.subscribeToRoom(currentRoomId, handleNewMessage)
-      stompChatClient.sendEnterPresence(currentRoomId)
+    // connect() 직후 즉시 connected가 아닐 수 있어 polling으로 구독 시점을 맞춘다.
+    let isCancelled = false
+    let subscribeRetryTimeout: ReturnType<typeof setTimeout> | null = null
+
+    const checkConnectionAndSubscribe = () => {
+      if (isCancelled) return
+
+      if (stompChatClient.isConnected()) {
+        console.log('[ChatRoom] WebSocket connected, subscribing to room...')
+        stompChatClient.subscribeToRoom(currentRoomId, handleNewMessage)
+        stompChatClient.sendEnterPresence(currentRoomId)
+        
+        // 앱 레벨 ping: 사용자가 "읽기만" 하는 상태에서도
+        // ws 활동(onWsActivity)이 기록되도록 60초마다 전송한다.
+        pingIntervalRef.current = setInterval(() => {
+          if (stompChatClient.isConnected()) {
+            stompChatClient.sendPing()
+          }
+        }, 60000)
+      } else {
+        // 연결 대기
+        subscribeRetryTimeout = setTimeout(checkConnectionAndSubscribe, 500)
+      }
     }
 
-    // Cleanup: 방 나갈 때
+    checkConnectionAndSubscribe()
+
+    // Cleanup: 방 이탈 시 presence leave 전송 후 WS를 완전히 종료한다.
+    // (다른 화면에서 불필요한 wsConnected 상태가 남지 않도록)
     return () => {
+      console.log('[ChatRoom] Leaving room, cleaning up...')
+
+      isCancelled = true
+      if (subscribeRetryTimeout) {
+        clearTimeout(subscribeRetryTimeout)
+        subscribeRetryTimeout = null
+      }
+
+      unsubscribeStatus()
+
+      // Ping interval 정리
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current)
+        pingIntervalRef.current = null
+      }
+
       if (stompChatClient.isConnected()) {
         stompChatClient.sendLeavePresence(currentRoomId)
         stompChatClient.unsubscribeFromRoom(currentRoomId)
+        stompChatClient.disconnect()
+        console.log('[ChatRoom] WebSocket disconnected')
       }
+      
       setCurrentRoomId(null)
     }
-  }, [currentRoomId])
+  }, [currentRoomId, resetUnreadCount, setCurrentRoomId, setWsConnectionStatus])
 
   // 메시지 추가 시 자동 스크롤
   useEffect(() => {
@@ -227,6 +303,10 @@ const ChatRoomPage = () => {
 
   const handleSendMessage = async () => {
     if (!currentRoomId || !inputMessage.trim() || isSending) return
+    if (!canSendMessage) {
+      toast.error('채팅 요청이 수락되어야 메시지를 보낼 수 있습니다.')
+      return
+    }
 
     if (!stompChatClient.isConnected()) {
       toast.error('연결이 끊어졌습니다. 잠시 후 다시 시도해주세요.')
@@ -269,7 +349,7 @@ const ChatRoomPage = () => {
         senderNo: currentUserId,
         senderName: '나',
         content,
-        messageType: 'TEXT',
+        messageType: MessageType.TEXT,
         sentAt: new Date().toISOString(),
         isLocal: true,
       }
@@ -282,6 +362,61 @@ const ChatRoomPage = () => {
       setInputMessage(content) // 입력 복구
     } finally {
       setIsSending(false)
+    }
+  }
+
+  const handleDecision = async (decision: MessageRequestDecision) => {
+    if (!currentRoom?.messageRequestNo) {
+      toast.error('요청 정보를 찾을 수 없습니다.')
+      return
+    }
+
+    try {
+      await decideChatRequest(currentRoom.messageRequestNo, decision)
+      if (decision === MessageRequestDecision.APPROVE) {
+        updateRoom(currentRoom.messageRoomNo, { roomStatus: MessageRoomStatus.APPROVED })
+        toast.success('채팅 요청을 수락했습니다.')
+      } else {
+        updateRoom(currentRoom.messageRoomNo, { roomStatus: MessageRoomStatus.REJECTED })
+        toast.success('채팅 요청을 거절했습니다.')
+      }
+    } catch (error) {
+      console.error('Failed to decide chat request:', error)
+      toast.error('요청 처리에 실패했습니다.')
+    }
+  }
+
+  const handleLeaveRoom = async () => {
+    if (!currentRoomId || isActionLoading) return
+    try {
+      setIsActionLoading(true)
+      await leaveMessageRoom(currentRoomId)
+      removeRoom(currentRoomId)
+      toast.success('채팅방을 나갔습니다.')
+      navigate('/chats')
+    } catch (error) {
+      console.error('Failed to leave room:', error)
+      toast.error('채팅방 나가기에 실패했습니다.')
+    } finally {
+      setIsActionLoading(false)
+      setShowLeaveModal(false)
+    }
+  }
+
+  const handleDeleteRoom = async () => {
+    if (!currentRoomId || isActionLoading) return
+    try {
+      setIsActionLoading(true)
+      await deleteMessageRoom(currentRoomId)
+      removeRoom(currentRoomId)
+      toast.success('채팅방을 삭제했습니다.')
+      navigate('/chats')
+    } catch (error) {
+      console.error('Failed to delete room:', error)
+      toast.error('채팅방 삭제에 실패했습니다.')
+    } finally {
+      setIsActionLoading(false)
+      setShowDeleteModal(false)
     }
   }
 
@@ -337,10 +472,22 @@ const ChatRoomPage = () => {
           <ArrowLeft className="w-6 h-6 text-gray-700" />
         </button>
         <h1 className="text-lg font-semibold text-gray-900">채팅</h1>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           {wsConnectionStatus !== 'CONNECTED' && (
             <span className="text-xs text-orange-500">연결 중...</span>
           )}
+          <button
+            onClick={() => setShowLeaveModal(true)}
+            className="text-xs text-gray-600 border border-gray-300 rounded-lg px-2 py-1 hover:bg-gray-50"
+          >
+            나가기
+          </button>
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="text-xs text-red-600 border border-red-300 rounded-lg px-2 py-1 hover:bg-red-50"
+          >
+            삭제
+          </button>
         </div>
       </header>
 
@@ -351,6 +498,13 @@ const ChatRoomPage = () => {
         className="flex-1 overflow-y-auto px-4 py-4"
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
+        {isRequested && (
+          <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-800">
+            {isRequester
+              ? '채팅 요청을 걸었습니다. 수락될 때까지 메시지를 보낼 수 없습니다.'
+              : '채팅 요청을 받았습니다. 수락하시겠습니까?'}
+          </div>
+        )}
         {isLoadingMessages && messages.length === 0 ? (
           <div className="flex justify-center items-center h-full">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
@@ -415,6 +569,26 @@ const ChatRoomPage = () => {
         )}
       </div>
 
+      {/* 요청 수락/거절 버튼 (수신자) */}
+      {isRequested && !isRequester && (
+        <div className="bg-white border-t border-gray-200 px-4 py-3">
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleDecision(MessageRequestDecision.REJECT)}
+              className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              거절
+            </button>
+            <button
+              onClick={() => handleDecision(MessageRequestDecision.APPROVE)}
+              className="flex-1 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
+            >
+              수락
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 메시지 입력 */}
       <div className="bg-white border-t border-gray-200 px-4 py-3">
         <div className="flex items-end gap-2">
@@ -422,16 +596,21 @@ const ChatRoomPage = () => {
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="메시지를 입력하세요..."
+            placeholder={canSendMessage ? '메시지를 입력하세요...' : '요청 수락 후 메시지를 보낼 수 있습니다.'}
             rows={1}
-            className="flex-1 resize-none border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 text-sm"
+            disabled={!canSendMessage}
+            className={`flex-1 resize-none border rounded-lg px-4 py-2 text-sm focus:outline-none ${
+              canSendMessage
+                ? 'border-gray-300 focus:border-blue-500'
+                : 'border-gray-200 bg-gray-50 text-gray-400'
+            }`}
             style={{ maxHeight: '100px' }}
           />
           <button
             onClick={handleSendMessage}
-            disabled={!inputMessage.trim() || isSending}
+            disabled={!inputMessage.trim() || isSending || !canSendMessage}
             className={`p-3 rounded-lg transition-colors ${
-              inputMessage.trim() && !isSending
+              inputMessage.trim() && !isSending && canSendMessage
                 ? 'bg-blue-500 text-white hover:bg-blue-600'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }`}
@@ -440,6 +619,25 @@ const ChatRoomPage = () => {
           </button>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={showLeaveModal}
+        title="채팅방 나가기"
+        message="이 채팅방을 나가시겠습니까?"
+        confirmText={isActionLoading ? '처리 중...' : '나가기'}
+        onConfirm={handleLeaveRoom}
+        onCancel={() => setShowLeaveModal(false)}
+        confirmButtonColor="bg-gray-700 hover:bg-gray-800"
+      />
+
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        title="채팅방 삭제"
+        message="이 채팅방을 삭제하시겠습니까? 복구할 수 없습니다."
+        confirmText={isActionLoading ? '처리 중...' : '삭제'}
+        onConfirm={handleDeleteRoom}
+        onCancel={() => setShowDeleteModal(false)}
+      />
     </div>
   )
 }

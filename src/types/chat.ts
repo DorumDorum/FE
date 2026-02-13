@@ -119,6 +119,8 @@ export interface MessageRequestDecidedEvent {
 
 // SSE 이벤트 이름
 export enum SseEventName {
+  CONNECTED = 'connected',
+  HEARTBEAT = 'heartbeat',
   CHAT_MESSAGE = 'chat.message',
   CHAT_REQUEST_CREATED = 'chat.request.created',
   CHAT_REQUEST_DECIDED = 'chat.request.decided',

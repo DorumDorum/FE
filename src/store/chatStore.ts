@@ -31,6 +31,7 @@ interface ChatState {
   // Actions
   setRooms: (rooms: ChatRoom[], cursor: string | null, hasMore: boolean) => void
   addRoom: (room: ChatRoom) => void
+  removeRoom: (roomId: string) => void
   updateRoom: (roomId: string, updates: Partial<ChatRoom>) => void // number → string
   setLoadingRooms: (loading: boolean) => void
 
@@ -81,6 +82,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   addRoom: (room) =>
     set((state) => ({
       rooms: [room, ...state.rooms],
+    })),
+
+  removeRoom: (roomId) =>
+    set((state) => ({
+      rooms: state.rooms.filter((room) => room.messageRoomNo !== roomId),
     })),
 
   updateRoom: (roomId, updates) =>
