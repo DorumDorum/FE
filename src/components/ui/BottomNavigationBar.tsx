@@ -53,14 +53,19 @@ const BottomNavigationBar = () => {
           return
         }
 
-        const res = await fetch('http://localhost:8080/api/rooms/me', {
+        // CheckMyRoom 사용 - LoadMyRoom 호출 시 방 없으면 404 발생하므로 exists API 사용
+        const res = await fetch('http://localhost:8080/api/rooms/me/exists', {
           credentials: 'include',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         })
 
-        setHasRoom(res.ok)
+        if (!res.ok) {
+          setHasRoom(false)
+          return
+        }
+        const data = await res.json().catch(() => null)
+        const payload = data?.result ?? data?.data ?? data
+        setHasRoom(Boolean(payload?.isExist))
       } catch (error) {
         console.error('[navigation] room check error', error)
         setHasRoom(false)

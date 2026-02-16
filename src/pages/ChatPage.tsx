@@ -1,7 +1,24 @@
 import BottomNavigationBar from '@/components/ui/BottomNavigationBar'
+import GuestOnlyMessage from '@/components/ui/GuestOnlyMessage'
 import { MessageCircle } from 'lucide-react'
 
 const ChatPage = () => {
+  const isGuest = !localStorage.getItem('accessToken')
+
+  if (isGuest) {
+    return (
+      <div className="h-screen bg-white flex flex-col overflow-hidden animate-fade-in">
+        <header className="bg-white px-4 py-4 border-b border-gray-100">
+          <h1 className="text-2xl font-bold text-gray-900">채팅</h1>
+        </header>
+        <main className="flex-1 overflow-y-auto">
+          <GuestOnlyMessage />
+        </main>
+        <BottomNavigationBar />
+      </div>
+    )
+  }
+
   return (
     <div className="h-screen bg-white flex flex-col overflow-hidden animate-fade-in">
       {/* 메인 콘텐츠 - 스크롤 가능 영역 */}

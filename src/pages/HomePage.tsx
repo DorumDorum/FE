@@ -4,6 +4,7 @@ import { Bell, Share2, Calendar, ChevronRight, ChevronLeft, Menu } from 'lucide-
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, getDay, addMonths, subMonths } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import BottomNavigationBar from '@/components/ui/BottomNavigationBar'
+import GuestOnlyMessage from '@/components/ui/GuestOnlyMessage'
 
 const HomePage = () => {
   const navigate = useNavigate()
@@ -22,26 +23,52 @@ const HomePage = () => {
     const fetchMyRoom = async () => {
       try {
         const token = localStorage.getItem('accessToken')
+        // 비회원은 방 정보 조회하지 않음
         if (!token) {
-          navigate('/login', { replace: true })
+          setHasRoom(null) // null = 비회원
+          setLoading(false)
           return
         }
 
-        const res = await fetch('http://localhost:8080/api/rooms/me', {
+        // 1) CheckMyRoom 먼저 호출 - 방 존재 여부만 확인 (404 없음)
+        const existsRes = await fetch('http://localhost:8080/api/rooms/me/exists', {
           credentials: 'include',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         })
 
-        if (res.status === 401) {
-          navigate('/login', { replace: true })
+        if (existsRes.status === 401) {
+          setHasRoom(null)
+          setLoading(false)
           return
         }
+
+        const existsRawBody = await existsRes.text()
+        let existsData: any
+        try {
+          existsData = existsRawBody ? JSON.parse(existsRawBody) : null
+        } catch (e) {
+          setHasRoom(false)
+          setLoading(false)
+          return
+        }
+
+        const existsPayload = existsData?.result ?? existsData?.data ?? existsData
+        if (!existsPayload?.isExist) {
+          setHasRoom(false)
+          setLoading(false)
+          return
+        }
+
+        setHasRoom(true)
+
+        // 2) 방이 있을 때만 LoadMyRoom 호출 (상세 정보)
+        const res = await fetch('http://localhost:8080/api/rooms/me', {
+          credentials: 'include',
+          headers: { Authorization: `Bearer ${token}` },
+        })
 
         const contentType = res.headers.get('content-type') ?? ''
         const rawBody = await res.text()
-        
         if (res.ok) {
           let data: any
           try {
@@ -52,14 +79,8 @@ const HomePage = () => {
             setLoading(false)
             return
           }
-
           const payload = data?.result ?? data?.data ?? data
-          if (payload) {
-            setRoom(payload)
-            setHasRoom(true)
-          } else {
-            setHasRoom(false)
-          }
+          setRoom(payload ?? null)
         } else {
           setHasRoom(false)
         }
@@ -78,9 +99,7 @@ const HomePage = () => {
     const fetchCalendarEvents = async () => {
       try {
         const token = localStorage.getItem('accessToken')
-        if (!token) {
-          return
-        }
+        // 비회원도 학사일정 조회 가능
 
         setLoadingCalendar(true)
         
@@ -92,13 +111,17 @@ const HomePage = () => {
         const startDateStr = format(monthStart, 'yyyy-MM-dd')
         const endDateStr = format(monthEnd, 'yyyy-MM-dd')
 
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+        }
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
         const res = await fetch(
           `http://localhost:8080/api/calendar/events?startDate=${startDateStr}&endDate=${endDateStr}`,
           {
             credentials: 'include',
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+            headers,
           }
         )
 
@@ -138,17 +161,19 @@ const HomePage = () => {
     const fetchNotices = async () => {
       try {
         const token = localStorage.getItem('accessToken')
-        if (!token) {
-          return
-        }
+        // 비회원도 공지사항 조회 가능
 
         setLoadingNotices(true)
 
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+        }
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
         const res = await fetch('http://localhost:8080/api/notices', {
           credentials: 'include',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers,
         })
 
         if (res.ok) {
@@ -310,18 +335,23 @@ const HomePage = () => {
             </div>
           )}
 
-          {!loading && !hasRoom && (
+          {!loading && hasRoom === null && (
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+              <GuestOnlyMessage compact />
+            </div>
+          )}
+          {!loading && hasRoom === false && (
             <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
               <div className="flex flex-col items-center justify-center py-6">
                 <p className="text-base font-medium text-gray-700 mb-1.5">
-                  속한 방이 없습니다
+                  속한 방이 없습니다.
                 </p>
                 <p className="text-xs text-gray-500 mb-4">
-                  룸메를 찾아보세요
+                  룸메를 찾아보세요.
                 </p>
                 <button
                   onClick={() => navigate('/rooms/search')}
-                  className="bg-[#3072E1] text-white px-5 py-1.5 rounded-lg text-sm font-medium hover:bg-[#2563E1] active:scale-[0.99] transition-colors"
+                  className="bg-[#3072E1] text-white px-6 py-2.5 rounded-lg text-base font-medium hover:bg-[#2563E1] active:scale-[0.99] transition-colors"
                 >
                   룸메 찾기
                 </button>
@@ -508,7 +538,7 @@ const HomePage = () => {
                 <div className="border-b border-gray-100 pb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900 mb-1">공지사항이 없습니다</p>
+                      <p className="text-sm font-medium text-gray-900 mb-1">공지사항이 없습니다.</p>
                       <p className="text-xs text-gray-500">새로운 공지사항이 등록되면 알려드립니다.</p>
                     </div>
                     <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0 ml-2" />

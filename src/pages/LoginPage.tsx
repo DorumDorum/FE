@@ -112,7 +112,7 @@ const LoginPage = () => {
             <RoundedInput
               value={password}
               onChange={setPassword}
-              placeholder="비밀번호를 입력하세요"
+              placeholder="비밀번호를 입력하세요."
               type={showPassword ? 'text' : 'password'}
               rightIcon={
                 <button

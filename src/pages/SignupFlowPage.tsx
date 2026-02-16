@@ -340,7 +340,7 @@ const SignupFlowPage = () => {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
             <FieldLabel>이메일</FieldLabel>
-              <span className="text-xs text-gray-500">(학교 이메일만 사용 가능)</span>
+              <span className="text-xs text-gray-500">(학교 이메일만 사용 가능.)</span>
             </div>
             <RoundedInput
               value={email}
@@ -397,7 +397,7 @@ const SignupFlowPage = () => {
               </button>
             )}
             {isEmailVerified && (
-              <p className="text-xs text-green-600 font-semibold">이메일 인증 완료</p>
+              <p className="text-xs text-green-600 font-semibold">이메일 인증 완료.</p>
             )}
           </div>
 
@@ -408,7 +408,7 @@ const SignupFlowPage = () => {
               <RoundedInput
                 value={name}
                 onChange={setName}
-                placeholder="이름을 입력하세요"
+                placeholder="이름을 입력하세요."
               />
             </div>
           )}
@@ -420,7 +420,7 @@ const SignupFlowPage = () => {
               <RoundedInput
                 value={studentId}
                 onChange={setStudentId}
-                placeholder="학번을 입력하세요"
+                placeholder="학번을 입력하세요."
                 inputMode="numeric"
               />
             </div>
@@ -459,7 +459,7 @@ const SignupFlowPage = () => {
               <RoundedInput
                 value={major}
                 onChange={setMajor}
-                placeholder="단과대/학과를 입력하세요"
+                placeholder="단과대/학과를 입력하세요."
               />
             </div>
           )}
@@ -510,7 +510,7 @@ const SignupFlowPage = () => {
               <RoundedInput
                 value={password}
                 onChange={setPassword}
-                placeholder="비밀번호를 입력하세요"
+                placeholder="비밀번호를 입력하세요."
                 type={showPassword ? 'text' : 'password'}
                 rightIcon={
                   <button
@@ -533,7 +533,7 @@ const SignupFlowPage = () => {
               <RoundedInput
                 value={passwordConfirm}
                 onChange={setPasswordConfirm}
-                placeholder="비밀번호를 한번 더 입력하세요"
+                placeholder="비밀번호를 한번 더 입력하세요."
                 type={showPasswordConfirm ? 'text' : 'password'}
                 rightIcon={
                   <button

@@ -220,7 +220,7 @@ const ApplyRoomModal = ({ onClose, roomInfo, roomId, onSuccess }: ApplyRoomModal
                   : 'border border-gray-300 focus:ring-2 focus:ring-primary-500'
               }`}
               rows={4}
-              placeholder="자신을 간단히 소개해주세요"
+              placeholder="자신을 간단히 소개해주세요."
             />
             {introError && (
               <p className="mt-1 text-xs text-red-500">자기소개를 입력해주세요.</p>
@@ -237,7 +237,7 @@ const ApplyRoomModal = ({ onClose, roomInfo, roomId, onSuccess }: ApplyRoomModal
               onChange={(e) => setFormData(prev => ({ ...prev, additionalMessage: e.target.value }))}
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-black"
               rows={3}
-              placeholder="룸메이트에게 전하고 싶은 말이 있다면 적어주세요"
+              placeholder="룸메이트에게 전하고 싶은 말이 있다면 적어주세요."
             />
           </div>
 

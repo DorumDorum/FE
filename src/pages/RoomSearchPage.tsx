@@ -803,11 +803,15 @@ const RoomSearchPage = () => {
                   ? room.id.replace('room-', '')
                   : room.id
 
+              const headers: HeadersInit = {
+                'Content-Type': 'application/json',
+              }
+              if (token) {
+                headers['Authorization'] = `Bearer ${token}`
+              }
               const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/rule`, {
                 credentials: 'include',
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                },
+                headers,
               })
 
               if (!res.ok) return
@@ -984,8 +988,8 @@ const RoomSearchPage = () => {
     }
     try {
       const token = localStorage.getItem('accessToken')
-      if (!token) {
-        navigate('/login')
+      // 비회원은 RECRUITING만 조회 가능
+      if (!token && relation !== 'recruiting') {
         if (loadingDelayTimerRef.current) window.clearTimeout(loadingDelayTimerRef.current)
         loadingDelayTimerRef.current = null
         setLoadingTab(null)
@@ -1034,11 +1038,15 @@ const RoomSearchPage = () => {
       })
 
       const startedAt = performance.now()
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
       const res = await fetch(url, {
         credentials: 'include',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
       })
       const elapsedMs = Math.round(performance.now() - startedAt)
       console.log('[rooms] response meta', {
@@ -1048,7 +1056,7 @@ const RoomSearchPage = () => {
         ok: res.ok,
         elapsedMs,
       })
-      if (res.status === 401) {
+      if (res.status === 401 && token) {
         navigate('/login')
         return
       }
@@ -1130,6 +1138,14 @@ const RoomSearchPage = () => {
       setActiveTab('recruiting')
     }
   }, [hasMyRoom, activeTab])
+
+  // 비회원은 'recruiting' 탭만 사용 가능
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken')
+    if (!token && activeTab !== 'recruiting') {
+      setActiveTab('recruiting')
+    }
+  }, [activeTab])
 
   // const handleChatRequest = (roomId: string) => {
   //   const room = recruitingRooms.find(r => r.id === roomId)
@@ -1412,14 +1428,16 @@ const RoomSearchPage = () => {
             </div>
           </div>
 
-          {/* 방 만들기 버튼 */}
-          <button
-            onClick={handleCreateRoom}
-            className="w-full bg-[#3072E1] text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center space-x-2 hover:bg-[#2563E1] mb-4"
-          >
-            <Plus className="w-4 h-4" />
-            <span>방 만들기</span>
-          </button>
+          {/* 방 만들기 버튼 - 로그인한 사용자만 표시 */}
+          {localStorage.getItem('accessToken') && (
+            <button
+              onClick={handleCreateRoom}
+              className="w-full bg-[#3072E1] text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center space-x-2 hover:bg-[#2563E1] mb-4"
+            >
+              <Plus className="w-4 h-4" />
+              <span>방 만들기</span>
+            </button>
+          )}
         </div>
 
         {/* 방 목록 */}
@@ -1446,27 +1464,32 @@ const RoomSearchPage = () => {
               >
                 모집 중인 방
               </button>
-              <button
-                onClick={() => setActiveTab('joined')}
-                className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'joined'
-                    ? 'border-[#3072E1] text-[#3072E1]'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                관심 있는 방
-              </button>
-              {!hasMyRoom && (
-                <button
-                  onClick={() => setActiveTab('applied')}
-                  className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === 'applied'
-                      ? 'border-[#3072E1] text-[#3072E1]'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  내가 지원한 방
-                </button>
+              {/* 로그인한 사용자만 다른 탭 표시 */}
+              {localStorage.getItem('accessToken') && (
+                <>
+                  <button
+                    onClick={() => setActiveTab('joined')}
+                    className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === 'joined'
+                        ? 'border-[#3072E1] text-[#3072E1]'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    관심 있는 방
+                  </button>
+                  {!hasMyRoom && (
+                    <button
+                      onClick={() => setActiveTab('applied')}
+                      className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                        activeTab === 'applied'
+                          ? 'border-[#3072E1] text-[#3072E1]'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      내가 지원한 방
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -1571,7 +1594,7 @@ const RoomSearchPage = () => {
                           if (!roomRules[room.id]) {
                             try {
                               const token = localStorage.getItem('accessToken')
-                              if (!token) return
+                              // 비회원도 체크리스트 조회 가능
 
                               // roomNo를 room.id에서 추출 (room.id가 roomNo인 경우)
                               // room.id에서 roomNo 추출 (Room 타입의 id는 string이지만 실제로는 roomNo)
@@ -1580,11 +1603,15 @@ const RoomSearchPage = () => {
                                 : room.id
 
                               // 공개 API 사용
+                              const headers: HeadersInit = {
+                                'Content-Type': 'application/json',
+                              }
+                              if (token) {
+                                headers['Authorization'] = `Bearer ${token}`
+                              }
                               const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/rule`, {
                                 credentials: 'include',
-                                headers: {
-                                  Authorization: `Bearer ${token}`,
-                                },
+                                headers,
                               })
 
                               if (res.ok) {
@@ -1626,7 +1653,8 @@ const RoomSearchPage = () => {
                     >
                       <span>{expandedRoomIds.has(room.id) ? '접기' : '체크리스트 보기'}</span>
                     </button>
-                    {!hasMyRoom && (
+                    {/* 지원하기 버튼 - 로그인한 사용자만 표시 */}
+                    {localStorage.getItem('accessToken') && !hasMyRoom && (
                       (() => {
                         const alreadyApplied = appliedRooms.some((applied) => applied.id === room.id)
 
@@ -1903,7 +1931,7 @@ const RoomSearchPage = () => {
                           if (!roomRules[room.id]) {
                             try {
                               const token = localStorage.getItem('accessToken')
-                              if (!token) return
+                              // 비회원도 체크리스트 조회 가능
 
                               // roomNo를 room.id에서 추출 (room.id가 roomNo인 경우)
                               // room.id에서 roomNo 추출 (Room 타입의 id는 string이지만 실제로는 roomNo)
@@ -1912,11 +1940,15 @@ const RoomSearchPage = () => {
                                 : room.id
 
                               // 공개 API 사용
+                              const headers: HeadersInit = {
+                                'Content-Type': 'application/json',
+                              }
+                              if (token) {
+                                headers['Authorization'] = `Bearer ${token}`
+                              }
                               const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/rule`, {
                                 credentials: 'include',
-                                headers: {
-                                  Authorization: `Bearer ${token}`,
-                                },
+                                headers,
                               })
 
                               if (res.ok) {
@@ -1958,7 +1990,8 @@ const RoomSearchPage = () => {
                     >
                       <span>{expandedRoomIds.has(room.id) ? '접기' : '체크리스트 보기'}</span>
                     </button>
-                    {!hasMyRoom && (
+                    {/* 지원하기 버튼 - 로그인한 사용자만 표시 */}
+                    {localStorage.getItem('accessToken') && !hasMyRoom && (
                       (() => {
                         const alreadyApplied = appliedRooms.some((applied) => applied.id === room.id)
 
@@ -2115,7 +2148,17 @@ const RoomSearchPage = () => {
           }}
           roomId={selectedRoom.id}
           onSuccess={() => {
-            // 가입 요청 성공 후 목록 새로고침
+            // 가입 요청 성공 시 즉시 로컬 상태 업데이트
+            const roomId = selectedRoom.id
+            setRecruitingRooms((prev) => prev.filter((room) => room.id !== roomId))
+            setAppliedRooms((prev) => {
+              // 이미 있는지 확인
+              if (prev.some((room) => room.id === roomId)) {
+                return prev
+              }
+              return [...prev, selectedRoom]
+            })
+            // 백그라운드에서 목록 새로고침
             void fetchRooms(activeTab, { showLoading: false })
           }}
         />

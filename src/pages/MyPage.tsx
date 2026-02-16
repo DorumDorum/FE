@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LogOut, Bell, Pencil } from 'lucide-react'
 import BottomNavigationBar from '../components/ui/BottomNavigationBar'
+import GuestOnlyMessage from '../components/ui/GuestOnlyMessage'
 import CreateChecklistModal from '../components/modals/CreateChecklistModal'
 // import toast from 'react-hot-toast' // 토스트 알림 비활성화
 
@@ -23,6 +24,7 @@ const MyPage = () => {
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isGuest, setIsGuest] = useState(false)
   const [activeTab, setActiveTab] = useState<'프로필' | '체크리스트'>('프로필')
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({
@@ -61,9 +63,11 @@ const MyPage = () => {
       try {
         const token = localStorage.getItem('accessToken')
         if (!token) {
-          navigate('/login', { replace: true })
+          setIsGuest(true)
+          setLoading(false)
           return
         }
+        setIsGuest(false)
 
         const res = await fetch('http://localhost:8080/api/users/profile/me', {
           credentials: 'include',
@@ -73,7 +77,8 @@ const MyPage = () => {
         })
 
         if (res.status === 401) {
-          navigate('/login', { replace: true })
+          setIsGuest(true)
+          setLoading(false)
           return
         }
 
@@ -1310,7 +1315,11 @@ const MyPage = () => {
           </div>
         )}
 
-        {!loading && profile && (
+        {!loading && isGuest && (
+          <GuestOnlyMessage />
+        )}
+
+        {!loading && !isGuest && profile && (
           <div className="pb-4">
             {/* 프로필 헤더 섹션 */}
             <div className="px-4 pt-6 pb-4">
@@ -1412,7 +1421,7 @@ const MyPage = () => {
                               onChange={(e) => setEditForm({ ...editForm, nickname: e.target.value })}
                               maxLength={10}
                               className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              placeholder="닉네임을 입력하세요"
+                              placeholder="닉네임을 입력하세요."
                             />
                           </div>
 
@@ -1441,7 +1450,7 @@ const MyPage = () => {
                               value={editForm.major}
                               onChange={(e) => setEditForm({ ...editForm, major: e.target.value })}
                               className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              placeholder="전공을 입력하세요"
+                              placeholder="전공을 입력하세요."
                             />
                           </div>
 
@@ -1660,7 +1669,7 @@ const MyPage = () => {
           </div>
         )}
 
-        {!loading && !profile && (
+        {!loading && !isGuest && !profile && (
           <div className="text-sm text-gray-500 flex items-center justify-center py-10">
             프로필 정보를 불러올 수 없습니다.
           </div>

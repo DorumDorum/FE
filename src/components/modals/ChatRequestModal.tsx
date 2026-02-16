@@ -161,7 +161,7 @@ const ChatRequestModal = ({ onClose, roomInfo }: ChatRequestModalProps) => {
               onChange={(e) => setFormData(prev => ({ ...prev, message: e.target.value }))}
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-black"
               rows={4}
-              placeholder="문의 내용을 적어주세요"
+              placeholder="문의 내용을 적어주세요."
             />
           </div>
 

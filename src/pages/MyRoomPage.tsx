@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, Share2, Pencil, Settings, DoorOpen, CheckCircle, Star } from 'lucide-react'
 import BottomNavigationBar from '../components/ui/BottomNavigationBar'
+import GuestOnlyMessage from '../components/ui/GuestOnlyMessage'
 // import toast from 'react-hot-toast' // 토스트 알림 비활성화
 
 const MyRoomPage = () => {
@@ -16,7 +17,6 @@ const MyRoomPage = () => {
     hostNickname: string
     additionalTag: string[]
     roomStatus: string
-    isHost?: boolean
     residencePeriod?: string // 거주기간 (enum 값: SEMESTER, HALF_YEAR, SEASONAL)
   }
 
@@ -85,9 +85,10 @@ const MyRoomPage = () => {
 
   const [room, setRoom] = useState<ApiRoom | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isGuest, setIsGuest] = useState(false)
   const [activeTab, setActiveTab] = useState<'규칙' | '지원자' | '룸메이트'>('규칙')
-  const [isHost, setIsHost] = useState<boolean>(() => localStorage.getItem('isHost') === 'true')
   const [roommates, setRoommates] = useState<ApiRoommate[]>([])
+  const isHost = useMemo(() => roommates.some((m) => m.isMe && m.roomRole === 'HOST'), [roommates])
   const [roommatesLoading, setRoommatesLoading] = useState(true)
   const [isEditingChecklist, setIsEditingChecklist] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -183,51 +184,70 @@ const MyRoomPage = () => {
       try {
         const token = localStorage.getItem('accessToken')
         if (!token) {
-          // toast.error('로그인이 필요합니다.')
-          navigate('/login', { replace: true })
+          setIsGuest(true)
+          setLoading(false)
           return
         }
+        setIsGuest(false)
 
-        const res = await fetch('http://localhost:8080/api/rooms/me', {
+        // 1) CheckMyRoom 먼저 호출 - 방 없으면 LoadMyRoom 호출하지 않음
+        const existsRes = await fetch('http://localhost:8080/api/rooms/me/exists', {
           credentials: 'include',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         })
 
-        if (res.status === 401) {
-          // toast.error('로그인이 필요합니다.')
-          navigate('/login', { replace: true })
+        if (existsRes.status === 401) {
+          setIsGuest(true)
+          setLoading(false)
           return
         }
 
-        const contentType = res.headers.get('content-type') ?? ''
+        const existsRawBody = await existsRes.text()
+        let existsData: any
+        try {
+          existsData = existsRawBody ? JSON.parse(existsRawBody) : null
+        } catch (e) {
+          setRoom(null)
+          setLoading(false)
+          return
+        }
+
+        const existsPayload = existsData?.result ?? existsData?.data ?? existsData
+        if (!existsPayload?.isExist) {
+          setRoom(null)
+          setLoading(false)
+          return
+        }
+
+        // 2) 방이 있을 때만 LoadMyRoom 호출 (쿼리 방지)
+        const res = await fetch('http://localhost:8080/api/rooms/me', {
+          credentials: 'include',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+
         const rawBody = await res.text()
         if (!res.ok) {
-          console.error('[rooms] my room fetch failed', {
-            status: res.status,
-            contentType,
-            body: rawBody,
-          })
-          throw new Error('내 방 정보를 불러오지 못했습니다.')
+          console.error('[rooms] my room fetch failed', { status: res.status })
+          setRoom(null)
+          setLoading(false)
+          return
         }
 
         let data: any
         try {
           data = rawBody ? JSON.parse(rawBody) : null
         } catch (e) {
-          console.error('[rooms] my room parse error', { contentType, rawBody }, e)
-          throw new Error('서버 응답(JSON)을 파싱하지 못했습니다.')
+          console.error('[rooms] my room parse error', e)
+          setRoom(null)
+          setLoading(false)
+          return
         }
 
         const payload = data?.result ?? data?.data ?? data
         setRoom(payload ?? null)
-        const hostFlag = Boolean(payload?.isHost)
-        setIsHost(hostFlag)
-        localStorage.setItem('isHost', hostFlag ? 'true' : 'false')
       } catch (err) {
         console.error('[rooms] my room fetch error', err)
-        // toast.error('내 방 정보를 불러오지 못했습니다.')
+        setRoom(null)
       } finally {
         setLoading(false)
       }
@@ -247,11 +267,7 @@ const MyRoomPage = () => {
     const fetchRoomRule = async () => {
       try {
         const token = localStorage.getItem('accessToken')
-        if (!token) {
-          // toast.error('로그인이 필요합니다.')
-          navigate('/login', { replace: true })
-          return
-        }
+        if (!token) return
 
         const res = await fetch(`http://localhost:8080/api/rooms/${effectiveRoomNo}/rule`, {
           credentials: 'include',
@@ -260,11 +276,7 @@ const MyRoomPage = () => {
           },
         })
 
-        if (res.status === 401) {
-          // toast.error('로그인이 필요합니다.')
-          navigate('/login', { replace: true })
-          return
-        }
+        if (res.status === 401) return
 
         const contentType = res.headers.get('content-type') ?? ''
         const rawBody = await res.text()
@@ -827,16 +839,14 @@ const MyRoomPage = () => {
     void fetchRoomRule()
   }, [room?.roomNo, navigate, activeTab])
 
-  // 룸메이트 조회 (룸메이트 탭에 들어올 때마다 최신 상태로 재조회)
+  // 룸메이트 조회 (room 로드 시 isHost 계산용으로 먼저 로드, 룸메이트 탭에서 재조회)
   useEffect(() => {
+    if (!room?.roomNo) return
+
     const fetchRoommates = async () => {
       try {
         const token = localStorage.getItem('accessToken')
-        if (!token) {
-          // toast.error('로그인이 필요합니다.')
-          navigate('/login', { replace: true })
-          return
-        }
+        if (!token) return
 
         const res = await fetch('http://localhost:8080/api/rooms/me/roommates', {
           credentials: 'include',
@@ -845,21 +855,13 @@ const MyRoomPage = () => {
           },
         })
 
-        if (res.status === 401) {
-          // toast.error('로그인이 필요합니다.')
-          navigate('/login', { replace: true })
-          return
-        }
+        if (res.status === 401) return
 
         const contentType = res.headers.get('content-type') ?? ''
         const rawBody = await res.text()
         if (!res.ok) {
-          console.error('[rooms] roommates fetch failed', {
-            status: res.status,
-            contentType,
-            body: rawBody,
-          })
-          throw new Error('룸메이트 정보를 불러오지 못했습니다.')
+          console.error('[rooms] roommates fetch failed', { status: res.status, contentType, body: rawBody })
+          return
         }
 
         let data: any
@@ -867,25 +869,20 @@ const MyRoomPage = () => {
           data = rawBody ? JSON.parse(rawBody) : null
         } catch (e) {
           console.error('[rooms] roommates parse error', { contentType, rawBody }, e)
-          throw new Error('서버 응답(JSON)을 파싱하지 못했습니다.')
+          return
         }
 
         const payload = data?.result ?? data?.data ?? data
         setRoommates(Array.isArray(payload) ? payload : [])
       } catch (err) {
         console.error('[rooms] roommates fetch error', err)
-        // toast.error('룸메이트 정보를 불러오지 못했습니다.')
       } finally {
         setRoommatesLoading(false)
       }
     }
 
-    // 현재 탭이 '룸메이트'가 아니라면 조회하지 않는다.
-    if (activeTab !== '룸메이트') return
-
     fetchRoommates()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab])
+  }, [room?.roomNo, navigate])
 
   // 지원자 목록 조회 (지원자 탭에 들어올 때마다, 또는 방 정보가 로드됐을 때 최신 상태로 재조회)
   useEffect(() => {
@@ -1106,10 +1103,13 @@ const MyRoomPage = () => {
             불러오는 중...
           </div>
         )}
-        {!loading && !room && (
+        {!loading && isGuest && (
+          <GuestOnlyMessage />
+        )}
+        {!loading && !isGuest && !room && (
           <div className="flex flex-col items-center justify-center min-h-[calc(100vh-300px)] px-4">
             <p className="text-lg font-medium text-gray-700 mb-2">
-              속한 방이 없습니다
+              속한 방이 없습니다.
             </p>
             <p className="text-sm text-gray-500 mb-6">
               룸메를 찾아보세요

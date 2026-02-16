@@ -712,7 +712,7 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
                   }
                 }}
                 className="w-full text-base text-black outline-none bg-transparent"
-                placeholder="방 이름을 입력하세요"
+                placeholder="방 이름을 입력하세요."
             />
           </div>
           </div>
@@ -862,7 +862,7 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
                   onChange={(e) => setOtherNotes(e.target.value)}
                   className="w-full text-sm text-gray-700 outline-none resize-none"
               rows={4}
-                  placeholder="추가로 전달하고 싶은 내용을 입력하세요"
+                  placeholder="추가로 전달하고 싶은 내용을 입력하세요."
             />
           </div>
             </div>

@@ -746,7 +746,7 @@ const CreateChecklistModal = ({ onClose, onCreated }: CreateChecklistModalProps)
                   onChange={(e) => setOtherNotes(e.target.value)}
                   className="w-full text-sm text-gray-700 outline-none resize-none"
               rows={4}
-                  placeholder="추가로 전달하고 싶은 내용을 입력하세요"
+                  placeholder="추가로 전달하고 싶은 내용을 입력하세요."
             />
           </div>
             </div>
