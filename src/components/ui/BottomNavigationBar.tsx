@@ -1,11 +1,9 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useEffect, useState } from 'react'
 import { Home, Users, MessageCircle, Menu, Building2 } from 'lucide-react'
 
 const BottomNavigationBar = () => {
   const navigate = useNavigate()
   const location = useLocation()
-  const [hasRoom, setHasRoom] = useState<boolean | null>(null)
 
   const isActive = (path: string) => {
     if (path === '/home') {
@@ -43,37 +41,6 @@ const BottomNavigationBar = () => {
     const active = isActive(path)
     return `w-6 h-6 ${active ? 'text-[#3072E1]' : 'text-gray-600'}`
   }
-
-  useEffect(() => {
-    const checkRoom = async () => {
-      try {
-        const token = localStorage.getItem('accessToken')
-        if (!token) {
-          setHasRoom(false)
-          return
-        }
-
-        // CheckMyRoom 사용 - LoadMyRoom 호출 시 방 없으면 404 발생하므로 exists API 사용
-        const res = await fetch('http://localhost:8080/api/rooms/me/exists', {
-          credentials: 'include',
-          headers: { Authorization: `Bearer ${token}` },
-        })
-
-        if (!res.ok) {
-          setHasRoom(false)
-          return
-        }
-        const data = await res.json().catch(() => null)
-        const payload = data?.result ?? data?.data ?? data
-        setHasRoom(Boolean(payload?.isExist))
-      } catch (error) {
-        console.error('[navigation] room check error', error)
-        setHasRoom(false)
-      }
-    }
-
-    checkRoom()
-  }, [location.pathname])
 
   return (
     <nav className="bg-blue-50 border-t border-blue-100 px-4 py-3 flex-shrink-0">
