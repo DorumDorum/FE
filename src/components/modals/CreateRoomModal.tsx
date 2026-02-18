@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X } from 'lucide-react'
+import { getApiUrl } from '../../utils/api'
 
 interface CreateRoomModalProps {
   onClose: () => void
@@ -512,7 +513,7 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
     }
 
     try {
-      const res = await fetch('http://localhost:8080/api/rooms', {
+      const res = await fetch(getApiUrl('/api/rooms'), {
         method: 'POST',
         credentials: 'include',
         headers: {

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { X } from 'lucide-react'
+import { getApiUrl } from '../../utils/api'
 
 interface CreateChecklistModalProps {
   onClose: () => void
@@ -430,7 +431,7 @@ const CreateChecklistModal = ({ onClose, onCreated }: CreateChecklistModalProps)
     }
 
     try {
-      const res = await fetch('http://localhost:8080/api/users/me/checklist', {
+      const res = await fetch(getApiUrl('/api/users/me/checklist'), {
         method: 'POST',
         credentials: 'include',
         headers: {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { getApiUrl } from '../utils/api'
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -147,7 +148,7 @@ const SignupFlowPage = () => {
     setIsSendingCode(true)
     try {
       const params = new URLSearchParams({ email })
-      const res = await fetch(`http://localhost:8080/api/email/send?${params.toString()}`, {
+      const res = await fetch(`${getApiUrl('/api/email/send')}?${params.toString()}`, {
         method: 'POST',
       })
       if (!res.ok) {
@@ -177,7 +178,7 @@ const SignupFlowPage = () => {
     setIsVerifyingCode(true)
     try {
       const params = new URLSearchParams({ email, code })
-      const res = await fetch(`http://localhost:8080/api/email/verify?${params.toString()}`, {
+      const res = await fetch(`${getApiUrl('/api/email/verify')}?${params.toString()}`, {
         method: 'POST',
       })
       if (!res.ok) {
@@ -225,7 +226,7 @@ const SignupFlowPage = () => {
           return today.getFullYear() - birth.getFullYear()
         }
 
-        const res = await fetch('http://localhost:8080/api/users/sign-up', {
+        const res = await fetch(getApiUrl('/api/users/sign-up'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

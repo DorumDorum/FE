@@ -5,6 +5,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSam
 import { ko } from 'date-fns/locale'
 import BottomNavigationBar from '@/components/ui/BottomNavigationBar'
 import GuestOnlyMessage from '@/components/ui/GuestOnlyMessage'
+import { getApiUrl } from '@/utils/api'
 
 const HomePage = () => {
   const navigate = useNavigate()
@@ -31,7 +32,7 @@ const HomePage = () => {
         }
 
         // 1) CheckMyRoom 먼저 호출 - 방 존재 여부만 확인 (404 없음)
-        const existsRes = await fetch('http://localhost:8080/api/rooms/me/exists', {
+        const existsRes = await fetch(getApiUrl('/api/rooms/me/exists'), {
           credentials: 'include',
           headers: { Authorization: `Bearer ${token}` },
         })
@@ -52,7 +53,8 @@ const HomePage = () => {
           return
         }
 
-        const existsPayload = existsData?.result ?? existsData?.data ?? existsData
+        // ResponseEntity<CheckMyRoomResponse> 형식: 직접 접근
+        const existsPayload = existsData
         if (!existsPayload?.isExist) {
           setHasRoom(false)
           setLoading(false)
@@ -62,7 +64,7 @@ const HomePage = () => {
         setHasRoom(true)
 
         // 2) 방이 있을 때만 LoadMyRoom 호출 (상세 정보)
-        const res = await fetch('http://localhost:8080/api/rooms/me', {
+        const res = await fetch(getApiUrl('/api/rooms/me'), {
           credentials: 'include',
           headers: { Authorization: `Bearer ${token}` },
         })
@@ -79,7 +81,8 @@ const HomePage = () => {
             setLoading(false)
             return
           }
-          const payload = data?.result ?? data?.data ?? data
+          // ResponseEntity 형식: 직접 접근
+          const payload = data
           setRoom(payload ?? null)
         } else {
           setHasRoom(false)
@@ -118,7 +121,7 @@ const HomePage = () => {
           headers['Authorization'] = `Bearer ${token}`
         }
         const res = await fetch(
-          `http://localhost:8080/api/calendar/events?startDate=${startDateStr}&endDate=${endDateStr}`,
+          `${getApiUrl('/api/calendar/events')}?startDate=${startDateStr}&endDate=${endDateStr}`,
           {
             credentials: 'include',
             headers,
@@ -137,7 +140,8 @@ const HomePage = () => {
             return
           }
 
-          const payload = data?.result ?? data?.data ?? data
+          // ResponseEntity 형식: 직접 접근
+          const payload = data
           if (Array.isArray(payload)) {
             // API 응답을 캘린더 형식으로 변환
             const events = payload.map((event: { date: string; title: string }) => ({
@@ -171,7 +175,7 @@ const HomePage = () => {
         if (token) {
           headers['Authorization'] = `Bearer ${token}`
         }
-        const res = await fetch('http://localhost:8080/api/notices', {
+        const res = await fetch(getApiUrl('/api/notices'), {
           credentials: 'include',
           headers,
         })
@@ -188,7 +192,8 @@ const HomePage = () => {
             return
           }
 
-          const payload = data?.result ?? data?.data ?? data
+          // ResponseEntity 형식: 직접 접근
+          const payload = data
           if (Array.isArray(payload)) {
             setNotices(payload)
           }

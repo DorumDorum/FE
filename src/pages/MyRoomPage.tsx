@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Bell, Share2, Pencil, Settings, DoorOpen, CheckCircle, Star } from 'lucide-react'
 import BottomNavigationBar from '../components/ui/BottomNavigationBar'
 import GuestOnlyMessage from '../components/ui/GuestOnlyMessage'
+import { getApiUrl } from '../utils/api'
 // import toast from 'react-hot-toast' // 토스트 알림 비활성화
 
 const MyRoomPage = () => {
@@ -191,7 +192,7 @@ const MyRoomPage = () => {
         setIsGuest(false)
 
         // 1) CheckMyRoom 먼저 호출 - 방 없으면 LoadMyRoom 호출하지 않음
-        const existsRes = await fetch('http://localhost:8080/api/rooms/me/exists', {
+        const existsRes = await fetch(getApiUrl('/api/rooms/me/exists'), {
           credentials: 'include',
           headers: { Authorization: `Bearer ${token}` },
         })
@@ -212,7 +213,8 @@ const MyRoomPage = () => {
           return
         }
 
-        const existsPayload = existsData?.result ?? existsData?.data ?? existsData
+        // ResponseEntity<CheckMyRoomResponse> 형식: 직접 접근
+        const existsPayload = existsData
         if (!existsPayload?.isExist) {
           setRoom(null)
           setLoading(false)
@@ -220,7 +222,7 @@ const MyRoomPage = () => {
         }
 
         // 2) 방이 있을 때만 LoadMyRoom 호출 (쿼리 방지)
-        const res = await fetch('http://localhost:8080/api/rooms/me', {
+        const res = await fetch(getApiUrl('/api/rooms/me'), {
           credentials: 'include',
           headers: { Authorization: `Bearer ${token}` },
         })
@@ -243,7 +245,8 @@ const MyRoomPage = () => {
           return
         }
 
-        const payload = data?.result ?? data?.data ?? data
+        // ResponseEntity<FindRoomsResponse> 형식: 직접 접근
+        const payload = data
         setRoom(payload ?? null)
       } catch (err) {
         console.error('[rooms] my room fetch error', err)
@@ -269,7 +272,7 @@ const MyRoomPage = () => {
         const token = localStorage.getItem('accessToken')
         if (!token) return
 
-        const res = await fetch(`http://localhost:8080/api/rooms/${effectiveRoomNo}/rule`, {
+        const res = await fetch(getApiUrl(`/api/rooms/${effectiveRoomNo}/rule`), {
           credentials: 'include',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -297,7 +300,8 @@ const MyRoomPage = () => {
           throw new Error('서버 응답(JSON)을 파싱하지 못했습니다.')
         }
 
-        const payload: ApiRoomRule | null = data?.result ?? data?.data ?? data
+        // ResponseEntity<MyRoomRuleResponse> 형식: 직접 접근
+        const payload: ApiRoomRule | null = data
         if (!payload) return
 
         // 비고
@@ -848,7 +852,7 @@ const MyRoomPage = () => {
         const token = localStorage.getItem('accessToken')
         if (!token) return
 
-        const res = await fetch('http://localhost:8080/api/rooms/me/roommates', {
+        const res = await fetch(getApiUrl('/api/rooms/me/roommates'), {
           credentials: 'include',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -872,7 +876,8 @@ const MyRoomPage = () => {
           return
         }
 
-        const payload = data?.result ?? data?.data ?? data
+        // ResponseEntity<FindRoomsResponse> 형식: 직접 접근
+        const payload = data
         setRoommates(Array.isArray(payload) ? payload : [])
       } catch (err) {
         console.error('[rooms] roommates fetch error', err)
@@ -902,7 +907,7 @@ const MyRoomPage = () => {
           return
         }
 
-        const res = await fetch(`http://localhost:8080/api/rooms/${effectiveRoomNo}/applications`, {
+        const res = await fetch(getApiUrl(`/api/rooms/${effectiveRoomNo}/applications`), {
           credentials: 'include',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -933,7 +938,8 @@ const MyRoomPage = () => {
           throw new Error('서버 응답(JSON)을 파싱하지 못했습니다.')
         }
 
-        const payload = data?.result ?? data?.data ?? data
+        // ResponseEntity<FindRoomsResponse> 형식: 직접 접근
+        const payload = data
         const applications: any[] = Array.isArray(payload) ? payload : []
 
         // API 응답을 프론트엔드 형식으로 매핑
@@ -1144,7 +1150,7 @@ const MyRoomPage = () => {
                         }
 
                         const params = new URLSearchParams({ roomNo: String(room.roomNo) })
-                        const updateRes = await fetch(`http://localhost:8080/api/rooms/me/title?${params.toString()}`, {
+                        const updateRes = await fetch(`${getApiUrl('/api/rooms/me/title')}?${params.toString()}`, {
                           method: 'PUT',
                           credentials: 'include',
                           headers: {
@@ -1530,7 +1536,7 @@ const MyRoomPage = () => {
                         }
 
                         const params = new URLSearchParams({ roomNo: String(room.roomNo) })
-                        const res = await fetch(`http://localhost:8080/api/rooms/me/rule?${params.toString()}`, {
+                        const res = await fetch(`${getApiUrl('/api/rooms/me/rule')}?${params.toString()}`, {
                           method: 'PUT',
                           credentials: 'include',
                           headers: {
@@ -1571,7 +1577,7 @@ const MyRoomPage = () => {
                           // capacity나 roomType이 변경되지 않았어도 RoomRule은 다시 불러와야 함
                           const effectiveRoomNo = String(room.roomNo)
                           const params = new URLSearchParams({ roomNo: effectiveRoomNo })
-                          const refreshRes = await fetch(`http://localhost:8080/api/rooms/me/rule?${params.toString()}`, {
+                          const refreshRes = await fetch(`getApiUrl('/api/rooms/me/rule?${params.toString()}`, {
                             credentials: 'include',
                             headers: {
                               Authorization: `Bearer ${token}`,
@@ -1579,7 +1585,8 @@ const MyRoomPage = () => {
                           })
                           if (refreshRes.ok) {
                             const refreshData = await refreshRes.json()
-                            const refreshPayload: ApiRoomRule | null = refreshData?.result ?? refreshData?.data ?? refreshData
+                            // ResponseEntity<MyRoomRuleResponse> 형식: 직접 접근
+                            const refreshPayload: ApiRoomRule | null = refreshData
                             if (refreshPayload) {
                               setOtherNotes(refreshPayload.otherNotes ?? '')
                               // fetchRoomRule과 동일한 로직 사용 (Enum 매핑 함수 재사용)
@@ -1809,7 +1816,7 @@ const MyRoomPage = () => {
                         return
                       }
 
-                      const res = await fetch(`http://localhost:8080/api/users/${applicant.userNo}/checklist`, {
+                      const res = await fetch(getApiUrl(`/api/users/${applicant.userNo}/checklist`), {
                         credentials: 'include',
                         headers: {
                           Authorization: `Bearer ${token}`,
@@ -1832,7 +1839,8 @@ const MyRoomPage = () => {
                         return
                       }
 
-                      const payload: any = data?.result ?? data?.data ?? data
+                      // ResponseEntity 형식: 직접 접근
+                      const payload: any = data
                       if (!payload) return
 
                       const sections: ChecklistSection[] = (payload.categories || []).map((cat: any) => {
@@ -2102,13 +2110,13 @@ const MyRoomPage = () => {
 
                     // 프로필과 체크리스트를 병렬로 가져오기
                     const [profileRes, checklistRes] = await Promise.all([
-                      needsProfile ? fetch(`http://localhost:8080/api/users/profile/${mate.userNo}`, {
+                      needsProfile ? fetch(getApiUrl(`/api/users/profile/${mate.userNo}`), {
                         credentials: 'include',
                         headers: {
                           Authorization: `Bearer ${token}`,
                         },
                       }) : Promise.resolve(null),
-                      needsChecklist ? fetch(`http://localhost:8080/api/users/${mate.userNo}/checklist`, {
+                      needsChecklist ? fetch(getApiUrl(`/api/users/${mate.userNo}/checklist`), {
                         credentials: 'include',
                         headers: {
                           Authorization: `Bearer ${token}`,
@@ -2120,7 +2128,8 @@ const MyRoomPage = () => {
                     if (profileRes) {
                       if (profileRes.ok) {
                         const profileData = await profileRes.json()
-                        const profile: any = profileData?.result ?? profileData?.data ?? profileData
+                        // ResponseEntity<ProfileResponse> 형식: 직접 접근
+                        const profile: any = profileData
                         console.log('[roommate] profile loaded:', profile)
                         setRoommateProfiles((prev) => ({
                           ...prev,
@@ -2134,7 +2143,8 @@ const MyRoomPage = () => {
                     // 체크리스트 저장
                     if (checklistRes && checklistRes.ok) {
                       const checklistData = await checklistRes.json()
-                      const payload: any = checklistData?.result ?? checklistData?.data ?? checklistData
+                      // ResponseEntity 형식: 직접 접근
+                      const payload: any = checklistData
                       
                       if (payload && payload.categories) {
                         // API 응답을 체크리스트 섹션 형식으로 변환
@@ -2510,7 +2520,7 @@ const MyRoomPage = () => {
 
                     const roomNo = String(room.roomNo)
                     const response = await fetch(
-                      `http://localhost:8080/api/rooms/${roomNo}/join-request/${applicantToAccept.requestNo}/approve`,
+                      getApiUrl(`/api/rooms/${roomNo}/join-request/${applicantToAccept.requestNo}/approve`),
                       {
                         method: 'POST',
                         headers: {
@@ -2572,7 +2582,7 @@ const MyRoomPage = () => {
                     }
 
                     const response = await fetch(
-                      `http://localhost:8080/api/join-request/${applicantToReject.requestNo}/reject`,
+                      getApiUrl(`/api/join-request/${applicantToReject.requestNo}/reject`),
                       {
                         method: 'POST',
                         headers: {
@@ -2639,7 +2649,7 @@ const MyRoomPage = () => {
                     }
 
                     const params = new URLSearchParams({ roomNo: String(room.roomNo) })
-                    const res = await fetch(`http://localhost:8080/api/rooms/me/confirm?${params.toString()}`, {
+                    const res = await fetch(`${getApiUrl('/api/rooms/me/confirm')}?${params.toString()}`, {
                       method: 'POST',
                       credentials: 'include',
                       headers: {

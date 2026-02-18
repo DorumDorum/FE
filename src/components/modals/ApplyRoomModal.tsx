@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { X } from 'lucide-react'
+import { getApiUrl } from '../../utils/api'
 
 interface ApplyRoomModalProps {
   onClose: () => void
@@ -47,7 +48,7 @@ const ApplyRoomModal = ({ onClose, roomInfo, roomId, onSuccess }: ApplyRoomModal
         return
       }
 
-      const res = await fetch(`http://localhost:8080/api/rooms/${roomId}/join-request`, {
+      const res = await fetch(getApiUrl(`/api/rooms/${roomId}/join-request`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

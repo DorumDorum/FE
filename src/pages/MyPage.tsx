@@ -4,6 +4,7 @@ import { LogOut, Bell, Pencil } from 'lucide-react'
 import BottomNavigationBar from '../components/ui/BottomNavigationBar'
 import GuestOnlyMessage from '../components/ui/GuestOnlyMessage'
 import CreateChecklistModal from '../components/modals/CreateChecklistModal'
+import { getApiUrl } from '../utils/api'
 // import toast from 'react-hot-toast' // 토스트 알림 비활성화
 
 const MyPage = () => {
@@ -69,7 +70,7 @@ const MyPage = () => {
         }
         setIsGuest(false)
 
-        const res = await fetch('http://localhost:8080/api/users/profile/me', {
+        const res = await fetch(getApiUrl('/api/users/profile/me'), {
           credentials: 'include',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -101,7 +102,8 @@ const MyPage = () => {
           throw new Error('서버 응답(JSON)을 파싱하지 못했습니다.')
         }
 
-        const payload: Profile | null = data?.result ?? data?.data ?? data
+        // ResponseEntity<ProfileResponse> 형식: 직접 접근
+        const payload: Profile | null = data
         if (payload) {
           console.log('[users] profile payload:', payload) // 디버깅용
           setProfile(payload)
@@ -317,7 +319,7 @@ const MyPage = () => {
         // 먼저 기본 템플릿으로 초기화
         const defaultTemplate = createDefaultChecklistTemplate()
 
-        const res = await fetch('http://localhost:8080/api/users/me/checklist', {
+        const res = await fetch(getApiUrl('/api/users/me/checklist'), {
           credentials: 'include',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -335,7 +337,8 @@ const MyPage = () => {
             return
           }
 
-          const payload: any = data?.result ?? data?.data ?? data
+          // ResponseEntity 형식: 직접 접근
+          const payload: any = data
           
           // API 응답이 없거나 빈 경우 체크리스트 없음으로 표시
           if (!payload) {
@@ -930,7 +933,7 @@ const MyPage = () => {
         return
       }
 
-      const res = await fetch('http://localhost:8080/api/users/profile', {
+      const res = await fetch(getApiUrl('/api/users/profile'), {
         method: 'PATCH',
         credentials: 'include',
         headers: {
@@ -1255,7 +1258,7 @@ const MyPage = () => {
         otherNotes: '',
       }
 
-      const res = await fetch('http://localhost:8080/api/users/me/checklist', {
+      const res = await fetch(getApiUrl('/api/users/me/checklist'), {
         method: 'PUT',
         credentials: 'include',
         headers: {

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronRight, ArrowLeft, ChevronLeft } from 'lucide-react'
 import BottomNavigationBar from '@/components/ui/BottomNavigationBar'
+import { getApiUrl } from '@/utils/api'
 
 const NoticeListPage = () => {
   const navigate = useNavigate()
@@ -37,7 +38,7 @@ const NoticeListPage = () => {
 
         setLoadingNotices(true)
 
-        const res = await fetch('http://localhost:8080/api/notices', {
+        const res = await fetch(getApiUrl('/api/notices'), {
           credentials: 'include',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -61,7 +62,8 @@ const NoticeListPage = () => {
             return
           }
 
-          const payload = data?.result ?? data?.data ?? data
+          // ResponseEntity 형식: 직접 접근
+          const payload = data
           if (Array.isArray(payload)) {
             setNotices(payload)
           }

@@ -8,6 +8,7 @@ import ApplyRoomModal from '@/components/modals/ApplyRoomModal'
 import ChatRequestModal from '@/components/modals/ChatRequestModal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { Room } from '@/types/room'
+import { getApiUrl } from '@/utils/api'
 
 const RoomSearchPage = () => {
   const navigate = useNavigate()
@@ -809,7 +810,7 @@ const RoomSearchPage = () => {
               if (token) {
                 headers['Authorization'] = `Bearer ${token}`
               }
-              const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/rule`, {
+              const res = await fetch(`getApiUrl('/api/rooms/${roomNo}/rule`, {
                 credentials: 'include',
                 headers,
               })
@@ -817,7 +818,8 @@ const RoomSearchPage = () => {
               if (!res.ok) return
 
               const data = await res.json()
-              const payload: ApiRoomRule | null = data?.result ?? data?.data ?? data
+              // ResponseEntity<MyRoomRuleResponse> 형식: 직접 접근
+              const payload: ApiRoomRule | null = data
               if (!payload) return
 
               const checklistSections = convertApiRuleToChecklistSections(payload)
@@ -854,7 +856,7 @@ const RoomSearchPage = () => {
           return
         }
 
-        const res = await fetch('http://localhost:8080/api/rooms/me/exists', {
+        const res = await fetch(getApiUrl('/api/rooms/me/exists'), {
           credentials: 'include',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -878,7 +880,8 @@ const RoomSearchPage = () => {
           return
         }
 
-        const payload = data?.result ?? data?.data ?? data
+        // ResponseEntity 형식: 직접 접근
+        const payload = data
         setHasMyRoom(!!payload?.isExist)
       } catch (err) {
         console.error('[rooms] check exists error', err)
@@ -1030,7 +1033,7 @@ const RoomSearchPage = () => {
         params.set('sort', 'CREATED_AT')
       }
 
-      const url = `http://localhost:8080/api/rooms?${params.toString()}`
+      const url = `${getApiUrl('/api/rooms')}?${params.toString()}`
       console.log('[rooms] request', {
         relation,
         url,
@@ -1082,8 +1085,8 @@ const RoomSearchPage = () => {
         console.error('[rooms] failed to parse json', { relation, url, contentType, rawBody }, e)
         throw new Error('서버 응답(JSON)을 파싱하지 못했습니다.')
       }
-      const payload = data?.data ?? data
-      const list: ApiRoom[] = payload?.result?.items ?? payload?.items ?? payload ?? []
+      // ResponseEntity<CursorPage<FindRoomsResponse>> 형식: { items, nextCursor, hasNext }
+      const list: ApiRoom[] = data?.items ?? []
       const mapped = list.map(mapApiRoom)
 
       if (relation === 'recruiting') {
@@ -1197,7 +1200,7 @@ const RoomSearchPage = () => {
           ? selectedRoom.id.replace('room-', '')
           : selectedRoom.id
 
-        const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/join-request`, {
+        const res = await fetch(getApiUrl(`/api/rooms/${roomNo}/join-request`), {
           method: 'DELETE',
           credentials: 'include',
           headers: {
@@ -1520,7 +1523,7 @@ const RoomSearchPage = () => {
 
                           if (isFavorite) {
                             // 관심 있는 방에서 제거
-                            const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/like`, {
+                            const res = await fetch(getApiUrl(`/api/rooms/${roomNo}/like`), {
                               method: 'DELETE',
                               credentials: 'include',
                               headers: {
@@ -1534,7 +1537,7 @@ const RoomSearchPage = () => {
                             }
                           } else {
                             // 관심 있는 방으로 추가
-                            const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/like`, {
+                            const res = await fetch(getApiUrl(`/api/rooms/${roomNo}/like`), {
                               method: 'POST',
                               credentials: 'include',
                               headers: {
@@ -1609,14 +1612,15 @@ const RoomSearchPage = () => {
                               if (token) {
                                 headers['Authorization'] = `Bearer ${token}`
                               }
-                              const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/rule`, {
+                              const res = await fetch(getApiUrl(`/api/rooms/${roomNo}/rule`), {
                                 credentials: 'include',
                                 headers,
                               })
 
                               if (res.ok) {
                                 const data = await res.json()
-                                const payload: ApiRoomRule | null = data?.result ?? data?.data ?? data
+                                // ResponseEntity<MyRoomRuleResponse> 형식: 직접 접근
+              const payload: ApiRoomRule | null = data
                                 
                                 if (payload) {
                                   // 기타 메모 저장
@@ -1857,7 +1861,7 @@ const RoomSearchPage = () => {
 
                           if (isFavorite) {
                             // 관심 있는 방에서 제거
-                            const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/like`, {
+                            const res = await fetch(getApiUrl(`/api/rooms/${roomNo}/like`), {
                               method: 'DELETE',
                               credentials: 'include',
                               headers: {
@@ -1871,7 +1875,7 @@ const RoomSearchPage = () => {
                             }
                           } else {
                             // 관심 있는 방으로 추가
-                            const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/like`, {
+                            const res = await fetch(getApiUrl(`/api/rooms/${roomNo}/like`), {
                               method: 'POST',
                               credentials: 'include',
                               headers: {
@@ -1946,14 +1950,15 @@ const RoomSearchPage = () => {
                               if (token) {
                                 headers['Authorization'] = `Bearer ${token}`
                               }
-                              const res = await fetch(`http://localhost:8080/api/rooms/${roomNo}/rule`, {
+                              const res = await fetch(getApiUrl(`/api/rooms/${roomNo}/rule`), {
                                 credentials: 'include',
                                 headers,
                               })
 
                               if (res.ok) {
                                 const data = await res.json()
-                                const payload: ApiRoomRule | null = data?.result ?? data?.data ?? data
+                                // ResponseEntity<MyRoomRuleResponse> 형식: 직접 접근
+              const payload: ApiRoomRule | null = data
                                 
                                 if (payload) {
                                   // 기타 메모 저장

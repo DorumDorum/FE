@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getApiUrl } from '../utils/api'
 
 const RoomGatePage = () => {
   const navigate = useNavigate()
@@ -13,7 +14,7 @@ const RoomGatePage = () => {
           return
         }
 
-        const res = await fetch('http://localhost:8080/api/rooms/me/exists', {
+        const res = await fetch(getApiUrl('/api/rooms/me/exists'), {
           credentials: 'include',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -48,7 +49,8 @@ const RoomGatePage = () => {
         // CheckMyRoomController response body 그대로 로그
         console.log('[CheckMyRoom] raw response body:', data)
 
-        const payload = data?.result ?? data?.data ?? data
+        // ResponseEntity 형식: 직접 접근
+        const payload = data
         if (payload?.isExist) {
           const roomNo = payload?.roomNo
           navigate('/rooms/me', { replace: true, state: { roomNo } })

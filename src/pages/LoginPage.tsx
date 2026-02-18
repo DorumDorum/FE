@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { getApiUrl } from '../utils/api'
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -20,7 +21,7 @@ const LoginPage = () => {
       setSubmitError('')
       setIsSubmitting(true)
       try {
-        const res = await fetch('http://localhost:8080/api/users/login', {
+        const res = await fetch(getApiUrl('/api/users/login'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
@@ -41,17 +42,9 @@ const LoginPage = () => {
           throw new Error(msg)
         }
 
-        // 토큰 파싱: BaseResponse.data 혹은 루트에 바로 존재할 수 있음
-        const accessToken =
-          data?.data?.accessToken ??
-          data?.accessToken ??
-          data?.data?.result?.accessToken ??
-          data?.result?.accessToken
-        const refreshToken =
-          data?.data?.refreshToken ??
-          data?.refreshToken ??
-          data?.data?.result?.refreshToken ??
-          data?.result?.refreshToken
+        // ResponseEntity<LoginResponse> 형식: { accessToken, refreshToken } 직접 접근
+        const accessToken = data?.accessToken
+        const refreshToken = data?.refreshToken
 
         if (accessToken) localStorage.setItem('accessToken', accessToken)
         if (refreshToken) localStorage.setItem('refreshToken', refreshToken)
