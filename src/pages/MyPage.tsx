@@ -59,6 +59,7 @@ const MyPage = () => {
   }
 
   const [myChecklist, setMyChecklist] = useState<ChecklistSection[]>([])
+  const [checklistBeforeEdit, setChecklistBeforeEdit] = useState<ChecklistSection[] | null>(null)
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -1080,12 +1081,23 @@ const MyPage = () => {
     if (isSavingChecklist) return
 
     try {
-      setIsSavingChecklist(true)
       const token = localStorage.getItem('accessToken')
       if (!token) {
         navigate('/login', { replace: true })
         return
       }
+
+      // 이전 값과 같으면 API 요청 없이 편집 모드만 해제
+      if (
+        checklistBeforeEdit &&
+        JSON.stringify(myChecklist) === JSON.stringify(checklistBeforeEdit)
+      ) {
+        setChecklistBeforeEdit(null)
+        setIsEditingChecklist(false)
+        return
+      }
+
+      setIsSavingChecklist(true)
 
       // 생활 패턴 섹션 필수 입력 검사 (다른 체크리스트와 동일하게 빨간색 표시)
       const newErrorFields = new Set<string>()
@@ -1311,6 +1323,7 @@ const MyPage = () => {
       }
 
       // 저장 성공
+      setChecklistBeforeEdit(null)
       setIsEditingChecklist(false)
       // toast.success('체크리스트가 수정되었습니다.')
     } catch (error) {
@@ -1522,21 +1535,48 @@ const MyPage = () => {
                         <div className="flex items-center justify-between gap-2">
                           <h4 className="text-base font-bold text-black">{section.title}</h4>
                           {index === 0 && (
-                            <button
-                              className="flex items-center gap-1 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                              onClick={() => {
-                                if (!isEditingChecklist) {
-                                  setChecklistErrorFields(new Set())
-                                  setIsEditingChecklist(true)
-                                } else {
-                                  handleSaveChecklist()
-                                }
-                              }}
-                              disabled={isSavingChecklist}
-                            >
-                              <Pencil className="w-4 h-4" />
-                              {isSavingChecklist ? '저장 중...' : isEditingChecklist ? '저장' : '편집'}
-                            </button>
+                            <div className="flex items-center gap-2">
+                              {isEditingChecklist ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (checklistBeforeEdit) {
+                                        setMyChecklist(JSON.parse(JSON.stringify(checklistBeforeEdit)))
+                                      }
+                                      setChecklistBeforeEdit(null)
+                                      setChecklistErrorFields(new Set())
+                                      setIsEditingChecklist(false)
+                                    }}
+                                    className="flex items-center gap-1 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg px-2 py-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={isSavingChecklist}
+                                  >
+                                    취소
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="flex items-center gap-1 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg px-2 py-1 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    onClick={() => handleSaveChecklist()}
+                                    disabled={isSavingChecklist}
+                                  >
+                                    {isSavingChecklist ? '저장 중...' : '저장'}
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="flex items-center gap-1 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg px-2 py-1 hover:bg-gray-50"
+                                  onClick={() => {
+                                    setChecklistErrorFields(new Set())
+                                    setChecklistBeforeEdit(JSON.parse(JSON.stringify(myChecklist)))
+                                    setIsEditingChecklist(true)
+                                  }}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                  편집
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
                         <div className="bg-white border border-gray-200 rounded-xl p-4">
