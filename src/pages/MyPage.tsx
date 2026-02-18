@@ -38,6 +38,7 @@ const MyPage = () => {
   const [isSavingChecklist, setIsSavingChecklist] = useState(false)
   const [showCreateChecklistModal, setShowCreateChecklistModal] = useState(false)
   const [hasChecklist, setHasChecklist] = useState<boolean | null>(null)
+  const [checklistErrorFields, setChecklistErrorFields] = useState<Set<string>>(new Set())
   type ChecklistOption = {
     text: string
     selected?: boolean
@@ -1086,6 +1087,33 @@ const MyPage = () => {
         return
       }
 
+      // 생활 패턴 섹션 필수 입력 검사 (다른 체크리스트와 동일하게 빨간색 표시)
+      const newErrorFields = new Set<string>()
+      myChecklist.forEach((section, sectionIndex) => {
+        if (section.category !== 'LIFESTYLE_PATTERN') return
+        section.items.forEach((item, itemIndex) => {
+          const errorKey = `${sectionIndex}-${itemIndex}`
+          if (item.options) {
+            const hasSelected = item.options.some(opt => opt.selected)
+            if (!hasSelected) newErrorFields.add(errorKey)
+            if (item.label === '귀가' && item.options.some(opt => opt.text === '고정적' && opt.selected)) {
+              if (!item.extraValue?.trim()) newErrorFields.add(errorKey)
+            }
+            if (item.label === '소등' && item.options.some(opt => opt.text === '__시 이후' && opt.selected)) {
+              if (!item.extraValue?.trim()) newErrorFields.add(errorKey)
+            }
+          } else if (item.value !== undefined) {
+            if (!item.value?.trim()) newErrorFields.add(errorKey)
+          }
+        })
+      })
+      if (newErrorFields.size > 0) {
+        setChecklistErrorFields(newErrorFields)
+        setIsSavingChecklist(false)
+        return
+      }
+      setChecklistErrorFields(new Set())
+
       // Enum 매핑 함수들
       const mapReturnHome = (text: string): string => {
         if (text === '유동적') return 'FLEXIBLE'
@@ -1498,6 +1526,7 @@ const MyPage = () => {
                               className="flex items-center gap-1 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
                               onClick={() => {
                                 if (!isEditingChecklist) {
+                                  setChecklistErrorFields(new Set())
                                   setIsEditingChecklist(true)
                                 } else {
                                   handleSaveChecklist()
@@ -1516,6 +1545,14 @@ const MyPage = () => {
                           // 기본 정보 섹션은 수정 불가능 (이미 제거됨)
                           const isBasicInfo = false
                           const isEditable = isEditingChecklist && !isBasicInfo
+                          const errorKey = `${index}-${itemIndex}`
+                          const hasError = section.category === 'LIFESTYLE_PATTERN' && checklistErrorFields.has(errorKey)
+                          const clearThisError = () =>
+                            setChecklistErrorFields((prev) => {
+                              const next = new Set(prev)
+                              next.delete(errorKey)
+                              return next
+                            })
 
                           return (
                             <div key={item.label} className="flex gap-2">
@@ -1526,8 +1563,11 @@ const MyPage = () => {
                                     item.label === '학번(학년)' ? (
                                       <select
                                         value={item.value || ''}
-                                        onChange={(e) => updateChecklistValue(index, itemIndex, e.target.value)}
-                                        className="border border-gray-300 rounded px-2 py-1 text-sm text-black"
+                                        onChange={(e) => {
+                                          updateChecklistValue(index, itemIndex, e.target.value)
+                                          clearThisError()
+                                        }}
+                                        className={`rounded px-2 py-1 text-sm text-black border ${hasError ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
                                       >
                                         {Array.from({ length: 11 }, (_, i) => 15 + i).map((year) => (
                                           <option key={year} value={`${year}학번`}>
@@ -1541,23 +1581,27 @@ const MyPage = () => {
                                         inputMode="numeric"
                                         pattern="[0-9]*"
                                         value={item.value || ''}
-                                        onChange={(e) =>
+                                        onChange={(e) => {
                                           updateChecklistValue(
                                             index,
                                             itemIndex,
                                             e.target.value.replace(/[^0-9]/g, '')
                                           )
-                                        }
-                                        className="border border-gray-300 rounded px-2 py-1 text-sm text-black w-24"
+                                          clearThisError()
+                                        }}
+                                        className={`rounded px-2 py-1 text-sm text-black w-24 border ${hasError ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
                                       />
                                     ) : (
                                       <input
                                         type="text"
                                         value={item.value || ''}
-                                        onChange={(e) => updateChecklistValue(index, itemIndex, e.target.value)}
-                                        className={`border border-gray-300 rounded px-2 py-1 text-sm text-black ${
-                                          item.label === '드라이기' ? 'w-full' : 'flex-1 min-w-0'
-                                        }`}
+                                        onChange={(e) => {
+                                          updateChecklistValue(index, itemIndex, e.target.value)
+                                          clearThisError()
+                                        }}
+                                        className={`rounded px-2 py-1 text-sm text-black border ${
+                                          hasError ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                                        } ${item.label === '드라이기' ? 'w-full' : 'flex-1 min-w-0'}`}
                                         placeholder={
                                           item.label === '취침'
                                             ? '예: 23시-1시'
@@ -1590,13 +1634,18 @@ const MyPage = () => {
                                           key={option.text}
                                           onClick={
                                             isEditable
-                                              ? () => selectChecklistOption(index, itemIndex, optionIndex)
+                                              ? () => {
+                                                  selectChecklistOption(index, itemIndex, optionIndex)
+                                                  clearThisError()
+                                                }
                                               : undefined
                                           }
                                           className={
                                             option.selected
                                               ? `bg-blue-50 text-blue-600 border border-blue-200 text-xs px-2 py-1 rounded-md ${isEditable ? 'cursor-pointer' : ''}`
-                                              : `text-gray-500 text-xs px-2 py-1 ${isEditable ? 'cursor-pointer border border-transparent' : ''}`
+                                              : hasError
+                                                ? `text-gray-500 text-xs px-2 py-1 rounded-md border border-red-400 bg-red-50 ${isEditable ? 'cursor-pointer' : ''}`
+                                                : `text-gray-500 text-xs px-2 py-1 ${isEditable ? 'cursor-pointer border border-transparent' : ''}`
                                           }
                                         >
                                           {option.text}
@@ -1606,8 +1655,11 @@ const MyPage = () => {
                                     {isEditable && item.label === '귀가' && item.options?.some(opt => opt.text === '고정적' && opt.selected) && (
                                       <select
                                         value={item.extraValue ?? ''}
-                                        onChange={(e) => updateChecklistExtraValue(index, itemIndex, e.target.value)}
-                                        className="border border-gray-300 rounded px-2 py-1 text-xs text-black w-24"
+                                        onChange={(e) => {
+                                          updateChecklistExtraValue(index, itemIndex, e.target.value)
+                                          clearThisError()
+                                        }}
+                                        className={`rounded px-2 py-1 text-xs text-black w-24 border ${hasError ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
                                       >
                                         <option value="">시간 선택</option>
                                         {Array.from({ length: 25 }, (_, hour) => hour).map((hour) => (
@@ -1620,8 +1672,11 @@ const MyPage = () => {
                                     {isEditable && item.label === '소등' && item.options?.some(opt => opt.text === '__시 이후' && opt.selected) && (
                                       <select
                                         value={item.extraValue ?? ''}
-                                        onChange={(e) => updateChecklistExtraValue(index, itemIndex, e.target.value)}
-                                        className="border border-gray-300 rounded px-2 py-1 text-xs text-black w-24"
+                                        onChange={(e) => {
+                                          updateChecklistExtraValue(index, itemIndex, e.target.value)
+                                          clearThisError()
+                                        }}
+                                        className={`rounded px-2 py-1 text-xs text-black w-24 border ${hasError ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
                                       >
                                         <option value="">시간 선택</option>
                                         {Array.from({ length: 25 }, (_, hour) => hour).map((hour) => (
