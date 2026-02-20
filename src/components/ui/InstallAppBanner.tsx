@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Download, X } from 'lucide-react'
 
 const DISMISS_KEY = 'pwa-install-banner-dismissed'
 const DISMISS_DAYS = 7
@@ -64,40 +65,63 @@ export default function InstallAppBanner() {
     setDeferredPrompt(null)
   }
 
+  const handleIOSInstall = () => {
+    // iOS에서는 사용자에게 안내만 표시
+    // 실제로는 Safari의 공유 버튼을 사용해야 함
+    alert('Safari에서 공유 버튼(⬆️)을 누르고 "홈 화면에 추가"를 선택해주세요.')
+  }
+
   if (!visible) return null
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[100] px-4 pb-4 pt-2 bg-gradient-to-t from-gray-900/95 to-gray-900/90 text-white shadow-lg">
-      <div className="max-w-[430px] mx-auto flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium">앱처럼 사용해 보세요</p>
-          <p className="text-xs text-gray-300 mt-0.5">
-            홈 화면에 추가하면 주소창 없이 앱처럼 열립니다.
-          </p>
-          {deferredPrompt ? (
-            <button
-              type="button"
-              onClick={handleInstall}
-              className="mt-2 px-4 py-2 bg-white text-gray-900 text-sm font-medium rounded-lg"
-            >
-              앱 설치
-            </button>
-          ) : isIOS() ? (
-            <p className="text-xs text-gray-400 mt-2">
-              Safari에서 공유 버튼 → &quot;홈 화면에 추가&quot;
+      <div className="max-w-[430px] mx-auto">
+        <div className="flex items-start gap-3 mb-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">앱처럼 사용해 보세요</p>
+            <p className="text-xs text-gray-300 mt-0.5">
+              홈 화면에 추가하면 주소창 없이 앱처럼 열립니다.
             </p>
-          ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={handleDismiss}
+            className="text-gray-400 hover:text-white p-1 flex-shrink-0"
+            aria-label="닫기"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={handleDismiss}
-          className="text-gray-400 hover:text-white p-1"
-          aria-label="닫기"
-        >
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-          </svg>
-        </button>
+        
+        {/* 다운로드 버튼 */}
+        {deferredPrompt ? (
+          <button
+            type="button"
+            onClick={handleInstall}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white text-gray-900 text-sm font-semibold rounded-lg hover:bg-gray-100 active:scale-[0.98] transition-all shadow-sm"
+          >
+            <Download className="w-4 h-4" />
+            앱 다운로드
+          </button>
+        ) : isIOS() ? (
+          <button
+            type="button"
+            onClick={handleIOSInstall}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white text-gray-900 text-sm font-semibold rounded-lg hover:bg-gray-100 active:scale-[0.98] transition-all shadow-sm"
+          >
+            <Download className="w-4 h-4" />
+            홈 화면에 추가
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleDismiss}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white/10 text-white text-sm font-semibold rounded-lg hover:bg-white/20 active:scale-[0.98] transition-all border border-white/20"
+          >
+            <Download className="w-4 h-4" />
+            설치 방법 안내
+          </button>
+        )}
       </div>
     </div>
   )
