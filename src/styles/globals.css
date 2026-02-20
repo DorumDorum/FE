@@ -196,6 +196,21 @@
     }
   }
 
+  /* 브라우저 하단 네비게이션 바 위에 앱 네비게이션 바 배치 */
+  @media (max-width: 767px) {
+    /* 모바일 브라우저의 하단 바 높이 고려 (약 50px) */
+    nav[class*="bg-blue-50"] {
+      padding-bottom: calc(1rem + 50px) !important;
+    }
+    
+    /* PWA 모드에서는 safe area 사용 */
+    @media (display-mode: standalone) {
+      nav[class*="bg-blue-50"] {
+        padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px)) !important;
+      }
+    }
+  }
+
   /* 애니메이션 */
   @keyframes slide-up {
     from {
