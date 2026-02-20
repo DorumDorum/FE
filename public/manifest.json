@@ -3,27 +3,15 @@
   "short_name": "도룸도룸",
   "start_url": "/",
   "display": "standalone",
+  "scope": "/",
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
   "background_color": "#ffffff",
   "theme_color": "#3b82f6",
   "icons": [
-    {
-      "src": "/pwa-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/pwa-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/pwa-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    }
+    {"src": "/pwa-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/pwa-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/pwa-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
   ]
 }
-

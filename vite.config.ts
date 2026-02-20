@@ -50,6 +50,10 @@ export default defineConfig({
         orientation: 'portrait',
         scope: '/',
         start_url: '/',
+        // 링크 클릭 시 PWA로 열릴 때 기존 창에서 해당 URL로 이동
+        launch_handler: {
+          client_mode: 'navigate-existing',
+        },
         icons: [
           {
             src: 'pwa-192x192.png',

@@ -1,18 +1,89 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import logo from '@/assets/images/logo.png'
+import { getApiUrl } from '@/utils/api'
 
 const SplashPage = () => {
   const navigate = useNavigate()
   const [isFadingOut, setIsFadingOut] = useState(false)
 
   useEffect(() => {
-    // 페이드인(0~0.6s) 이후 잠시 머물렀다가 페이드아웃(0.6s) → 네비게이션
-    const fadeTimer = setTimeout(() => setIsFadingOut(true), 1300) // +0.2s 머무름
-    const navTimer = setTimeout(() => navigate('/intro', { replace: true }), 1900)
+    let fadeTimer: NodeJS.Timeout | null = null
+    let navTimer: NodeJS.Timeout | null = null
+    let isCancelled = false
+
+    const attemptAutoLogin = async () => {
+      const refreshToken = localStorage.getItem('refreshToken')
+      
+      // 리프레시 토큰이 없으면 intro로 이동
+      if (!refreshToken) {
+        if (isCancelled) return
+        fadeTimer = setTimeout(() => setIsFadingOut(true), 1300)
+        navTimer = setTimeout(() => {
+          if (!isCancelled) navigate('/intro', { replace: true })
+        }, 1900)
+        return
+      }
+
+      // 리프레시 토큰이 있으면 토큰 재발급 시도
+      try {
+        const res = await fetch(getApiUrl('/api/token/reissue'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${refreshToken}`,
+          },
+          credentials: 'include',
+        })
+
+        if (isCancelled) return
+
+        if (res.ok) {
+          // 토큰 재발급 성공
+          const data = await res.json()
+          const newAccessToken = data?.accessToken
+          const newRefreshToken = data?.refreshToken
+
+          if (newAccessToken) {
+            localStorage.setItem('accessToken', newAccessToken)
+          }
+          if (newRefreshToken) {
+            localStorage.setItem('refreshToken', newRefreshToken)
+          }
+
+          // 홈 화면으로 리다이렉트
+          fadeTimer = setTimeout(() => setIsFadingOut(true), 1300)
+          navTimer = setTimeout(() => {
+            if (!isCancelled) navigate('/home', { replace: true })
+          }, 1900)
+        } else {
+          // 토큰 재발급 실패 (만료 등) - intro로 이동
+          localStorage.removeItem('accessToken')
+          localStorage.removeItem('refreshToken')
+          fadeTimer = setTimeout(() => setIsFadingOut(true), 1300)
+          navTimer = setTimeout(() => {
+            if (!isCancelled) navigate('/intro', { replace: true })
+          }, 1900)
+        }
+      } catch (error) {
+        // 네트워크 오류 등 - intro로 이동
+        if (isCancelled) return
+        console.error('Auto login failed:', error)
+        localStorage.removeItem('accessToken')
+        localStorage.removeItem('refreshToken')
+        fadeTimer = setTimeout(() => setIsFadingOut(true), 1300)
+        navTimer = setTimeout(() => {
+          if (!isCancelled) navigate('/intro', { replace: true })
+        }, 1900)
+      }
+    }
+
+    attemptAutoLogin()
+
     return () => {
-      clearTimeout(fadeTimer)
-      clearTimeout(navTimer)
+      isCancelled = true
+      if (fadeTimer) clearTimeout(fadeTimer)
+      if (navTimer) clearTimeout(navTimer)
     }
   }, [navigate])
 

@@ -14,6 +14,7 @@ import ChatPage from '@/pages/ChatPage'
 import NotificationsPage from '@/pages/NotificationsPage'
 import { useFcmToken } from '@/hooks/useFcmToken'
 import SwipeableTabLayout from '@/components/layout/SwipeableTabLayout'
+import InstallAppBanner from '@/components/ui/InstallAppBanner'
 
 function App() {
   // 앱 시작 시 한 번 FCM 토큰을 수집하고 서버에 등록
@@ -50,6 +51,7 @@ function App() {
         
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <InstallAppBanner />
     </div>
   )
 }
