@@ -41,9 +41,9 @@ export default defineConfig({
       },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'DorumDorum',
-        short_name: 'DorumDorum',
-        description: 'DorumDorum Progressive Web App',
+        name: '도룸도룸',
+        short_name: '도룸도룸',
+        description: '도룸도룸 Progressive Web App',
         theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',
