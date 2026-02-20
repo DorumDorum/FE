@@ -20,7 +20,7 @@ function App() {
   useFcmToken()
 
   return (
-    <div className="h-screen bg-white">
+    <div className="bg-white" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
       <Routes>
         <Route path="/" element={<SplashPage />} />
         <Route path="/intro" element={<IntroPage />} />

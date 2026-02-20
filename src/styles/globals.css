@@ -65,6 +65,7 @@
 
   #root {
     height: 100vh;
+    height: calc(var(--vh, 1vh) * 100); /* JavaScript로 설정된 실제 사용 가능한 높이 */
     max-width: 100%;
     margin: 0 auto;
     background: white;
@@ -196,11 +197,10 @@
     }
   }
 
-  /* 브라우저 하단 네비게이션 바 위에 앱 네비게이션 바 배치 */
+  /* 브라우저 모드에서 네비게이션 바는 기본 패딩만 사용 */
   @media (max-width: 767px) {
-    /* 모바일 브라우저의 하단 바 높이 고려 (약 50px) */
     nav[class*="bg-blue-50"] {
-      padding-bottom: calc(1rem + 50px) !important;
+      padding-bottom: 1rem;
     }
     
     /* PWA 모드에서는 safe area 사용 */
