@@ -13,6 +13,7 @@ import LoginPage from '@/pages/LoginPage'
 import ChatPage from '@/pages/ChatPage'
 import NotificationsPage from '@/pages/NotificationsPage'
 import { useFcmToken } from '@/hooks/useFcmToken'
+import SwipeableTabLayout from '@/components/layout/SwipeableTabLayout'
 
 function App() {
   // 앱 시작 시 한 번 FCM 토큰을 수집하고 서버에 등록
@@ -27,10 +28,10 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
 
         {/* 홈 */}
-        <Route path="/home" element={<HomePage />} />
+        <Route path="/home" element={<SwipeableTabLayout><HomePage /></SwipeableTabLayout>} />
         
         {/* 채팅 */}
-        <Route path="/chats" element={<ChatPage />} />
+        <Route path="/chats" element={<SwipeableTabLayout><ChatPage /></SwipeableTabLayout>} />
         
         {/* 알림 */}
         <Route path="/notifications" element={<NotificationsPage />} />
@@ -41,11 +42,11 @@ function App() {
         
         {/* 방 진입 게이트 */}
         <Route path="/rooms" element={<RoomGatePage />} />
-        <Route path="/rooms/search" element={<RoomSearchPage />} />
-        <Route path="/rooms/me" element={<MyRoomPage />} />
+        <Route path="/rooms/search" element={<SwipeableTabLayout><RoomSearchPage /></SwipeableTabLayout>} />
+        <Route path="/rooms/me" element={<SwipeableTabLayout><MyRoomPage /></SwipeableTabLayout>} />
         
         {/* 마이페이지 */}
-        <Route path="/me" element={<MyPage />} />
+        <Route path="/me" element={<SwipeableTabLayout><MyPage /></SwipeableTabLayout>} />
         
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
