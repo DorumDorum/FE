@@ -65,10 +65,40 @@ export default function InstallAppBanner() {
     setDeferredPrompt(null)
   }
 
-  const handleIOSInstall = () => {
-    // iOS에서는 사용자에게 안내만 표시
-    // 실제로는 Safari의 공유 버튼을 사용해야 함
-    alert('Safari에서 공유 버튼(⬆️)을 누르고 "홈 화면에 추가"를 선택해주세요.')
+  const handleShare = async () => {
+    // 크롬/기타 브라우저에서 공유 시트 열기
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: '도룸도룸',
+          text: '도룸도룸 앱을 설치하세요',
+          url: window.location.href,
+        })
+      } catch (error) {
+        // 사용자가 공유를 취소했거나 에러 발생
+        console.log('Share cancelled or error:', error)
+      }
+    }
+  }
+
+  const handleIOSInstall = async () => {
+    // iOS에서 공유 시트 열기 (Safari에서 "홈 화면에 추가" 옵션 포함)
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: '도룸도룸',
+          text: '도룸도룸 앱을 홈 화면에 추가하세요',
+          url: window.location.href,
+        })
+      } catch (error) {
+        // 사용자가 공유를 취소했거나 에러 발생
+        // Safari의 공유 시트에서 "홈 화면에 추가" 옵션을 찾을 수 있음
+        console.log('Share cancelled or error:', error)
+      }
+    } else {
+      // navigator.share를 지원하지 않는 경우 안내
+      alert('Safari에서 공유 버튼(⬆️)을 누르고 "홈 화면에 추가"를 선택해주세요.')
+    }
   }
 
   if (!visible) return null
@@ -111,6 +141,15 @@ export default function InstallAppBanner() {
           >
             <Download className="w-4 h-4" />
             홈 화면에 추가
+          </button>
+        ) : navigator.share ? (
+          <button
+            type="button"
+            onClick={handleShare}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white text-gray-900 text-sm font-semibold rounded-lg hover:bg-gray-100 active:scale-[0.98] transition-all shadow-sm"
+          >
+            <Download className="w-4 h-4" />
+            공유하여 설치
           </button>
         ) : (
           <button
