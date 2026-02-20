@@ -5,6 +5,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSam
 import { ko } from 'date-fns/locale'
 import BottomNavigationBar from '@/components/ui/BottomNavigationBar'
 import GuestOnlyMessage from '@/components/ui/GuestOnlyMessage'
+import SectionLoading from '@/components/ui/SectionLoading'
 import { getApiUrl } from '@/utils/api'
 
 const HomePage = () => {
@@ -280,11 +281,7 @@ const HomePage = () => {
         {/* 콘텐츠 */}
         <div className="px-4 pt-2 pb-4 space-y-6">
           {/* 내 방 섹션 */}
-          {loading && (
-            <div className="text-sm text-gray-500 flex items-center justify-center py-10">
-              불러오는 중...
-            </div>
-          )}
+          {loading && <SectionLoading variant="card" />}
 
           {!loading && hasRoom && room && (
             <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
@@ -491,9 +488,7 @@ const HomePage = () => {
                   </button>
                 </div>
                 {loadingCalendar ? (
-                  <div className="text-sm text-gray-500 text-center py-8">
-                    불러오는 중...
-                  </div>
+                  <SectionLoading variant="calendar" />
                 ) : calendarEvents.length === 0 ? (
                   <div className="text-sm text-gray-500 text-center py-8">
                     이번 달 일정이 없습니다.
@@ -535,9 +530,7 @@ const HomePage = () => {
               <h2 className="text-lg font-bold text-gray-900">공지사항</h2>
             </div>
             {loadingNotices ? (
-              <div className="text-sm text-gray-500 text-center py-8">
-                불러오는 중...
-              </div>
+              <SectionLoading variant="notice" />
             ) : notices.length === 0 ? (
               <div className="space-y-3">
                 <div className="border-b border-gray-100 pb-3">

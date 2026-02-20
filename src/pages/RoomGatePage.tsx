@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getApiUrl } from '../utils/api'
+import SectionLoading from '../components/ui/SectionLoading'
 
 const RoomGatePage = () => {
   const navigate = useNavigate()
@@ -68,8 +69,8 @@ const RoomGatePage = () => {
   }, [])
 
   return (
-    <div className="h-screen bg-white flex items-center justify-center text-sm text-gray-500">
-      불러오는 중...
+    <div className="h-screen bg-white flex items-center justify-center">
+      <SectionLoading variant="minimal" />
     </div>
   )
 }

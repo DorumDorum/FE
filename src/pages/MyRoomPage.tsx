@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, Share2, Pencil, Settings, DoorOpen, CheckCircle, Star } from 'lucide-react'
 import BottomNavigationBar from '../components/ui/BottomNavigationBar'
+import SectionLoading from '../components/ui/SectionLoading'
 import GuestOnlyMessage from '../components/ui/GuestOnlyMessage'
 import { getApiUrl } from '../utils/api'
 // import toast from 'react-hot-toast' // 토스트 알림 비활성화
@@ -1104,11 +1105,7 @@ const MyRoomPage = () => {
 
         {/* 콘텐츠 */}
         <div className="px-4 pt-2 pb-4">
-        {loading && (
-          <div className="text-sm text-gray-500 flex items-center justify-center py-10">
-            불러오는 중...
-          </div>
-        )}
+        {loading && <SectionLoading variant="card" />}
         {!loading && isGuest && (
           <GuestOnlyMessage />
         )}
@@ -1788,9 +1785,7 @@ const MyRoomPage = () => {
         <div className="mt-4 space-y-4">
           <h3 className="text-base font-bold text-black">지원자 목록 ({applicants.length}명)</h3>
           {applicantsLoading ? (
-            <div className="text-center py-8 text-gray-500 text-sm">
-              불러오는 중...
-            </div>
+            <SectionLoading variant="list" className="py-4" />
           ) : applicants.length === 0 ? (
             <div className="text-center py-8 text-gray-500 text-sm">
               지원자가 없습니다.
@@ -2060,7 +2055,7 @@ const MyRoomPage = () => {
             )}
           </div>
           {roommatesLoading && (
-            <div className="text-sm text-gray-500">불러오는 중...</div>
+            <SectionLoading variant="list" className="py-2" />
           )}
           {!roommatesLoading && roommates.length === 0 && (
             <div className="text-sm text-gray-500">룸메이트가 없습니다.</div>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, Search, Plus, Filter, Star } from 'lucide-react'
 import BottomNavigationBar from '@/components/ui/BottomNavigationBar'
+import SectionLoading from '@/components/ui/SectionLoading'
 // import RoomCard from '@/components/room/RoomCard'
 import CreateRoomModal from '@/components/modals/CreateRoomModal'
 import ApplyRoomModal from '@/components/modals/ApplyRoomModal'
@@ -1451,7 +1452,7 @@ const RoomSearchPage = () => {
               : activeTab === 'applied'
                 ? appliedRooms.length === 0
                 : joinedRooms.length === 0) && (
-            <div className="text-xs text-gray-500 mb-2">불러오는 중...</div>
+            <SectionLoading variant="room-card" className="pt-4" />
           )}
 
           {/* 탭 네비게이션 - 헤더 바로 아래에 고정 */}

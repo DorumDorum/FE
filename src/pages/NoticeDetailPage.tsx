@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
 import BottomNavigationBar from '@/components/ui/BottomNavigationBar'
+import SectionLoading from '@/components/ui/SectionLoading'
 import { getApiUrl } from '@/utils/api'
 
 const NoticeDetailPage = () => {
@@ -91,9 +92,7 @@ const NoticeDetailPage = () => {
         {/* 콘텐츠 */}
         <div className="px-4 pt-2 pb-4">
           {loading ? (
-            <div className="text-sm text-gray-500 text-center py-10">
-              불러오는 중...
-            </div>
+            <SectionLoading variant="card" className="min-h-[200px]" />
           ) : !notice ? (
             <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
               <div className="text-center">

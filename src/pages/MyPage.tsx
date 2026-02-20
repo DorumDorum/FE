@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LogOut, Bell, Pencil } from 'lucide-react'
 import BottomNavigationBar from '../components/ui/BottomNavigationBar'
+import SectionLoading from '../components/ui/SectionLoading'
 import GuestOnlyMessage from '../components/ui/GuestOnlyMessage'
 import CreateChecklistModal from '../components/modals/CreateChecklistModal'
 import { getApiUrl } from '../utils/api'
@@ -1353,11 +1354,7 @@ const MyPage = () => {
             </button>
           </div>
         </header>
-        {loading && (
-          <div className="text-sm text-gray-500 flex items-center justify-center py-10">
-            불러오는 중...
-          </div>
-        )}
+        {loading && <SectionLoading variant="card" />}
 
         {!loading && isGuest && (
           <GuestOnlyMessage />
@@ -1525,9 +1522,7 @@ const MyPage = () => {
             {(activeTab as string) === '체크리스트' && (
               <div className="px-4 pt-4">
                 {hasChecklist === null ? (
-                  <div className="text-sm text-gray-500 text-center py-8">
-                    체크리스트 정보를 불러오는 중...
-                  </div>
+                  <SectionLoading variant="list" className="py-4" />
                 ) : hasChecklist && myChecklist.length > 0 ? (
                   <div className="mt space-y-4">
                     {myChecklist.map((section, index) => (
