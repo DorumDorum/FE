@@ -1435,7 +1435,7 @@ const RoomSearchPage = () => {
           {localStorage.getItem('accessToken') && (
             <button
               onClick={handleCreateRoom}
-              className="w-full bg-[#3072E1] text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center space-x-2 hover:bg-[#2563E1] mb-4"
+              className="w-full bg-[#3072E1] text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center space-x-2 hover:bg-[#2563E1] mb-2"
             >
               <Plus className="w-4 h-4" />
               <span>방 만들기</span>
@@ -1444,7 +1444,7 @@ const RoomSearchPage = () => {
         </div>
 
         {/* 방 목록 */}
-        <div className="mt-4 px-4">
+        <div className="mt-2 px-4">
           {loadingTab === activeTab &&
             (activeTab === 'recruiting'
               ? recruitingRooms.length === 0
