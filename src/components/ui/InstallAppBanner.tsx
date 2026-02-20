@@ -67,7 +67,7 @@ export default function InstallAppBanner() {
 
   const handleShare = async () => {
     // 크롬/기타 브라우저에서 공유 시트 열기
-    if (navigator.share) {
+    if ('share' in navigator) {
       try {
         await navigator.share({
           title: '도룸도룸',
@@ -83,7 +83,7 @@ export default function InstallAppBanner() {
 
   const handleIOSInstall = async () => {
     // iOS에서 공유 시트 열기 (Safari에서 "홈 화면에 추가" 옵션 포함)
-    if (navigator.share) {
+    if ('share' in navigator) {
       try {
         await navigator.share({
           title: '도룸도룸',
@@ -142,7 +142,7 @@ export default function InstallAppBanner() {
             <Download className="w-4 h-4" />
             홈 화면에 추가
           </button>
-        ) : navigator.share ? (
+        ) : 'share' in navigator ? (
           <button
             type="button"
             onClick={handleShare}
