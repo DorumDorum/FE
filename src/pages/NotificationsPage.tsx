@@ -59,7 +59,7 @@ const NotificationsPage = () => {
 
 
   return (
-    <div className="h-screen bg-white flex flex-col overflow-hidden animate-fade-in">
+    <div className="page-with-bottom-nav h-screen bg-white flex flex-col overflow-hidden animate-fade-in">
       {/* 메인 콘텐츠 - 스크롤 가능 영역 */}
       <main
         className="flex-1 overflow-y-auto"

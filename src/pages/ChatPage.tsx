@@ -7,7 +7,7 @@ const ChatPage = () => {
 
   if (isGuest) {
     return (
-      <div className="h-screen bg-white flex flex-col overflow-hidden animate-fade-in">
+      <div className="page-with-bottom-nav h-screen bg-white flex flex-col overflow-hidden animate-fade-in">
         <header className="bg-white px-4 py-4 border-b border-gray-100">
           <h1 className="text-2xl font-bold text-gray-900">채팅</h1>
         </header>
@@ -20,7 +20,7 @@ const ChatPage = () => {
   }
 
   return (
-    <div className="h-screen bg-white flex flex-col overflow-hidden animate-fade-in">
+    <div className="page-with-bottom-nav h-screen bg-white flex flex-col overflow-hidden animate-fade-in">
       {/* 메인 콘텐츠 - 스크롤 가능 영역 */}
       <main
         className="flex-1 overflow-y-auto"

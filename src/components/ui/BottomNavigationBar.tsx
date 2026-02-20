@@ -43,7 +43,10 @@ const BottomNavigationBar = () => {
   }
 
   return (
-    <nav className="bg-blue-50 border-t border-blue-100 px-4 py-4 min-h-[56px] flex-shrink-0">
+    <nav
+      className="bottom-nav-bar bg-blue-50 border-t border-blue-100 px-4 py-4 min-h-[56px] flex-shrink-0"
+      aria-label="하단 메뉴"
+    >
       <div className="flex items-center justify-around h-full">
         <button
           onClick={() => navigate('/home')}

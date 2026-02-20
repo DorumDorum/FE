@@ -5,16 +5,29 @@ import { QueryClient, QueryClientProvider } from 'react-query'
 import App from './App.tsx'
 import './styles/globals.css'
 
-// 브라우저 모드에서 실제 사용 가능한 뷰포트 높이 설정
+// 브라우저 모드에서 실제 사용 가능한 뷰포트 높이 + 하단 툴바 높이(5번)
 const isStandalone = window.matchMedia('(display-mode: standalone)').matches
 if (!isStandalone) {
   const setViewportHeight = () => {
     const vh = window.innerHeight
     document.documentElement.style.setProperty('--vh', `${vh}px`)
   }
+  const setToolbarHeight = () => {
+    const toolbarHeight = Math.max(0, window.outerHeight - window.innerHeight)
+    document.documentElement.style.setProperty('--toolbar-height', `${toolbarHeight}px`)
+  }
   setViewportHeight()
-  window.addEventListener('resize', setViewportHeight)
-  window.addEventListener('orientationchange', setViewportHeight)
+  setToolbarHeight()
+  window.addEventListener('resize', () => {
+    setViewportHeight()
+    setToolbarHeight()
+  })
+  window.addEventListener('orientationchange', () => {
+    setViewportHeight()
+    setToolbarHeight()
+  })
+} else {
+  document.documentElement.style.setProperty('--toolbar-height', '0px')
 }
 
 // PWA 업데이트 알림
