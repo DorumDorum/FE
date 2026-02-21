@@ -16,7 +16,8 @@ interface SseEventHandlers {
 }
 
 class SseNotificationClient {
-  private eventSource: EventSource | null = null
+  private abortController: AbortController | null = null
+  private connected = false
   private handlers: SseEventHandlers = {
     [SseEventName.CONNECTED]: [],
     [SseEventName.HEARTBEAT]: [],
@@ -29,15 +30,21 @@ class SseNotificationClient {
   private maxReconnectDelay = 30000
   private currentReconnectDelay = this.reconnectDelay
   private isIntentionallyClosed = false
+  private static readonly AUTH_ERROR = 'SSE_AUTH_ERROR'
 
   /**
    * SSE 연결 시작
    * 로그인 후 호출되어야 함
    */
   connect(): void {
-    if (this.eventSource) {
+    if (this.abortController) {
       console.warn('[SSE] Already connected')
       return
+    }
+
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout)
+      this.reconnectTimeout = null
     }
 
     const accessToken = localStorage.getItem('accessToken')
@@ -47,31 +54,9 @@ class SseNotificationClient {
     }
 
     const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
-    const tokenParam = encodeURIComponent(accessToken)
-    const url = `${baseUrl}/api/notifications/stream?accessToken=${tokenParam}`
-
-    // EventSource는 헤더를 지원하지 않으므로 쿼리 파라미터로 토큰 전달
-    this.eventSource = new EventSource(url)
-
-    this.eventSource.onopen = () => {
-      console.log('[SSE] Connected')
-      this.currentReconnectDelay = this.reconnectDelay // 재연결 딜레이 초기화
-      this.isIntentionallyClosed = false
-    }
-
-    this.eventSource.onerror = (error) => {
-      console.error('[SSE] Connection error:', error)
-      this.eventSource?.close()
-      this.eventSource = null
-
-      // 의도적으로 닫은 경우가 아니면 재연결 시도
-      if (!this.isIntentionallyClosed) {
-        this.scheduleReconnect()
-      }
-    }
-
-    // 이벤트 리스너 등록
-    this.registerEventListeners()
+    const url = `${baseUrl}/api/notifications/stream`
+    this.isIntentionallyClosed = false
+    void this.openStream(url, accessToken)
   }
 
   /**
@@ -85,11 +70,10 @@ class SseNotificationClient {
       this.reconnectTimeout = null
     }
 
-    if (this.eventSource) {
-      this.eventSource.close()
-      this.eventSource = null
-      console.log('[SSE] Disconnected')
-    }
+    this.abortController?.abort()
+    this.abortController = null
+    this.connected = false
+    console.log('[SSE] Disconnected')
   }
 
   /**
@@ -117,56 +101,159 @@ class SseNotificationClient {
    * 연결 여부 확인
    */
   isConnected(): boolean {
-    return this.eventSource !== null && this.eventSource.readyState === EventSource.OPEN
+    return this.connected
   }
 
   // ===== Private Methods =====
 
-  private registerEventListeners(): void {
-    if (!this.eventSource) return
+  private async openStream(url: string, accessToken: string): Promise<void> {
+    const controller = new AbortController()
+    this.abortController = controller
 
-    // connected 이벤트
-    this.eventSource.addEventListener(SseEventName.CONNECTED, (event: MessageEvent) => {
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'text/event-stream',
+        },
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error(SseNotificationClient.AUTH_ERROR)
+        }
+        throw new Error(`SSE request failed: ${response.status}`)
+      }
+
+      if (!response.body) {
+        throw new Error('SSE response body is empty')
+      }
+
+      this.connected = true
+      this.currentReconnectDelay = this.reconnectDelay
+      console.log('[SSE] Connected')
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder('utf-8')
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        buffer = this.processBuffer(buffer)
+      }
+
+      buffer += decoder.decode()
+      this.processRemainingBuffer(buffer)
+
+      if (!this.isIntentionallyClosed) {
+        throw new Error('SSE stream closed')
+      }
+    } catch (error) {
+      const isAborted = controller.signal.aborted
+      const isAuthError = error instanceof Error && error.message === SseNotificationClient.AUTH_ERROR
+
+      if (isAuthError) {
+        console.error('[SSE] Unauthorized. Stop reconnect and require re-login.')
+        this.isIntentionallyClosed = true
+        return
+      }
+
+      if (!this.isIntentionallyClosed && !isAborted) {
+        console.error('[SSE] Connection error:', error)
+        this.scheduleReconnect()
+      }
+    } finally {
+      if (this.abortController === controller) {
+        this.abortController = null
+      }
+      this.connected = false
+    }
+  }
+
+  private processBuffer(buffer: string): string {
+    const normalized = buffer.replace(/\r\n/g, '\n')
+    let rest = normalized
+
+    while (true) {
+      const boundary = rest.indexOf('\n\n')
+      if (boundary < 0) break
+
+      const rawEvent = rest.slice(0, boundary)
+      rest = rest.slice(boundary + 2)
+      this.handleRawEvent(rawEvent)
+    }
+
+    return rest
+  }
+
+  private processRemainingBuffer(buffer: string): void {
+    const remaining = buffer.trim()
+    if (!remaining) return
+    this.handleRawEvent(remaining)
+  }
+
+  private handleRawEvent(rawEvent: string): void {
+    const lines = rawEvent.replace(/\r/g, '').split('\n')
+    let eventName = 'message'
+    const dataLines: string[] = []
+
+    lines.forEach((line) => {
+      if (!line || line.startsWith(':')) return
+
+      if (line.startsWith('event:')) {
+        eventName = line.slice('event:'.length).trim()
+        return
+      }
+
+      if (line.startsWith('data:')) {
+        dataLines.push(line.slice('data:'.length).trimStart())
+      }
+    })
+
+    const data = dataLines.join('\n')
+    this.dispatchEvent(eventName, data)
+  }
+
+  private dispatchEvent(eventName: string, data: string): void {
+    if (eventName === SseEventName.CONNECTED) {
       console.log('[SSE] Connected event received')
       this.notifyHandlers(SseEventName.CONNECTED, {})
-    })
+      return
+    }
 
-    // heartbeat 이벤트 (수신만, 응답 불필요)
-    this.eventSource.addEventListener(SseEventName.HEARTBEAT, (event: MessageEvent) => {
-      // 로깅은 너무 많아질 수 있으므로 필요시에만 활성화
-      // console.log('[SSE] Heartbeat received')
+    if (eventName === SseEventName.HEARTBEAT) {
       this.notifyHandlers(SseEventName.HEARTBEAT, {})
-    })
+      return
+    }
 
-    // chat.message 이벤트
-    this.eventSource.addEventListener(SseEventName.CHAT_MESSAGE, (event: MessageEvent) => {
-      try {
-        const data: MessageSentEvent = JSON.parse(event.data)
-        this.notifyHandlers(SseEventName.CHAT_MESSAGE, data)
-      } catch (error) {
-        console.error('[SSE] Failed to parse chat.message:', error)
-      }
-    })
+    if (eventName === SseEventName.CHAT_MESSAGE) {
+      this.dispatchJsonEvent<MessageSentEvent>(SseEventName.CHAT_MESSAGE, data)
+      return
+    }
 
-    // chat.request.created 이벤트
-    this.eventSource.addEventListener(SseEventName.CHAT_REQUEST_CREATED, (event: MessageEvent) => {
-      try {
-        const data: MessageRequestCreatedEvent = JSON.parse(event.data)
-        this.notifyHandlers(SseEventName.CHAT_REQUEST_CREATED, data)
-      } catch (error) {
-        console.error('[SSE] Failed to parse chat.request.created:', error)
-      }
-    })
+    if (eventName === SseEventName.CHAT_REQUEST_CREATED) {
+      this.dispatchJsonEvent<MessageRequestCreatedEvent>(SseEventName.CHAT_REQUEST_CREATED, data)
+      return
+    }
 
-    // chat.request.decided 이벤트
-    this.eventSource.addEventListener(SseEventName.CHAT_REQUEST_DECIDED, (event: MessageEvent) => {
-      try {
-        const data: MessageRequestDecidedEvent = JSON.parse(event.data)
-        this.notifyHandlers(SseEventName.CHAT_REQUEST_DECIDED, data)
-      } catch (error) {
-        console.error('[SSE] Failed to parse chat.request.decided:', error)
-      }
-    })
+    if (eventName === SseEventName.CHAT_REQUEST_DECIDED) {
+      this.dispatchJsonEvent<MessageRequestDecidedEvent>(SseEventName.CHAT_REQUEST_DECIDED, data)
+    }
+  }
+
+  private dispatchJsonEvent<T>(eventName: SseEventName, data: string): void {
+    if (!data) return
+    try {
+      const parsed = JSON.parse(data) as T
+      this.notifyHandlers(eventName, parsed)
+    } catch (error) {
+      console.error(`[SSE] Failed to parse ${eventName}:`, error)
+    }
   }
 
   private addEventListener<T>(eventName: SseEventName, handler: SseEventHandler<T>): () => void {
