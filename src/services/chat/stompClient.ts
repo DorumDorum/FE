@@ -4,16 +4,20 @@ import type {
   SendMessageSocketRequest,
   ReceiveMessageSocketResponse,
   PresenceSignalRequest,
+  MessageRoomReadStatePayload,
 } from '@/types/chat'
 import { ConnectionStatus } from '@/types/chat'
 
 type MessageHandler = (message: ReceiveMessageSocketResponse) => void
+type ReadStateHandler = (payload: MessageRoomReadStatePayload) => void
 type ConnectionStatusHandler = (status: ConnectionStatus) => void
 
 class StompChatClient {
   private client: Client | null = null
-  private subscriptions: Map<string, StompSubscription> = new Map() // number → string
+  private messageSubscriptions: Map<string, StompSubscription> = new Map() // number → string
+  private readStateSubscriptions: Map<string, StompSubscription> = new Map() // number → string
   private messageHandlers: Map<string, MessageHandler[]> = new Map() // number → string
+  private readStateHandlers: Map<string, ReadStateHandler[]> = new Map() // number → string
   private connectionStatusHandlers: ConnectionStatusHandler[] = []
   private connectionStatus: ConnectionStatus = ConnectionStatus.DISCONNECTED
   private reconnectAttempts = 0
@@ -87,8 +91,10 @@ class StompChatClient {
    */
   disconnect(): void {
     if (this.client?.active) {
-      this.subscriptions.forEach((sub) => sub.unsubscribe())
-      this.subscriptions.clear()
+      this.messageSubscriptions.forEach((sub) => sub.unsubscribe())
+      this.readStateSubscriptions.forEach((sub) => sub.unsubscribe())
+      this.messageSubscriptions.clear()
+      this.readStateSubscriptions.clear()
       this.client.deactivate()
       this.client = null
       this.updateConnectionStatus(ConnectionStatus.DISCONNECTED)
@@ -106,7 +112,7 @@ class StompChatClient {
     }
 
     // 이미 구독 중이면 핸들러만 추가
-    if (this.subscriptions.has(roomId)) {
+    if (this.messageSubscriptions.has(roomId)) {
       this.addMessageHandler(roomId, handler)
       console.log('[STOMP] Already subscribed to room', roomId, ', added handler')
       return
@@ -122,21 +128,56 @@ class StompChatClient {
       }
     })
 
-    this.subscriptions.set(roomId, subscription)
+    this.messageSubscriptions.set(roomId, subscription)
     this.addMessageHandler(roomId, handler)
     console.log('[STOMP] Subscribed to room', roomId)
+  }
+
+  subscribeToRoomReadState(roomId: string, handler: ReadStateHandler): void {
+    if (!this.client?.connected) {
+      console.warn('[STOMP] Not connected, cannot subscribe to room read-state', roomId)
+      return
+    }
+
+    if (this.readStateSubscriptions.has(roomId)) {
+      this.addReadStateHandler(roomId, handler)
+      console.log('[STOMP] Already subscribed to room read-state', roomId, ', added handler')
+      return
+    }
+
+    const destination = `/sub/rooms/${roomId}/read-state`
+    const subscription = this.client.subscribe(destination, (message: IMessage) => {
+      try {
+        const data: MessageRoomReadStatePayload = JSON.parse(message.body)
+        this.notifyReadStateHandlers(roomId, data)
+      } catch (error) {
+        console.error('[STOMP] Failed to parse read-state payload:', error)
+      }
+    })
+
+    this.readStateSubscriptions.set(roomId, subscription)
+    this.addReadStateHandler(roomId, handler)
+    console.log('[STOMP] Subscribed to room read-state', roomId)
   }
 
   /**
    * 채팅방 구독 해제
    */
   unsubscribeFromRoom(roomId: string): void { // number → string
-    const subscription = this.subscriptions.get(roomId)
-    if (subscription) {
-      subscription.unsubscribe()
-      this.subscriptions.delete(roomId)
+    const messageSubscription = this.messageSubscriptions.get(roomId)
+    if (messageSubscription) {
+      messageSubscription.unsubscribe()
+      this.messageSubscriptions.delete(roomId)
       this.messageHandlers.delete(roomId)
       console.log('[STOMP] Unsubscribed from room', roomId)
+    }
+
+    const readStateSubscription = this.readStateSubscriptions.get(roomId)
+    if (readStateSubscription) {
+      readStateSubscription.unsubscribe()
+      this.readStateSubscriptions.delete(roomId)
+      this.readStateHandlers.delete(roomId)
+      console.log('[STOMP] Unsubscribed from room read-state', roomId)
     }
   }
 
@@ -165,13 +206,21 @@ class StompChatClient {
    * 채팅방 입장 신호 전송
    * SEND /pub/presence/enter
    */
-  sendEnterPresence(roomId: string): void { // number → string
+  sendEnterPresence(
+    roomId: string,
+    lastReadMessageId: string | null,
+    lastReadSentAt: string | null
+  ): void { // number → string
     if (!this.client?.connected) {
       console.warn('[STOMP] Not connected, cannot send enter presence')
       return
     }
 
-    const request: PresenceSignalRequest = { roomId }
+    const request: PresenceSignalRequest = {
+      messageRoomNo: roomId,
+      lastReadMessageId,
+      lastReadSentAt,
+    }
     this.client.publish({
       destination: '/pub/presence/enter',
       body: JSON.stringify(request),
@@ -184,13 +233,21 @@ class StompChatClient {
    * 채팅방 퇴장 신호 전송
    * SEND /pub/presence/leave
    */
-  sendLeavePresence(roomId: string): void { // number → string
+  sendLeavePresence(
+    roomId: string,
+    lastReadMessageId: string | null,
+    lastReadSentAt: string | null
+  ): void { // number → string
     if (!this.client?.connected) {
       console.warn('[STOMP] Not connected, cannot send leave presence')
       return
     }
 
-    const request: PresenceSignalRequest = { roomId }
+    const request: PresenceSignalRequest = {
+      messageRoomNo: roomId,
+      lastReadMessageId,
+      lastReadSentAt,
+    }
     this.client.publish({
       destination: '/pub/presence/leave',
       body: JSON.stringify(request),
@@ -268,6 +325,18 @@ class StompChatClient {
     handlers.forEach((handler) => handler(message))
   }
 
+  private addReadStateHandler(roomId: string, handler: ReadStateHandler): void {
+    if (!this.readStateHandlers.has(roomId)) {
+      this.readStateHandlers.set(roomId, [])
+    }
+    this.readStateHandlers.get(roomId)!.push(handler)
+  }
+
+  private notifyReadStateHandlers(roomId: string, payload: MessageRoomReadStatePayload): void {
+    const handlers = this.readStateHandlers.get(roomId) || []
+    handlers.forEach((handler) => handler(payload))
+  }
+
   private updateConnectionStatus(status: ConnectionStatus): void {
     this.connectionStatus = status
     this.connectionStatusHandlers.forEach((handler) => handler(status))
@@ -275,14 +344,22 @@ class StompChatClient {
 
   private restoreSubscriptions(): void {
     // 재연결 시 기존 구독 복원
-    const roomIds = Array.from(this.subscriptions.keys())
-    this.subscriptions.clear()
-    
-    roomIds.forEach((roomId) => {
+    const messageRoomIds = Array.from(this.messageHandlers.keys())
+    const readStateRoomIds = Array.from(this.readStateHandlers.keys())
+    this.messageSubscriptions.clear()
+    this.readStateSubscriptions.clear()
+
+    messageRoomIds.forEach((roomId) => {
       const handlers = this.messageHandlers.get(roomId) || []
       if (handlers.length > 0) {
-        // 첫 번째 핸들러로 재구독 (내부적으로 모든 핸들러가 호출됨)
         this.subscribeToRoom(roomId, handlers[0])
+      }
+    })
+
+    readStateRoomIds.forEach((roomId) => {
+      const handlers = this.readStateHandlers.get(roomId) || []
+      if (handlers.length > 0) {
+        this.subscribeToRoomReadState(roomId, handlers[0])
       }
     })
   }

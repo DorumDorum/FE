@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Send } from 'lucide-react'
 import { useChatStore } from '@/store/chatStore'
@@ -10,7 +10,7 @@ import {
   deleteMessageRoom,
 } from '@/services/chat/chatApi'
 import { stompChatClient } from '@/services/chat/stompClient'
-import type { ChatMessage, ChatParticipant } from '@/types/chat'
+import type { ChatMessage, ChatParticipant, MessageRoomReadStatePayload } from '@/types/chat'
 import { MessageRoomStatus, MessageRequestDecision, MessageType } from '@/types/chat'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -39,10 +39,14 @@ const ChatRoomPage = () => {
     messageCursors,
     hasMoreMessages,
     participantsByRoom,
+    participantReadStatesByRoom,
     setMessages,
     addMessage,
     prependMessages,
+    replaceMessage,
     setRoomParticipants,
+    mergeRoomReadState,
+    advanceReadStateForInRoomParticipants,
     setCurrentRoomId,
     resetUnreadCount,
     wsConnectionStatus,
@@ -55,6 +59,9 @@ const ChatRoomPage = () => {
   const messages = currentRoomId ? messagesByRoom.get(currentRoomId) || [] : []
   // 이 방 참여자 정보 캐시 (입장/새로고침 때 해당 방만 갱신)
   const participantMap = currentRoomId ? participantsByRoom.get(currentRoomId) : undefined
+  const participantReadStateMap = currentRoomId
+    ? participantReadStatesByRoom.get(currentRoomId)
+    : undefined
   const currentRoom = currentRoomId ? rooms.find((room) => room.messageRoomNo === currentRoomId) : null
   const isApproved = currentRoom?.roomStatus === MessageRoomStatus.APPROVED
   const isRequested = currentRoom?.roomStatus === MessageRoomStatus.REQUESTED
@@ -69,10 +76,6 @@ const ChatRoomPage = () => {
     setCurrentRoomId(currentRoomId)
     resetUnreadCount(currentRoomId)
     
-    // 입장할 때 메시지와 참여자 API를 함께 호출해 초기 렌더링 데이터를 맞춘다.
-    // (참여자 캐시는 roomId 단위로 덮어써서 재입장/새로고침 시 최신화)
-    void loadRoomData(currentRoomId)
-
     // WebSocket 연결 시작
     const accessToken = localStorage.getItem('accessToken')
     if (!accessToken) {
@@ -120,13 +123,7 @@ const ChatRoomPage = () => {
       // MessageSentEvent 구조: { messageId, roomId, senderId, senderName, content, messageType, sentAt }
       const senderId = message.senderId?.toString()
       console.log('[WebSocket] Message senderId:', senderId, 'currentUserId:', currentUserId)
-      
-      // 발신자가 본인인 경우 이미 낙관적 업데이트로 추가했으므로 무시
-      if (currentUserId && senderId === currentUserId) {
-        console.log('[WebSocket] Ignoring own message (already added)')
-        return
-      }
-      
+
       const chatMessage: ChatMessage = {
         messageNo: message.messageId?.toString() || Date.now().toString(),
         messageRoomNo: currentRoomId,
@@ -136,23 +133,73 @@ const ChatRoomPage = () => {
         messageType: message.messageType,
         sentAt: message.sentAt,
       }
-      
-      console.log('[WebSocket] Adding message to chat:', chatMessage)
-      addMessage(currentRoomId, chatMessage)
+
+      if (currentUserId && senderId === currentUserId) {
+        const currentMessages = useChatStore.getState().messagesByRoom.get(currentRoomId) || []
+        const tempCandidate = [...currentMessages]
+          .reverse()
+          .find(
+            (candidate) =>
+              candidate.isLocal === true &&
+              candidate.messageNo.startsWith('temp-') &&
+              candidate.senderNo === currentUserId &&
+              candidate.content === chatMessage.content
+          )
+
+        if (tempCandidate) {
+          replaceMessage(currentRoomId, tempCandidate.messageNo, {
+            ...chatMessage,
+            isLocal: true,
+          })
+        } else {
+          addMessage(currentRoomId, {
+            ...chatMessage,
+            isLocal: true,
+          })
+        }
+      } else {
+        console.log('[WebSocket] Adding message to chat:', chatMessage)
+        addMessage(currentRoomId, chatMessage)
+      }
+
+      advanceReadStateForInRoomParticipants(
+        currentRoomId,
+        chatMessage.messageNo,
+        chatMessage.sentAt
+      )
       scrollToBottom()
     }
 
     // connect() 직후 즉시 connected가 아닐 수 있어 polling으로 구독 시점을 맞춘다.
+    const handleReadStateChanged = (payload: MessageRoomReadStatePayload) => {
+      if (payload.messageRoomNo !== currentRoomId) return
+      mergeRoomReadState(currentRoomId, payload.participants)
+    }
+
     let isCancelled = false
     let subscribeRetryTimeout: ReturnType<typeof setTimeout> | null = null
 
-    const checkConnectionAndSubscribe = () => {
+    const checkConnectionAndSubscribe = async () => {
       if (isCancelled) return
 
       if (stompChatClient.isConnected()) {
         console.log('[ChatRoom] WebSocket connected, subscribing to room...')
         stompChatClient.subscribeToRoom(currentRoomId, handleNewMessage)
-        stompChatClient.sendEnterPresence(currentRoomId)
+        stompChatClient.subscribeToRoomReadState(currentRoomId, handleReadStateChanged)
+
+        try {
+          await loadRoomData(currentRoomId)
+        } catch (error) {
+          console.error('[ChatRoom] Failed to load initial room data:', error)
+        }
+        if (isCancelled) return
+
+        const lastRead = getLastReadCursor(currentRoomId)
+        stompChatClient.sendEnterPresence(
+          currentRoomId,
+          lastRead.lastReadMessageId,
+          lastRead.lastReadSentAt
+        )
         
         // 앱 레벨 ping: 사용자가 "읽기만" 하는 상태에서도
         // ws 활동(onWsActivity)이 기록되도록 60초마다 전송한다.
@@ -163,11 +210,13 @@ const ChatRoomPage = () => {
         }, 60000)
       } else {
         // 연결 대기
-        subscribeRetryTimeout = setTimeout(checkConnectionAndSubscribe, 500)
+        subscribeRetryTimeout = setTimeout(() => {
+          void checkConnectionAndSubscribe()
+        }, 500)
       }
     }
 
-    checkConnectionAndSubscribe()
+    void checkConnectionAndSubscribe()
 
     // Cleanup: 방 이탈 시 presence leave 전송 후 WS를 완전히 종료한다.
     // (다른 화면에서 불필요한 wsConnected 상태가 남지 않도록)
@@ -189,7 +238,12 @@ const ChatRoomPage = () => {
       }
 
       if (stompChatClient.isConnected()) {
-        stompChatClient.sendLeavePresence(currentRoomId)
+        const lastRead = getLastReadCursor(currentRoomId)
+        stompChatClient.sendLeavePresence(
+          currentRoomId,
+          lastRead.lastReadMessageId,
+          lastRead.lastReadSentAt
+        )
         stompChatClient.unsubscribeFromRoom(currentRoomId)
         stompChatClient.disconnect()
         console.log('[ChatRoom] WebSocket disconnected')
@@ -197,7 +251,14 @@ const ChatRoomPage = () => {
       
       setCurrentRoomId(null)
     }
-  }, [currentRoomId, resetUnreadCount, setCurrentRoomId, setWsConnectionStatus])
+  }, [
+    advanceReadStateForInRoomParticipants,
+    currentRoomId,
+    mergeRoomReadState,
+    resetUnreadCount,
+    setCurrentRoomId,
+    setWsConnectionStatus,
+  ])
 
   const prefetchProfileImages = (participants: ChatParticipant[]) => {
     participants.forEach((participant) => {
@@ -257,7 +318,6 @@ const ChatRoomPage = () => {
         content: msg.content,
         messageType: msg.messageType,
         sentAt: msg.sentAt,
-        readCount: msg.readCount,
       }))
 
       // 메시지를 시간순으로 정렬 (오래된 것 → 최신 것)
@@ -310,7 +370,6 @@ const ChatRoomPage = () => {
         content: msg.content,
         messageType: msg.messageType,
         sentAt: msg.sentAt,
-        readCount: msg.readCount,
       }))
 
       // 메시지를 시간순으로 정렬
@@ -398,7 +457,7 @@ const ChatRoomPage = () => {
         senderName: '나',
         content,
         messageType: MessageType.TEXT,
-        sentAt: new Date().toISOString(),
+        sentAt: toLocalDateTimeString(new Date()),
         isLocal: true,
       }
       
@@ -494,6 +553,33 @@ const ChatRoomPage = () => {
       return ''
     }
   }
+
+  const unreadCountByMessageId = useMemo(() => {
+    if (!participantMap || participantMap.size === 0) {
+      return new Map<string, number>()
+    }
+    const counts = new Map<string, number>()
+    const participants = Array.from(participantMap.keys()).map((userId) =>
+      participantReadStateMap?.get(userId) || {
+        userId,
+        isInMessageRoom: false,
+        lastReadMessageId: null,
+        lastReadSentAt: null,
+      }
+    )
+
+    messages.forEach((message) => {
+      const readParticipants = participants.reduce((acc, participantState) => {
+        if (hasReadMessage(participantState, message)) {
+          return acc + 1
+        }
+        return acc
+      }, 0)
+      counts.set(message.messageNo, participants.length - readParticipants)
+    })
+
+    return counts
+  }, [messages, participantMap, participantReadStateMap])
 
   // 날짜 구분선 표시 여부 확인
   const shouldShowDateDivider = (index: number) => {
@@ -613,6 +699,11 @@ const ChatRoomPage = () => {
                       }`}
                     >
                       {formatMessageTime(message.sentAt)}
+                      {message.isLocal && (unreadCountByMessageId.get(message.messageNo) || 0) > 0 && (
+                        <span className="ml-2">
+                          안읽음 {unreadCountByMessageId.get(message.messageNo)}
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -697,3 +788,76 @@ const ChatRoomPage = () => {
 }
 
 export default ChatRoomPage
+
+const hasReadMessage = (
+  participantState: {
+    isInMessageRoom: boolean
+    lastReadMessageId: string | null
+    lastReadSentAt: string | null
+  },
+  message: ChatMessage
+): boolean => {
+  if (participantState.isInMessageRoom) {
+    return true
+  }
+
+  const { lastReadMessageId, lastReadSentAt } = participantState
+  if (!lastReadSentAt) {
+    return false
+  }
+
+  // 임시 메시지는 서버 ID/시간으로 정규화되기 전까지
+  // in-room 참여자 외에는 읽지 않은 것으로 본다.
+  if (message.messageNo.startsWith('temp-')) {
+    return false
+  }
+
+  const messageSentAtMillis = toComparableMillis(message.sentAt)
+  const lastReadSentAtMillis = toComparableMillis(lastReadSentAt)
+
+  if (messageSentAtMillis < lastReadSentAtMillis) {
+    return true
+  }
+  if (messageSentAtMillis > lastReadSentAtMillis) {
+    return false
+  }
+
+  if (!lastReadMessageId) {
+    return false
+  }
+  return message.messageNo <= lastReadMessageId
+}
+
+const getLastReadCursor = (
+  targetRoomId: string
+): { lastReadMessageId: string | null; lastReadSentAt: string | null } => {
+  const messages = useChatStore.getState().messagesByRoom.get(targetRoomId) || []
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (!message.messageNo.startsWith('temp-')) {
+      return {
+        lastReadMessageId: message.messageNo,
+        lastReadSentAt: message.sentAt,
+      }
+    }
+  }
+  return {
+    lastReadMessageId: null,
+    lastReadSentAt: null,
+  }
+}
+
+const toComparableMillis = (value: string): number => {
+  const millis = Date.parse(value)
+  if (!Number.isNaN(millis)) {
+    return millis
+  }
+  return 0
+}
+
+const toLocalDateTimeString = (date: Date): string => {
+  const pad = (value: number, length: number = 2) => value.toString().padStart(length, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`
+}

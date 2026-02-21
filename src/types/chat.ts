@@ -59,7 +59,7 @@ export interface MessageDto {
   content: string
   messageType: MessageType
   sentAt: string // ISO DateTime
-  readCount: number
+  readCount?: number
 }
 
 export interface LoadMessagesResponse {
@@ -97,7 +97,21 @@ export interface ReceiveMessageSocketResponse {
 
 // Presence 신호 (SEND /pub/presence/enter, /pub/presence/leave)
 export interface PresenceSignalRequest {
-  roomId: string // number → string
+  messageRoomNo: string
+  lastReadMessageId: string | null
+  lastReadSentAt: string | null
+}
+
+export interface MessageRoomReadStateParticipantPayload {
+  userId: string
+  lastReadMessageId: string | null
+  lastReadSentAt: string | null
+}
+
+export interface MessageRoomReadStatePayload {
+  messageRoomNo: string
+  inMessageRoomCount: number
+  participants: MessageRoomReadStateParticipantPayload[]
 }
 
 // ===== SSE Event Types =====
@@ -168,6 +182,13 @@ export interface ChatParticipant {
   major: string | null
   age: number
   profileImageUrl: string | null
+}
+
+export interface ParticipantReadState {
+  userId: string
+  isInMessageRoom: boolean
+  lastReadMessageId: string | null
+  lastReadSentAt: string | null
 }
 
 // WebSocket 연결 상태
