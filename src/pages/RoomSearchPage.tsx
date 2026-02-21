@@ -1446,15 +1446,6 @@ const RoomSearchPage = () => {
 
         {/* 방 목록 */}
         <div className="mt-2 px-4">
-          {loadingTab === activeTab &&
-            (activeTab === 'recruiting'
-              ? recruitingRooms.length === 0
-              : activeTab === 'applied'
-                ? appliedRooms.length === 0
-                : joinedRooms.length === 0) && (
-            <SectionLoading variant="room-card" className="pt-4" />
-          )}
-
           {/* 탭 네비게이션 - 헤더 바로 아래에 고정 */}
           <div className="sticky top-[64px] z-10 bg-white pb-2">
             <div className="flex border-b border-gray-200">
@@ -1501,6 +1492,10 @@ const RoomSearchPage = () => {
           {/* 탭 콘텐츠 */}
           {activeTab === 'recruiting' && (
             <div className="space-y-4">
+              {loadingTab === 'recruiting' && recruitingRooms.length === 0 ? (
+                <SectionLoading variant="room-card" className="pt-4" />
+              ) : (
+              <>
               {filteredRecruitingRooms.map((room) => (
                 <div key={room.id} className="bg-white border border-gray-200 rounded-xl p-5">
                   {/* 헤더 */}
@@ -1787,11 +1782,17 @@ const RoomSearchPage = () => {
                   </div>
                 </div>
               ))}
+              </>
+              )}
             </div>
           )}
 
           {!hasMyRoom && activeTab === 'applied' && (
             <div className="space-y-4">
+              {loadingTab === 'applied' && appliedRooms.length === 0 ? (
+                <SectionLoading variant="room-card" className="pt-4" />
+              ) : (
+              <>
               {filteredAppliedRooms.map((room) => (
                 <div key={room.id} className="bg-white border border-gray-200 rounded-xl p-5">
                   {/* 헤더 */}
@@ -1834,11 +1835,17 @@ const RoomSearchPage = () => {
                   </div>
                 </div>
               ))}
+              </>
+              )}
             </div>
           )}
 
           {activeTab === 'joined' && (
             <div className="space-y-4">
+              {loadingTab === 'joined' && joinedRooms.length === 0 ? (
+                <SectionLoading variant="room-card" className="pt-4" />
+              ) : (
+              <>
               {filteredJoinedRooms.map((room) => (
                 <div key={room.id} className="bg-white border border-gray-200 rounded-xl p-5">
                   {/* 헤더 */}
@@ -2125,6 +2132,8 @@ const RoomSearchPage = () => {
                   </div>
                 </div>
               ))}
+              </>
+              )}
             </div>
           )}
         </div>

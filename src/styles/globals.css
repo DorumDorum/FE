@@ -212,6 +212,18 @@
     z-index: 50;
   }
 
+  /* 데스크톱/태블릿: 휴대폰 비율(430px) 안에 네비 제한 + 하단에 붙임 (툴바 오프셋 없음) */
+  @media (min-width: 768px) {
+    .bottom-nav-bar {
+      left: 50%;
+      right: auto;
+      width: 100%;
+      max-width: 430px;
+      transform: translateX(-50%);
+      bottom: 0;
+    }
+  }
+
   /* 4번: PWA/iOS 전용 - safe area 사용 */
   @media (display-mode: standalone) {
     .bottom-nav-bar {
@@ -226,8 +238,25 @@
   .page-with-bottom-nav {
     padding-bottom: calc(var(--bottom-nav-height) + var(--toolbar-height, 0));
   }
+  /* 스크롤 영역(main)에도 하단 여백 → 끝까지 스크롤해도 마지막 콘텐츠가 네비 위에 보이도록 */
+  .page-with-bottom-nav main {
+    padding-bottom: calc(var(--bottom-nav-height) + var(--toolbar-height, 0));
+    box-sizing: border-box;
+  }
+  /* 데스크톱/태블릿: 툴바 오프셋 없이 네비 높이만 */
+  @media (min-width: 768px) {
+    .page-with-bottom-nav {
+      padding-bottom: var(--bottom-nav-height);
+    }
+    .page-with-bottom-nav main {
+      padding-bottom: var(--bottom-nav-height);
+    }
+  }
   @media (display-mode: standalone) {
     .page-with-bottom-nav {
+      padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+    }
+    .page-with-bottom-nav main {
       padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
     }
   }
