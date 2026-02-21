@@ -15,6 +15,7 @@ import { MessageRoomStatus, MessageRequestDecision, MessageType } from '@/types/
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import ConfirmModal from '@/components/ui/ConfirmModal'
+import { userStorage } from '@/utils/storage'
 
 const ChatRoomPage = () => {
   const { roomId } = useParams<{ roomId: string }>()
@@ -56,6 +57,7 @@ const ChatRoomPage = () => {
   } = useChatStore()
 
   const currentRoomId = roomId // string 그대로 사용
+  const currentUserId = useMemo(() => getCurrentUserId(), [])
   const messages = currentRoomId ? messagesByRoom.get(currentRoomId) || [] : []
   // 이 방 참여자 정보 캐시 (입장/새로고침 때 해당 방만 갱신)
   const participantMap = currentRoomId ? participantsByRoom.get(currentRoomId) : undefined
@@ -97,28 +99,6 @@ const ChatRoomPage = () => {
     // 본인 메시지는 낙관적 업데이트가 이미 들어가 있으므로 중복 반영하지 않는다.
     const handleNewMessage = (message: any) => {
       console.log('[WebSocket] Received message:', message)
-      
-      // JWT 토큰에서 userId 추출
-      let currentUserId: string | null = null
-      
-      if (accessToken) {
-        try {
-          // JWT 디코딩 (간단한 방식, 검증 없음)
-          const base64Url = accessToken.split('.')[1]
-          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
-          const jsonPayload = decodeURIComponent(
-            atob(base64)
-              .split('')
-              .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-              .join('')
-          )
-          const payload = JSON.parse(jsonPayload)
-          currentUserId = payload.id?.toString()
-          console.log('[WebSocket] Current userId from token:', currentUserId)
-        } catch (error) {
-          console.error('[WebSocket] Failed to decode token:', error)
-        }
-      }
       
       // MessageSentEvent 구조: { messageId, roomId, senderId, senderName, content, messageType, sentAt }
       const senderId = message.senderId?.toString()
@@ -254,6 +234,7 @@ const ChatRoomPage = () => {
   }, [
     advanceReadStateForInRoomParticipants,
     currentRoomId,
+    currentUserId,
     mergeRoomReadState,
     resetUnreadCount,
     setCurrentRoomId,
@@ -318,6 +299,7 @@ const ChatRoomPage = () => {
         content: msg.content,
         messageType: msg.messageType,
         sentAt: msg.sentAt,
+        isLocal: msg.senderNo === currentUserId,
       }))
 
       // 메시지를 시간순으로 정렬 (오래된 것 → 최신 것)
@@ -370,6 +352,7 @@ const ChatRoomPage = () => {
         content: msg.content,
         messageType: msg.messageType,
         sentAt: msg.sentAt,
+        isLocal: msg.senderNo === currentUserId,
       }))
 
       // 메시지를 시간순으로 정렬
@@ -429,31 +412,10 @@ const ChatRoomPage = () => {
       stompChatClient.sendMessage(currentRoomId, content)
       
       // 로컬에 임시 메시지 추가 (낙관적 업데이트)
-      // JWT 토큰에서 userId 추출
-      const accessToken = localStorage.getItem('accessToken')
-      let currentUserId = '0'
-      
-      if (accessToken) {
-        try {
-          const base64Url = accessToken.split('.')[1]
-          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
-          const jsonPayload = decodeURIComponent(
-            atob(base64)
-              .split('')
-              .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-              .join('')
-          )
-          const payload = JSON.parse(jsonPayload)
-          currentUserId = payload.id?.toString() || '0'
-        } catch (error) {
-          console.error('Failed to decode token:', error)
-        }
-      }
-      
       const tempMessage: ChatMessage = {
         messageNo: `temp-${Date.now()}`, // 임시 ID (문자열, temp 접두사)
         messageRoomNo: currentRoomId,
-        senderNo: currentUserId,
+        senderNo: currentUserId || '0',
         senderName: '나',
         content,
         messageType: MessageType.TEXT,
@@ -669,17 +631,19 @@ const ChatRoomPage = () => {
 
                 <div
                   className={`flex ${
-                    message.isLocal ? 'justify-end' : 'justify-start'
+                    message.senderNo === currentUserId || message.isLocal === true
+                      ? 'justify-end'
+                      : 'justify-start'
                   }`}
                 >
                   <div
                     className={`max-w-[70%] ${
-                      message.isLocal
+                      message.senderNo === currentUserId || message.isLocal === true
                         ? 'bg-blue-500 text-white'
                         : 'bg-white text-gray-900'
                     } rounded-lg px-4 py-2 shadow-sm`}
                   >
-                    {!message.isLocal && (
+                    {!(message.senderNo === currentUserId || message.isLocal === true) && (
                       <div className="mb-1 flex items-center gap-2">
                         <span className="text-xs font-semibold text-gray-600">
                           {participantMap?.get(message.senderNo)?.name || message.senderName}
@@ -695,11 +659,14 @@ const ChatRoomPage = () => {
                     </p>
                     <p
                       className={`text-xs mt-1 ${
-                        message.isLocal ? 'text-blue-100' : 'text-gray-400'
+                        message.senderNo === currentUserId || message.isLocal === true
+                          ? 'text-blue-100'
+                          : 'text-gray-400'
                       }`}
                     >
                       {formatMessageTime(message.sentAt)}
-                      {message.isLocal && (unreadCountByMessageId.get(message.messageNo) || 0) > 0 && (
+                      {(message.senderNo === currentUserId || message.isLocal === true) &&
+                        (unreadCountByMessageId.get(message.messageNo) || 0) > 0 && (
                         <span className="ml-2">
                           안읽음 {unreadCountByMessageId.get(message.messageNo)}
                         </span>
@@ -853,6 +820,34 @@ const toComparableMillis = (value: string): number => {
     return millis
   }
   return 0
+}
+
+const getCurrentUserId = (): string | null => {
+  const storedUserId = userStorage.getUserId()
+  if (storedUserId) {
+    return storedUserId
+  }
+
+  const accessToken = localStorage.getItem('accessToken')
+  if (!accessToken) {
+    return null
+  }
+
+  try {
+    const base64Url = accessToken.split('.')[1]
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((char) => '%' + ('00' + char.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    )
+    const payload = JSON.parse(jsonPayload)
+    return payload.id?.toString() || null
+  } catch (error) {
+    console.error('Failed to decode token:', error)
+    return null
+  }
 }
 
 const toLocalDateTimeString = (date: Date): string => {
