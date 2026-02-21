@@ -1356,7 +1356,7 @@ const MyPage = () => {
         </header>
         {loading && <SectionLoading variant="card" />}
 
-        {!loading && isGuest && (
+        {!loading && (isGuest || !profile) && (
           <GuestOnlyMessage />
         )}
 
@@ -1762,11 +1762,6 @@ const MyPage = () => {
           </div>
         )}
 
-        {!loading && !isGuest && !profile && (
-          <div className="text-sm text-gray-500 flex items-center justify-center py-10">
-            프로필 정보를 불러올 수 없습니다.
-          </div>
-        )}
       </main>
 
       {/* 하단 네비게이션 바 */}
