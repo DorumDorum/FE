@@ -26,7 +26,6 @@ export const useChatConnections = () => {
     setWsConnectionStatus,
     setSseConnected,
     updateRoom,
-    incrementUnreadCount,
   } = useChatStore()
 
   // 공개 페이지는 비로그인 진입 구간이므로 SSE/WS를 절대 열지 않는다.
@@ -97,10 +96,11 @@ export const useChatConnections = () => {
     updateRoom(event.roomId, {
       lastMessage: event.content,
       lastMessageAt: event.sentAt,
+      hasUnread: true,
     })
 
-    // 읽지 않은 메시지 카운트 증가
-    incrementUnreadCount(event.roomId)
+    // 이전 방식: SSE 수신마다 unreadCount 증가
+    // incrementUnreadCount(event.roomId)
 
     showChatNavigationToast({
       title: `${event.senderName}님의 새 메시지`,

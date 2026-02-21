@@ -42,6 +42,7 @@ export interface LoadMessageRoomResponse {
   messageRequestNo: string | null // number → string
   lastMessage: string
   lastMessageAt: string // ISO DateTime
+  hasUnread: boolean
   isRequester: boolean
 }
 
@@ -171,8 +172,8 @@ export interface ChatRoom {
   messageRequestNo: string | null // number → string
   lastMessage: string
   lastMessageAt: string
+  hasUnread: boolean
   isRequester: boolean
-  unreadCount?: number
 }
 
 export interface ChatParticipant {

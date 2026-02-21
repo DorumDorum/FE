@@ -136,10 +136,12 @@ const ChatPage = () => {
                         <h3 className="font-semibold text-gray-900 truncate">
                           {room.roomType === 'DIRECT' ? '1:1 채팅' : '그룹 채팅'}
                         </h3>
-                        {room.unreadCount && room.unreadCount > 0 && (
-                          <span className="bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
-                            {room.unreadCount}
-                          </span>
+                        {room.hasUnread && (
+                          <span
+                            className="inline-block h-2.5 w-2.5 rounded-full bg-red-500"
+                            aria-label="읽지 않은 메시지 있음"
+                            title="읽지 않은 메시지 있음"
+                          />
                         )}
                       </div>
 

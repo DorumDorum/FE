@@ -66,7 +66,7 @@ interface ChatState {
   addPendingRequest: (request: MessageRequestCreatedEvent) => void
   removePendingRequest: (messageRequestNo: string) => void // number → string
 
-  // 읽지 않은 메시지 카운트 증가
+  // 읽지 않은 메시지 표시(on/off)
   incrementUnreadCount: (roomId: string) => void // number → string
   resetUnreadCount: (roomId: string) => void // number → string
 
@@ -366,7 +366,12 @@ export const useChatStore = create<ChatState>((set) => ({
     set((state) => ({
       rooms: state.rooms.map((room) =>
         room.messageRoomNo === roomId
-          ? { ...room, unreadCount: (room.unreadCount || 0) + 1 }
+          ? {
+              ...room,
+              // 이전 방식: SSE 수신마다 안읽은 "개수" 누적
+              // unreadCount: (room.unreadCount || 0) + 1,
+              hasUnread: true,
+            }
           : room
       ),
     })),
@@ -374,7 +379,14 @@ export const useChatStore = create<ChatState>((set) => ({
   resetUnreadCount: (roomId) =>
     set((state) => ({
       rooms: state.rooms.map((room) =>
-        room.messageRoomNo === roomId ? { ...room, unreadCount: 0 } : room
+        room.messageRoomNo === roomId
+          ? {
+              ...room,
+              // 이전 방식: 입장 시 unreadCount를 0으로 초기화
+              // unreadCount: 0,
+              hasUnread: false,
+            }
+          : room
       ),
     })),
 
