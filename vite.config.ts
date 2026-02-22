@@ -54,6 +54,9 @@ export default defineConfig({
         launch_handler: {
           client_mode: 'navigate-existing',
         },
+        related_applications: [
+          { platform: 'webapp', url: '/manifest.json' },
+        ],
         icons: [
           {
             src: 'pwa-192x192.png',
