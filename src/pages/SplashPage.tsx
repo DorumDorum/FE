@@ -13,25 +13,12 @@ const SplashPage = () => {
     let isCancelled = false
 
     const attemptAutoLogin = async () => {
-      const refreshToken = localStorage.getItem('refreshToken')
-      
-      // 리프레시 토큰이 없으면 intro로 이동
-      if (!refreshToken) {
-        if (isCancelled) return
-        fadeTimer = setTimeout(() => setIsFadingOut(true), 1300)
-        navTimer = setTimeout(() => {
-          if (!isCancelled) navigate('/intro', { replace: true })
-        }, 1900)
-        return
-      }
-
-      // 리프레시 토큰이 있으면 토큰 재발급 시도
+      // HttpOnly refresh 쿠키 기반으로 토큰 재발급 시도
       try {
         const res = await fetch(getApiUrl('/api/token/reissue'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${refreshToken}`,
           },
           credentials: 'include',
         })
@@ -42,14 +29,8 @@ const SplashPage = () => {
           // 토큰 재발급 성공
           const data = await res.json()
           const newAccessToken = data?.accessToken
-          const newRefreshToken = data?.refreshToken
 
-          if (newAccessToken) {
-            localStorage.setItem('accessToken', newAccessToken)
-          }
-          if (newRefreshToken) {
-            localStorage.setItem('refreshToken', newRefreshToken)
-          }
+          if (newAccessToken) localStorage.setItem('accessToken', newAccessToken)
 
           // 홈 화면으로 리다이렉트
           fadeTimer = setTimeout(() => setIsFadingOut(true), 1300)
@@ -59,7 +40,6 @@ const SplashPage = () => {
         } else {
           // 토큰 재발급 실패 (만료 등) - intro로 이동
           localStorage.removeItem('accessToken')
-          localStorage.removeItem('refreshToken')
           fadeTimer = setTimeout(() => setIsFadingOut(true), 1300)
           navTimer = setTimeout(() => {
             if (!isCancelled) navigate('/intro', { replace: true })
@@ -70,7 +50,6 @@ const SplashPage = () => {
         if (isCancelled) return
         console.error('Auto login failed:', error)
         localStorage.removeItem('accessToken')
-        localStorage.removeItem('refreshToken')
         fadeTimer = setTimeout(() => setIsFadingOut(true), 1300)
         navTimer = setTimeout(() => {
           if (!isCancelled) navigate('/intro', { replace: true })

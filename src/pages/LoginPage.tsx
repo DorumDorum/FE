@@ -25,6 +25,7 @@ const LoginPage = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
+          credentials: 'include',
         })
         let data: any = null
         try {
@@ -42,12 +43,9 @@ const LoginPage = () => {
           throw new Error(msg)
         }
 
-        // ResponseEntity<LoginResponse> 형식: { accessToken, refreshToken } 직접 접근
+        // AuthTokenResponse 형식: { accessToken } 직접 접근 (refreshToken은 HttpOnly 쿠키)
         const accessToken = data?.accessToken
-        const refreshToken = data?.refreshToken
-
         if (accessToken) localStorage.setItem('accessToken', accessToken)
-        if (refreshToken) localStorage.setItem('refreshToken', refreshToken)
 
         if (!accessToken) {
           throw new Error('토큰이 없습니다. 관리자에게 문의해주세요.')
