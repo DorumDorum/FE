@@ -586,6 +586,8 @@ const RoomSearchPage = () => {
   const [recruitingRooms, setRecruitingRooms] = useState<Room[]>([])
   const [appliedRooms, setAppliedRooms] = useState<Room[]>([])
   const [joinedRooms, setJoinedRooms] = useState<Room[]>([])
+  /** 관심(좋아요) 상태. 서버 LIKED 목록이 비정상이어도 like/unlike 직후 올바르게 토글되도록 로컬 보정 */
+  const [likedRoomIds, setLikedRoomIds] = useState<Set<string>>(() => new Set())
   const [loadingTab, setLoadingTab] = useState<Relation | null>(null)
   const loadingDelayTimerRef = useRef<number | null>(null)
   const lastFetchedKeyRef = useRef<Record<Relation, string | null>>({
@@ -1000,41 +1002,54 @@ const RoomSearchPage = () => {
         return
       }
 
-      const params = new URLSearchParams()
-      const relationMap = {
-        recruiting: 'RECRUITING',
-        applied: 'APPLIED',
-        joined: 'LIKED', // 관심 있는 방 탭은 내가 like한 방 목록
-      } as const
-      params.set('relation', relationMap[relation])
+      let url: string
+      let expectsCursorPage = false
 
-      // 기본정보 필터 배열의 모든 값을 API에 전송
-      if (filters.roomType.length > 0) {
-        filters.roomType.forEach((type) => {
-          const apiRoomType = mapRoomTypeToApi(type)
-          if (apiRoomType) params.append('types', apiRoomType)
-        })
-      }
+      if (relation === 'recruiting') {
+        // 공개 모집 방 목록: 서버에서 기본 정보 필터/정렬까지 처리
+        const params = new URLSearchParams()
+        const relationMap = {
+          recruiting: 'RECRUITING',
+          applied: 'APPLIED',
+          joined: 'LIKED',
+        } as const
+        params.set('relation', relationMap[relation])
 
-      if (filters.roomSize.length > 0) {
-        filters.roomSize.forEach((size) => {
-          params.append('capacities', size)
-        })
-      }
+        if (filters.roomType.length > 0) {
+          filters.roomType.forEach((type) => {
+            const apiRoomType = mapRoomTypeToApi(type)
+            if (apiRoomType) params.append('types', apiRoomType)
+          })
+        }
 
-      if (filters.residencePeriod.length > 0) {
-        filters.residencePeriod.forEach((period) => {
-          params.append('residencePeriods', period)
-        })
-      }
+        if (filters.roomSize.length > 0) {
+          filters.roomSize.forEach((size) => {
+            params.append('capacities', size)
+          })
+        }
 
-      if (filters.sort === 'remaining') {
-        params.set('sort', 'REMAINING')
+        if (filters.residencePeriod.length > 0) {
+          filters.residencePeriod.forEach((period) => {
+            params.append('residencePeriods', period)
+          })
+        }
+
+        if (filters.sort === 'remaining') {
+          params.set('sort', 'REMAINING')
+        } else {
+          params.set('sort', 'CREATED_AT')
+        }
+
+        url = `${getApiUrl('/api/rooms')}?${params.toString()}`
+        expectsCursorPage = true
+      } else if (relation === 'applied') {
+        // 내가 지원한 방: 서버에서 userNo 기준으로만 조회, 필터링/정렬은 FE에서 처리
+        url = getApiUrl('/api/rooms/me/applied')
       } else {
-        params.set('sort', 'CREATED_AT')
+        // joined 탭 = 내가 관심(좋아요)한 방
+        url = getApiUrl('/api/rooms/me/liked')
       }
 
-      const url = `${getApiUrl('/api/rooms')}?${params.toString()}`
       console.log('[rooms] request', {
         relation,
         url,
@@ -1086,15 +1101,22 @@ const RoomSearchPage = () => {
         console.error('[rooms] failed to parse json', { relation, url, contentType, rawBody }, e)
         throw new Error('서버 응답(JSON)을 파싱하지 못했습니다.')
       }
-      // ResponseEntity<CursorPage<FindRoomsResponse>> 형식: { items, nextCursor, hasNext }
-      const list: ApiRoom[] = data?.items ?? []
+      // RECRUITING: ResponseEntity<CursorPage<FindRoomsResponse>> 형식: { items, nextCursor, hasNext }
+      // APPLIED / JOINED: ResponseEntity<List<FindRoomsResponse>> 형식
+      const list: ApiRoom[] = expectsCursorPage
+        ? (data?.items ?? [])
+        : (Array.isArray(data) ? data : [])
       const mapped = list.map(mapApiRoom)
 
       if (relation === 'recruiting') {
         setRecruitingRooms(mapped)
       }
       if (relation === 'applied') setAppliedRooms(mapped)
-      if (relation === 'joined') setJoinedRooms(mapped)
+      if (relation === 'joined') {
+        setJoinedRooms(mapped)
+        // 서버 기준으로 좋아요 상태를 동기화
+        setLikedRoomIds(new Set(mapped.map((r) => r.id)))
+      }
 
       if (opts?.requestKey) lastFetchedKeyRef.current[relation] = opts.requestKey
     } catch (err) {
@@ -1507,7 +1529,7 @@ const RoomSearchPage = () => {
                     </div>
                     <button
                       onClick={async () => {
-                        const isFavorite = joinedRooms.some((joined) => joined.id === room.id)
+                        const isFavorite = likedRoomIds.has(room.id)
                         
                         try {
                           const token = localStorage.getItem('accessToken')
@@ -1528,8 +1550,13 @@ const RoomSearchPage = () => {
                             })
 
                             if (res.ok) {
-                              // 서버 상태 기준으로 관심 있는 방 목록 재조회
-                              fetchRooms('joined')
+                              setLikedRoomIds((prev) => {
+                                const next = new Set(prev)
+                                next.delete(room.id)
+                                return next
+                              })
+                              // 서버 기준 관심 방 목록도 동기화
+                              fetchRooms('joined', { showLoading: false })
                             }
                           } else {
                             // 관심 있는 방으로 추가
@@ -1542,8 +1569,12 @@ const RoomSearchPage = () => {
                             })
 
                             if (res.ok) {
-                              // 서버 상태 기준으로 관심 있는 방 목록 재조회
-                              fetchRooms('joined')
+                              setLikedRoomIds((prev) => {
+                                const next = new Set(prev)
+                                next.add(room.id)
+                                return next
+                              })
+                              fetchRooms('joined', { showLoading: false })
                             }
                           }
                         } catch (err) {
@@ -1553,7 +1584,7 @@ const RoomSearchPage = () => {
                       className="p-1 -m-1 text-gray-400 hover:text-yellow-500 transition-colors"
                     >
                       <Star 
-                        className={`w-5 h-5 ${joinedRooms.some((joined) => joined.id === room.id) ? 'fill-yellow-500/30 text-yellow-500' : ''}`}
+                        className={`w-5 h-5 ${likedRoomIds.has(room.id) ? 'fill-yellow-500/30 text-yellow-500' : ''}`}
                       />
                     </button>
                   </div>
@@ -1857,7 +1888,7 @@ const RoomSearchPage = () => {
                     </div>
                     <button
                       onClick={async () => {
-                        const isFavorite = joinedRooms.some((joined) => joined.id === room.id)
+                        const isFavorite = likedRoomIds.has(room.id)
                         
                         try {
                           const token = localStorage.getItem('accessToken')
@@ -1878,8 +1909,14 @@ const RoomSearchPage = () => {
                             })
 
                             if (res.ok) {
-                              // 서버 상태 기준으로 관심 있는 방 목록 재조회
-                              fetchRooms('joined')
+                              // 현재 탭에서 즉시 제거
+                              setJoinedRooms((prev) => prev.filter((r) => r.id !== room.id))
+                              setLikedRoomIds((prev) => {
+                                const next = new Set(prev)
+                                next.delete(room.id)
+                                return next
+                              })
+                              fetchRooms('joined', { showLoading: false })
                             }
                           } else {
                             // 관심 있는 방으로 추가
@@ -1892,8 +1929,12 @@ const RoomSearchPage = () => {
                             })
 
                             if (res.ok) {
-                              // 서버 상태 기준으로 관심 있는 방 목록 재조회
-                              fetchRooms('joined')
+                              setLikedRoomIds((prev) => {
+                                const next = new Set(prev)
+                                next.add(room.id)
+                                return next
+                              })
+                              fetchRooms('joined', { showLoading: false })
                             }
                           }
                         } catch (err) {
@@ -1903,7 +1944,7 @@ const RoomSearchPage = () => {
                       className="p-1 -m-1 text-gray-400 hover:text-yellow-500 transition-colors"
                     >
                       <Star 
-                        className={`w-5 h-5 ${joinedRooms.some((joined) => joined.id === room.id) ? 'fill-yellow-500/30 text-yellow-500' : ''}`}
+                        className={`w-5 h-5 ${likedRoomIds.has(room.id) ? 'fill-yellow-500/30 text-yellow-500' : ''}`}
                       />
                     </button>
                   </div>
