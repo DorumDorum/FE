@@ -404,7 +404,7 @@ const HomePage = () => {
                     <div
                       key={day}
                       className={`text-center text-xs font-medium py-2 ${
-                        index === 0 ? 'text-red-500' : index === 6 ? 'text-blue-500' : 'text-gray-600'
+                        index === 0 ? 'text-red-400' : index === 6 ? 'text-blue-400' : 'text-gray-600'
                       }`}
                     >
                       {day}
@@ -429,7 +429,13 @@ const HomePage = () => {
                       const isCurrentMonth = isSameMonth(day, currentDate)
                       const isToday = isSameDay(day, new Date())
                       const dayEvents = calendarEvents.filter(event => isSameDay(event.date, day))
-                      
+                      const isSunday = getDay(day) === 0
+                      const isSaturday = getDay(day) === 6
+                      // 이번 달이 아닌 날은 연하게, 일·토는 이번 달이면 진하게 / 다른 달이면 연하게
+                      const dayNumColor = !isCurrentMonth
+                        ? (isSunday ? 'text-red-200' : isSaturday ? 'text-blue-200' : '')
+                        : (isSunday ? 'text-red-400' : isSaturday ? 'text-blue-400' : '')
+
                       return (
                         <div
                           key={index}
@@ -437,9 +443,7 @@ const HomePage = () => {
                             !isCurrentMonth ? 'text-gray-300' : 'text-gray-900'
                           } ${isToday ? 'bg-blue-50 rounded' : ''}`}
                         >
-                          <div className={`text-xs font-medium mb-1 ${
-                            getDay(day) === 0 ? 'text-red-500' : getDay(day) === 6 ? 'text-blue-500' : ''
-                          }`}>
+                          <div className={`text-xs font-medium mb-1 ${dayNumColor}`}>
                             {format(day, 'd')}
                           </div>
                           {dayEvents.length > 0 && (
