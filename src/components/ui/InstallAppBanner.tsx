@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Download, X, MoreVertical } from 'lucide-react'
 
+// Minimal 타입 정의 (브라우저 실제 BeforeInstallPromptEvent를 위한 로컬 타입)
+type BeforeInstallPromptEvent = Event & {
+  readonly platforms?: string[]
+  prompt(): Promise<{ outcome: 'accepted' | 'dismissed' }>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
+}
+
 const DISMISS_KEY = 'pwa-install-banner-dismissed'
 const DISMISS_DAYS = 7
 
