@@ -24,9 +24,9 @@ const HomePage = () => {
   useEffect(() => {
     const fetchMyRoom = async () => {
       try {
-        const token = localStorage.getItem('accessToken')
+        const isLoggedIn = !!localStorage.getItem('isLoggedIn')
         // 비회원은 방 정보 조회하지 않음
-        if (!token) {
+        if (!isLoggedIn) {
           setHasRoom(null) // null = 비회원
           setLoading(false)
           return
@@ -35,7 +35,6 @@ const HomePage = () => {
         // 1) CheckMyRoom 먼저 호출 - 방 존재 여부만 확인 (404 없음)
         const existsRes = await fetch(getApiUrl('/api/rooms/me/exists'), {
           credentials: 'include',
-          headers: { Authorization: `Bearer ${token}` },
         })
 
         if (existsRes.status === 401) {
@@ -67,7 +66,6 @@ const HomePage = () => {
         // 2) 방이 있을 때만 LoadMyRoom 호출 (상세 정보)
         const res = await fetch(getApiUrl('/api/rooms/me'), {
           credentials: 'include',
-          headers: { Authorization: `Bearer ${token}` },
         })
 
         const contentType = res.headers.get('content-type') ?? ''
@@ -102,9 +100,6 @@ const HomePage = () => {
   useEffect(() => {
     const fetchCalendarEvents = async () => {
       try {
-        const token = localStorage.getItem('accessToken')
-        // 비회원도 학사일정 조회 가능
-
         setLoadingCalendar(true)
         
         // 현재 월의 시작일과 종료일 계산
@@ -115,17 +110,10 @@ const HomePage = () => {
         const startDateStr = format(monthStart, 'yyyy-MM-dd')
         const endDateStr = format(monthEnd, 'yyyy-MM-dd')
 
-        const headers: HeadersInit = {
-          'Content-Type': 'application/json',
-        }
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`
-        }
         const res = await fetch(
           `${getApiUrl('/api/calendar/events')}?startDate=${startDateStr}&endDate=${endDateStr}`,
           {
             credentials: 'include',
-            headers,
           }
         )
 
@@ -165,20 +153,10 @@ const HomePage = () => {
   useEffect(() => {
     const fetchNotices = async () => {
       try {
-        const token = localStorage.getItem('accessToken')
-        // 비회원도 공지사항 조회 가능
-
         setLoadingNotices(true)
 
-        const headers: HeadersInit = {
-          'Content-Type': 'application/json',
-        }
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`
-        }
         const res = await fetch(getApiUrl('/api/notices'), {
           credentials: 'include',
-          headers,
         })
 
         if (res.ok) {

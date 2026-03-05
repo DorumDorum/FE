@@ -43,14 +43,8 @@ const LoginPage = () => {
           throw new Error(msg)
         }
 
-        // AuthTokenResponse 형식: { accessToken } 직접 접근 (refreshToken은 HttpOnly 쿠키)
-        const accessToken = data?.accessToken
-        if (accessToken) localStorage.setItem('accessToken', accessToken)
-
-        if (!accessToken) {
-          throw new Error('토큰이 없습니다. 관리자에게 문의해주세요.')
-        }
-
+        // 쿠키 기반 로그인 성공
+        localStorage.setItem('isLoggedIn', 'true')
         navigate('/home', { replace: true })
       } catch (err) {
         if (err instanceof Error) {

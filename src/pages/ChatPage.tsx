@@ -3,7 +3,7 @@ import GuestOnlyMessage from '@/components/ui/GuestOnlyMessage'
 import { MessageCircle } from 'lucide-react'
 
 const ChatPage = () => {
-  const isGuest = !localStorage.getItem('accessToken')
+  const isGuest = !localStorage.getItem('isLoggedIn')
 
   if (isGuest) {
     return (

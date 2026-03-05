@@ -14,25 +14,11 @@ const NoticeDetailPage = () => {
   useEffect(() => {
     const fetchNotice = async () => {
       try {
-        const token = localStorage.getItem('accessToken')
-        if (!token) {
-          navigate('/login', { replace: true })
-          return
-        }
-
         setLoading(true)
 
         const res = await fetch(getApiUrl('/api/notices'), {
           credentials: 'include',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         })
-
-        if (res.status === 401) {
-          navigate('/login', { replace: true })
-          return
-        }
 
         if (res.ok) {
           const contentType = res.headers.get('content-type') ?? ''

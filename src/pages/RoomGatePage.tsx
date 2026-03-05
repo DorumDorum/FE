@@ -9,17 +9,14 @@ const RoomGatePage = () => {
   useEffect(() => {
     const checkRoomExist = async () => {
       try {
-        const token = localStorage.getItem('accessToken')
-        if (!token) {
+        const isLoggedIn = !!localStorage.getItem('isLoggedIn')
+        if (!isLoggedIn) {
           navigate('/login', { replace: true })
           return
         }
 
         const res = await fetch(getApiUrl('/api/rooms/me/exists'), {
           credentials: 'include',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         })
 
         if (res.status === 401) {

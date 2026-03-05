@@ -20,12 +20,6 @@ const NotificationsPage = () => {
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
-        const token = localStorage.getItem('accessToken')
-        if (!token) {
-          navigate('/login', { replace: true })
-          return
-        }
-
         setLoading(true)
 
         // TODO: 실제 알림 API로 교체 (예: /api/notifications)

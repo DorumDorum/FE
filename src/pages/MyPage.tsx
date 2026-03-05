@@ -65,19 +65,8 @@ const MyPage = () => {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const token = localStorage.getItem('accessToken')
-        if (!token) {
-          setIsGuest(true)
-          setLoading(false)
-          return
-        }
-        setIsGuest(false)
-
         const res = await fetch(getApiUrl('/api/users/profile/me'), {
           credentials: 'include',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         })
 
         if (res.status === 401) {

@@ -6,14 +6,5 @@ const apiClient = axios.create({
   withCredentials: true,
 })
 
-// localStorage.accessToken이 있으면 Authorization 헤더에 자동으로 붙입니다.
-apiClient.interceptors.request.use((config) => {
-  const accessToken = localStorage.getItem('accessToken')
-  if (accessToken) {
-    config.headers.Authorization = `Bearer ${accessToken}`
-  }
-  return config
-})
-
 export default apiClient
 

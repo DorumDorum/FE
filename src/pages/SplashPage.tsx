@@ -26,11 +26,8 @@ const SplashPage = () => {
         if (isCancelled) return
 
         if (res.ok) {
-          // 토큰 재발급 성공
-          const data = await res.json()
-          const newAccessToken = data?.accessToken
-
-          if (newAccessToken) localStorage.setItem('accessToken', newAccessToken)
+          // 토큰 재발급 성공 (쿠키 기준)
+          localStorage.setItem('isLoggedIn', 'true')
 
           // 홈 화면으로 리다이렉트
           fadeTimer = setTimeout(() => setIsFadingOut(true), 1300)
@@ -39,7 +36,7 @@ const SplashPage = () => {
           }, 1900)
         } else {
           // 토큰 재발급 실패 (만료 등) - intro로 이동
-          localStorage.removeItem('accessToken')
+          localStorage.removeItem('isLoggedIn')
           fadeTimer = setTimeout(() => setIsFadingOut(true), 1300)
           navTimer = setTimeout(() => {
             if (!isCancelled) navigate('/intro', { replace: true })
@@ -49,7 +46,7 @@ const SplashPage = () => {
         // 네트워크 오류 등 - intro로 이동
         if (isCancelled) return
         console.error('Auto login failed:', error)
-        localStorage.removeItem('accessToken')
+        localStorage.removeItem('isLoggedIn')
         fadeTimer = setTimeout(() => setIsFadingOut(true), 1300)
         navTimer = setTimeout(() => {
           if (!isCancelled) navigate('/intro', { replace: true })
