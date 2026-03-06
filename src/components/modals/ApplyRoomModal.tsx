@@ -42,17 +42,11 @@ const ApplyRoomModal = ({ onClose, roomInfo, roomId, onSuccess }: ApplyRoomModal
 
     setIsSubmitting(true)
     try {
-      const token = localStorage.getItem('accessToken')
-      if (!token) {
-        onClose()
-        return
-      }
-
       const res = await fetch(getApiUrl(`/api/rooms/${roomId}/join-request`), {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           introduction: formData.introduction.trim(),

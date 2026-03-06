@@ -184,8 +184,8 @@ const MyRoomPage = () => {
   useEffect(() => {
     const fetchMyRoom = async () => {
       try {
-        const token = localStorage.getItem('accessToken')
-        if (!token) {
+        const isLoggedIn = !!localStorage.getItem('isLoggedIn')
+        if (!isLoggedIn) {
           setIsGuest(true)
           setLoading(false)
           return
@@ -195,7 +195,6 @@ const MyRoomPage = () => {
         // 1) CheckMyRoom 먼저 호출 - 방 없으면 LoadMyRoom 호출하지 않음
         const existsRes = await fetch(getApiUrl('/api/rooms/me/exists'), {
           credentials: 'include',
-          headers: { Authorization: `Bearer ${token}` },
         })
 
         if (existsRes.status === 401) {
@@ -214,7 +213,7 @@ const MyRoomPage = () => {
           return
         }
 
-        // ResponseEntity<CheckMyRoomResponse> 형식: 직접 접근
+        // CheckMyRoom 응답에서 방 존재 여부 확인
         const existsPayload = existsData
         if (!existsPayload?.isExist) {
           setRoom(null)
@@ -225,7 +224,6 @@ const MyRoomPage = () => {
         // 2) 방이 있을 때만 LoadMyRoom 호출 (쿼리 방지)
         const res = await fetch(getApiUrl('/api/rooms/me'), {
           credentials: 'include',
-          headers: { Authorization: `Bearer ${token}` },
         })
 
         const rawBody = await res.text()
@@ -270,14 +268,8 @@ const MyRoomPage = () => {
 
     const fetchRoomRule = async () => {
       try {
-        const token = localStorage.getItem('accessToken')
-        if (!token) return
-
         const res = await fetch(getApiUrl(`/api/rooms/${effectiveRoomNo}/rule`), {
           credentials: 'include',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         })
 
         if (res.status === 401) return
@@ -850,14 +842,8 @@ const MyRoomPage = () => {
 
     const fetchRoommates = async () => {
       try {
-        const token = localStorage.getItem('accessToken')
-        if (!token) return
-
         const res = await fetch(getApiUrl('/api/rooms/me/roommates'), {
           credentials: 'include',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         })
 
         if (res.status === 401) return
@@ -902,17 +888,8 @@ const MyRoomPage = () => {
     const fetchApplicants = async () => {
       try {
         setApplicantsLoading(true)
-        const token = localStorage.getItem('accessToken')
-        if (!token) {
-          navigate('/login', { replace: true })
-          return
-        }
-
         const res = await fetch(getApiUrl(`/api/rooms/${effectiveRoomNo}/applications`), {
           credentials: 'include',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         })
 
         if (res.status === 401) {
@@ -1140,18 +1117,11 @@ const MyRoomPage = () => {
                   onBlur={async () => {
                     if (editingTitle.trim() && editingTitle.trim() !== room.title) {
                       try {
-                        const token = localStorage.getItem('accessToken')
-                        if (!token) {
-                          navigate('/login', { replace: true })
-                          return
-                        }
-
                         const params = new URLSearchParams({ roomNo: String(room.roomNo) })
                         const updateRes = await fetch(`${getApiUrl('/api/rooms/me/title')}?${params.toString()}`, {
                           method: 'PUT',
                           credentials: 'include',
                           headers: {
-                            Authorization: `Bearer ${token}`,
                             'Content-Type': 'application/json',
                           },
                           body: JSON.stringify({
@@ -1313,13 +1283,6 @@ const MyRoomPage = () => {
                       }
 
                       try {
-                        const token = localStorage.getItem('accessToken')
-                        if (!token) {
-                          // toast.error('로그인이 필요합니다.')
-                          navigate('/login', { replace: true })
-                          return
-                        }
-
                         // 기본 정보에서 수용 인원과 생활관, 거주기간 추출
                         const basicInfoSection = checklistSections.find(section => section.title === '기본 정보')
                         const capacityItem = basicInfoSection?.items.find(item => item.label === '수용 인원')
@@ -1805,17 +1768,8 @@ const MyRoomPage = () => {
                   // 체크리스트를 항상 최신 상태로 보기 위해, 펼칠 때마다 해당 지원자의 체크리스트를 새로 로드
                   const loadChecklist = async () => {
                     try {
-                      const token = localStorage.getItem('accessToken')
-                      if (!token) {
-                        navigate('/login', { replace: true })
-                        return
-                      }
-
                       const res = await fetch(getApiUrl(`/api/users/${applicant.userNo}/checklist`), {
                         credentials: 'include',
-                        headers: {
-                          Authorization: `Bearer ${token}`,
-                        },
                       })
 
                       if (!res.ok) {
@@ -2100,22 +2054,13 @@ const MyRoomPage = () => {
                 
                 if (needsProfile || needsChecklist) {
                   try {
-                    const token = localStorage.getItem('accessToken')
-                    if (!token) return
-
                     // 프로필과 체크리스트를 병렬로 가져오기
                     const [profileRes, checklistRes] = await Promise.all([
                       needsProfile ? fetch(getApiUrl(`/api/users/profile/${mate.userNo}`), {
                         credentials: 'include',
-                        headers: {
-                          Authorization: `Bearer ${token}`,
-                        },
                       }) : Promise.resolve(null),
                       needsChecklist ? fetch(getApiUrl(`/api/users/${mate.userNo}/checklist`), {
                         credentials: 'include',
-                        headers: {
-                          Authorization: `Bearer ${token}`,
-                        },
                       }) : Promise.resolve(null),
                     ])
 
@@ -2507,19 +2452,12 @@ const MyRoomPage = () => {
                   if (!applicantToAccept || !room?.roomNo) return
                   
                   try {
-                    const token = localStorage.getItem('accessToken')
-                    if (!token) {
-                      // toast.error('로그인이 필요합니다.')
-                      return
-                    }
-
                     const roomNo = String(room.roomNo)
                     const response = await fetch(
                       getApiUrl(`/api/rooms/${roomNo}/join-request/${applicantToAccept.requestNo}/approve`),
                       {
                         method: 'POST',
                         headers: {
-                          'Authorization': `Bearer ${token}`,
                           'Content-Type': 'application/json',
                         },
                         credentials: 'include',
@@ -2570,18 +2508,11 @@ const MyRoomPage = () => {
                   if (!applicantToReject) return
                   
                   try {
-                    const token = localStorage.getItem('accessToken')
-                    if (!token) {
-                      // toast.error('로그인이 필요합니다.')
-                      return
-                    }
-
                     const response = await fetch(
                       getApiUrl(`/api/join-request/${applicantToReject.requestNo}/reject`),
                       {
                         method: 'POST',
                         headers: {
-                          'Authorization': `Bearer ${token}`,
                           'Content-Type': 'application/json',
                         },
                         credentials: 'include',
@@ -2636,20 +2567,10 @@ const MyRoomPage = () => {
                   }
 
                   try {
-                    const token = localStorage.getItem('accessToken')
-                    if (!token) {
-                      // toast.error('로그인이 필요합니다.')
-                      navigate('/login', { replace: true })
-                      return
-                    }
-
                     const params = new URLSearchParams({ roomNo: String(room.roomNo) })
                     const res = await fetch(`${getApiUrl('/api/rooms/me/confirm')}?${params.toString()}`, {
                       method: 'POST',
                       credentials: 'include',
-                      headers: {
-                        Authorization: `Bearer ${token}`,
-                      },
                     })
 
                     if (res.status === 401) {

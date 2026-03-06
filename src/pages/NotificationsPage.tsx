@@ -3,11 +3,10 @@ import { ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import BottomNavigationBar from '@/components/ui/BottomNavigationBar'
 import SectionLoading from '@/components/ui/SectionLoading'
+import { NotificationEvent } from '@/services/notification'
 
-interface NotificationItem {
+type NotificationItem = Required<Pick<NotificationEvent, 'title' | 'body'>> & {
   id: number
-  title: string
-  body: string
   createdAt: string
   read: boolean
 }
@@ -18,39 +17,9 @@ const NotificationsPage = () => {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    const fetchNotifications = async () => {
-      try {
-        setLoading(true)
-
-        // TODO: 실제 알림 API로 교체 (예: /api/notifications)
-        // 일단은 더미 데이터로 UI만 구성
-        const dummy: NotificationItem[] = [
-          {
-            id: 1,
-            title: '새 룸메이트 지원 요청',
-            body: '도룸도룸 302호 방에 새로운 지원자가 있어요.',
-            createdAt: '방금 전',
-            read: false,
-          },
-          {
-            id: 2,
-            title: '공지사항 업데이트',
-            body: '생활 수칙이 일부 변경되었어요. 확인해 주세요.',
-            createdAt: '1시간 전',
-            read: true,
-          },
-        ]
-
-        setNotifications(dummy)
-      } catch (e) {
-        console.error('[notifications] fetch error', e)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchNotifications()
-  }, [navigate])
+    // TODO: 전역 알림 상태를 도입하면 여기에서 구독해서 렌더링하도록 변경
+    setLoading(false)
+  }, [])
 
 
   return (

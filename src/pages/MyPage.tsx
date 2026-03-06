@@ -63,6 +63,8 @@ const MyPage = () => {
   const [checklistBeforeEdit, setChecklistBeforeEdit] = useState<ChecklistSection[] | null>(null)
 
   useEffect(() => {
+    if (activeTab !== '프로필') return
+
     const fetchProfile = async () => {
       try {
         const res = await fetch(getApiUrl('/api/users/profile/me'), {
@@ -114,7 +116,7 @@ const MyPage = () => {
     }
 
     void fetchProfile()
-  }, [navigate])
+  }, [navigate, activeTab])
 
   // 기본 체크리스트 템플릿 생성 함수
   const createDefaultChecklistTemplate = (): ChecklistSection[] => {
@@ -303,19 +305,15 @@ const MyPage = () => {
 
   // 나의 체크리스트 정보 가져오기
   useEffect(() => {
+    if (activeTab !== '체크리스트') return
+
     const fetchMyChecklist = async () => {
       try {
-        const token = localStorage.getItem('accessToken')
-        if (!token) return
-
         // 먼저 기본 템플릿으로 초기화
         const defaultTemplate = createDefaultChecklistTemplate()
 
         const res = await fetch(getApiUrl('/api/users/me/checklist'), {
           credentials: 'include',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         })
 
         if (res.ok) {
@@ -896,7 +894,7 @@ const MyPage = () => {
     }
 
     void fetchMyChecklist()
-  }, [])
+  }, [activeTab])
 
   // 체크리스트 등록 후 다시 불러오기
   const handleChecklistCreated = () => {
@@ -919,17 +917,10 @@ const MyPage = () => {
 
     try {
       setIsSubmitting(true)
-      const token = localStorage.getItem('accessToken')
-      if (!token) {
-        navigate('/login', { replace: true })
-        return
-      }
-
       const res = await fetch(getApiUrl('/api/users/profile'), {
         method: 'PATCH',
         credentials: 'include',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -971,7 +962,6 @@ const MyPage = () => {
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('accessToken')
     navigate('/login', { replace: true })
   }
 
@@ -1070,12 +1060,6 @@ const MyPage = () => {
     if (isSavingChecklist) return
 
     try {
-      const token = localStorage.getItem('accessToken')
-      if (!token) {
-        navigate('/login', { replace: true })
-        return
-      }
-
       // 이전 값과 같으면 API 요청 없이 편집 모드만 해제
       if (
         checklistBeforeEdit &&
@@ -1291,7 +1275,6 @@ const MyPage = () => {
         method: 'PUT',
         credentials: 'include',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestBody),

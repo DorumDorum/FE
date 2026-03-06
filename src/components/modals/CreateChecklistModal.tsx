@@ -203,11 +203,6 @@ const CreateChecklistModal = ({ onClose, onCreated }: CreateChecklistModalProps)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const token = localStorage.getItem('accessToken')
-    if (!token) {
-      return
-    }
-
     // 에러 필드 초기화
     const newErrorFields = new Set<string>()
 
@@ -431,15 +426,14 @@ const CreateChecklistModal = ({ onClose, onCreated }: CreateChecklistModalProps)
     }
 
     try {
-      const res = await fetch(getApiUrl('/api/users/me/checklist'), {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      })
+    const res = await fetch(getApiUrl('/api/users/me/checklist'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    })
 
       if (res.status === 401) {
         return

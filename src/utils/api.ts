@@ -1,4 +1,5 @@
-const API_BASE_URL = 'https://api.dorumdorum.com'
+// const API_BASE_URL = 'https://api.dorumdorum.com'
+const API_BASE_URL = 'http://localhost:8080'
 
 /**
  * API 엔드포인트 전체 URL을 생성합니다.

@@ -265,11 +265,6 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const token = localStorage.getItem('accessToken')
-    if (!token) {
-      return
-    }
-
     // 에러 필드 초기화
     const newErrorFields = new Set<string>()
 
@@ -517,7 +512,6 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
         method: 'POST',
         credentials: 'include',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
