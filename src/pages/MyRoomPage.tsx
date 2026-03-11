@@ -1500,7 +1500,6 @@ const MyRoomPage = () => {
                           method: 'PUT',
                           credentials: 'include',
                           headers: {
-                            Authorization: `Bearer ${token}`,
                             'Content-Type': 'application/json',
                           },
                           body: JSON.stringify({
@@ -1537,11 +1536,8 @@ const MyRoomPage = () => {
                           // capacity나 roomType이 변경되지 않았어도 RoomRule은 다시 불러와야 함
                           const effectiveRoomNo = String(room.roomNo)
                           const params = new URLSearchParams({ roomNo: effectiveRoomNo })
-                          const refreshRes = await fetch(`getApiUrl('/api/rooms/me/rule?${params.toString()}`, {
+                          const refreshRes = await fetch(getApiUrl(`/api/rooms/me/rule?${params.toString()}`), {
                             credentials: 'include',
-                            headers: {
-                              Authorization: `Bearer ${token}`,
-                            },
                           })
                           if (refreshRes.ok) {
                             const refreshData = await refreshRes.json()

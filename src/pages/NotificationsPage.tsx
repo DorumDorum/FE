@@ -13,7 +13,7 @@ type NotificationItem = Required<Pick<NotificationEvent, 'title' | 'body'>> & {
 
 const NotificationsPage = () => {
   const navigate = useNavigate()
-  const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [notifications] = useState<NotificationItem[]>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
