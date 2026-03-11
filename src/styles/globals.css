@@ -24,6 +24,11 @@
   to { opacity: 1; transform: scale(1); }
 }
 
+@keyframes slideDownFromTop {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .animate-fade-in {
   animation: fadeIn 0.6s ease-out forwards;
 }
@@ -38,6 +43,10 @@
 
 .animate-scale-in {
   animation: scaleIn 0.6s ease-out forwards;
+}
+
+.animate-slide-down-from-top {
+  animation: slideDownFromTop 0.35s ease-out forwards;
 }
 
 @layer base {
@@ -73,6 +82,36 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+  }
+
+  /* SSE 토스트: 상단 중앙 배치 */
+  .sse-toast-container {
+    position: fixed !important;
+    top: calc(env(safe-area-inset-top, 0px) + 1rem) !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: calc(100vw - 2rem) !important;
+    max-width: min(400px, calc(100vw - 2rem)) !important;
+    padding: 0 1rem !important;
+    z-index: 9999;
+    pointer-events: none;
+    min-height: 4rem;
+  }
+  .sse-toast-container > * {
+    pointer-events: auto;
+    position: absolute !important;
+    top: 0 !important;
+    left: 1rem !important;
+    right: 1rem !important;
+    width: calc(100% - 2rem) !important;
+    max-width: 100% !important;
+    animation: slideDownFromTop 0.35s ease-out forwards;
+  }
+  .sse-toast-container > *:first-child {
+    z-index: 10;
+  }
+  .sse-toast-container > *:not(:first-child) {
+    z-index: 1;
   }
 
   /* 데스크톱에서 모바일 프리뷰 */

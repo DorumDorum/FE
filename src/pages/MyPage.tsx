@@ -6,6 +6,7 @@ import SectionLoading from '../components/ui/SectionLoading'
 import GuestOnlyMessage from '../components/ui/GuestOnlyMessage'
 import CreateChecklistModal from '../components/modals/CreateChecklistModal'
 import { getApiUrl } from '../utils/api'
+import { AUTH_CHANGE_EVENT } from '@/services/notification'
 // import toast from 'react-hot-toast' // 토스트 알림 비활성화
 
 const MyPage = () => {
@@ -962,6 +963,7 @@ const MyPage = () => {
   }
 
   const handleLogout = () => {
+    window.dispatchEvent(new CustomEvent(AUTH_CHANGE_EVENT, { detail: { loggedIn: false } }))
     navigate('/login', { replace: true })
   }
 

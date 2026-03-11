@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getApiUrl } from '../utils/api'
+import { AUTH_CHANGE_EVENT } from '@/services/notification'
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -43,7 +44,8 @@ const LoginPage = () => {
           throw new Error(msg)
         }
 
-        // 쿠키 기반 로그인 성공
+        // 쿠키 기반 로그인 성공 → SSE 알림 스트림 연결
+        window.dispatchEvent(new CustomEvent(AUTH_CHANGE_EVENT, { detail: { loggedIn: true } }))
         localStorage.setItem('isLoggedIn', 'true')
         navigate('/home', { replace: true })
       } catch (err) {

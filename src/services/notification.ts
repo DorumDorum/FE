@@ -1,9 +1,27 @@
 import apiClient from './apiClient'
 import { getApiUrl } from '@/utils/api'
 
-// 백엔드에 FCM 디바이스 토큰을 등록
-export const sendFirebaseToken = (firebaseToken: string) =>
-  apiClient.post('/api/notification', { firebaseToken })
+/** 로그인/로그아웃 시 App에서 SSE 연결 여부를 바꿀 때 사용하는 커스텀 이벤트 이름 */
+export const AUTH_CHANGE_EVENT = 'auth-change'
+
+const DEVICE_ID_STORAGE_KEY = 'dd_notification_device_id'
+
+/** SSE/FCM 디바이스 식별자. SSE 연결·FCM 등록 시 동일한 값 사용 */
+export const getOrCreateDeviceId = (): string => {
+  if (typeof window === 'undefined') return ''
+  const existing = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY)
+  if (existing) return existing
+  const generated =
+    window.crypto && 'randomUUID' in window.crypto
+      ? window.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  window.localStorage.setItem(DEVICE_ID_STORAGE_KEY, generated)
+  return generated
+}
+
+/** 백엔드에 FCM 디바이스 토큰 등록 (deviceId + fcmToken) */
+export const registerDeviceToken = (deviceId: string, fcmToken: string) =>
+  apiClient.put('/api/notifications/devices', { deviceId, fcmToken })
 
 export interface NotificationEvent {
   notificationNo: string

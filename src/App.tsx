@@ -1,5 +1,6 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
+import toast, { Toaster } from 'react-hot-toast'
 import RoomGatePage from '@/pages/RoomGatePage'
 import RoomSearchPage from '@/pages/RoomSearchPage'
 import MyRoomPage from '@/pages/MyRoomPage'
@@ -16,45 +17,95 @@ import NotificationsPage from '@/pages/NotificationsPage'
 import { useFcmToken } from '@/hooks/useFcmToken'
 import SwipeableTabLayout from '@/components/layout/SwipeableTabLayout'
 import InstallAppBanner from '@/components/ui/InstallAppBanner'
-import { NotificationEvent, subscribeNotificationStream } from '@/services/notification'
-
-const DEVICE_ID_STORAGE_KEY = 'dd_notification_device_id'
-
-const getOrCreateDeviceId = () => {
-  if (typeof window === 'undefined') return ''
-
-  const existing = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY)
-  if (existing) return existing
-
-  const generated =
-    window.crypto && 'randomUUID' in window.crypto
-      ? window.crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
-
-  window.localStorage.setItem(DEVICE_ID_STORAGE_KEY, generated)
-  return generated
-}
+import {
+  AUTH_CHANGE_EVENT,
+  getOrCreateDeviceId,
+  NotificationEvent,
+  subscribeNotificationStream,
+} from '@/services/notification'
+import { getApiUrl } from '@/utils/api'
 
 function App() {
-  // 앱 시작 시 한 번 FCM 토큰을 수집하고 서버에 등록
+  const navigate = useNavigate()
   useFcmToken()
 
-  // 앱 전체 수명 동안 유지되는 SSE 알림 스트림 연결
-  useEffect(() => {
-    const deviceId = getOrCreateDeviceId()
+  const sseUnsubscribeRef = useRef<(() => void) | null>(null)
 
-    const unsubscribe = subscribeNotificationStream(deviceId, (event: NotificationEvent) => {
-      // TODO: 전역 상태(예: zustand, context)에 쌓아서 필요한 화면에서 소비하도록 확장 가능
-      console.log('[SSE] notification event', event)
+  const connectSSE = () => {
+    if (sseUnsubscribeRef.current) return
+    const deviceId = getOrCreateDeviceId()
+    sseUnsubscribeRef.current = subscribeNotificationStream(deviceId, (event: NotificationEvent) => {
+      const path = event.redirectPath || '/notifications'
+      toast.custom(
+        (t) => (
+          <button
+            type="button"
+            onClick={() => {
+              toast.dismiss(t.id)
+              navigate(path)
+            }}
+            className="flex flex-col items-start gap-0.5 w-full max-w-full rounded-xl bg-blue-50 px-4 py-2.5 shadow-lg border border-blue-100 text-left hover:bg-blue-100 active:bg-blue-100 transition-colors"
+          >
+            <span className="font-semibold text-black truncate w-full">{event.title}</span>
+            {event.body && (
+              <span className="text-sm text-black line-clamp-2 w-full opacity-90">{event.body}</span>
+            )}
+          </button>
+        ),
+        { id: 'sse-notification', position: 'top-center', duration: 4000 }
+      )
     })
+  }
+
+  const disconnectSSE = () => {
+    if (sseUnsubscribeRef.current) {
+      sseUnsubscribeRef.current()
+      sseUnsubscribeRef.current = null
+    }
+  }
+
+  // 로그인된 상태에서만 SSE 연결. 포그라운드일 때만 연결, 백그라운드면 끊어서 FCM으로 전달.
+  useEffect(() => {
+    let cancelled = false
+
+    const checkAndConnect = async () => {
+      try {
+        const res = await fetch(getApiUrl('/api/users/profile/me'), { credentials: 'include' })
+        if (cancelled) return
+        if (res.ok && document.visibilityState === 'visible') connectSSE()
+        else if (!res.ok) disconnectSSE()
+      } catch {
+        if (!cancelled) disconnectSSE()
+      }
+    }
+
+    void checkAndConnect()
+
+    const onAuthChange = (e: Event) => {
+      const detail = (e as CustomEvent<{ loggedIn: boolean }>).detail
+      if (detail?.loggedIn && document.visibilityState === 'visible') connectSSE()
+      else disconnectSSE()
+    }
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void checkAndConnect()
+      else disconnectSSE()
+    }
+
+    window.addEventListener(AUTH_CHANGE_EVENT, onAuthChange)
+    document.addEventListener('visibilitychange', onVisibilityChange)
 
     return () => {
-      unsubscribe()
+      cancelled = true
+      window.removeEventListener(AUTH_CHANGE_EVENT, onAuthChange)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      disconnectSSE()
     }
   }, [])
 
   return (
     <div className="bg-white" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
+      <Toaster position="top-center" containerClassName="sse-toast-container" />
       <Routes>
         <Route path="/" element={<SplashPage />} />
         <Route path="/intro" element={<IntroPage />} />

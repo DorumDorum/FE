@@ -1,5 +1,6 @@
-// const API_BASE_URL = 'https://api.dorumdorum.com'
-const API_BASE_URL = 'http://localhost:8080'
+/** API 서버 베이스 URL. .env의 VITE_API_BASE_URL 또는 기본값 사용 */
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
 
 /**
  * API 엔드포인트 전체 URL을 생성합니다.

@@ -27,15 +27,13 @@ self.addEventListener('push', (event) => {
         const title = notification.title || 'DorumDorum';
         const body = notification.body || '';
         const image = notification.image;
-        const icon = notification.icon || '/vite.svg';
-        const badge = notification.badge || '/vite.svg';
+        const icon = notification.icon || '/logo.png';
         const clickAction = data.clickAction || notification.clickAction || '/';
         const tag = data.tag || notification.tag || 'dorumdorum';
 
         await self.registration.showNotification(title, {
           body,
           icon,
-          badge,
           image,
           data: {
             ...data,
