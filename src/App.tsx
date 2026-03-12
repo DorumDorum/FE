@@ -29,6 +29,19 @@ function App() {
   const navigate = useNavigate()
   useFcmToken()
 
+  // [DEBUG] 환경변수 주입 확인 (배포 후 제거)
+  useEffect(() => {
+    const env = {
+      VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL || '(fallback)',
+      VITE_FIREBASE_API_KEY: import.meta.env.VITE_FIREBASE_API_KEY ? '✓' : '✗',
+      VITE_FIREBASE_AUTH_DOMAIN: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ? '✓' : '✗',
+      VITE_FIREBASE_PROJECT_ID: import.meta.env.VITE_FIREBASE_PROJECT_ID ? '✓' : '✗',
+      VITE_FIREBASE_VAPID_KEY: import.meta.env.VITE_FIREBASE_VAPID_KEY ? '✓' : '✗',
+    }
+    console.warn('[ENV DEBUG] 환경변수:', env)
+    ;(window as unknown as Record<string, unknown>).__ENV_DEBUG__ = env
+  }, [])
+
   const sseUnsubscribeRef = useRef<(() => void) | null>(null)
 
   const connectSSE = () => {
