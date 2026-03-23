@@ -1048,7 +1048,7 @@ const MyRoomPage = () => {
     [room]
   )
   const displayCapacity = room ? `${room.capacity}인실` : ''
-  const displayMembers = room ? `${room.currentMateCount}/${room.capacity}명` : ''
+  const displayMembers = room ? `${roommates.length}/${room.capacity}명` : ''
   const displayStatus = room ? mapApiStatusToDisplay(room.roomStatus) : ''
   // const displayCreatedAt = room ? formatRelativeTime(room.createdAt) : '' // 사용되지 않음
   const displayResidencePeriod = room ? mapResidencePeriodToDisplay(room.residencePeriod) : ''
