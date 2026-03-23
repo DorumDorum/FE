@@ -23,43 +23,54 @@ const MessageBubble = ({ message, myUserNo, showTime = true }: Props) => {
 
   if (isMe) {
     return (
-      <div className="flex flex-col items-end mb-2">
-        <div className="max-w-[240px] rounded-2xl px-3 py-2 text-sm bg-[#3072E1] text-white rounded-br-sm">
-          <p className="whitespace-pre-wrap break-words">{message.content}</p>
-        </div>
-        {showTime && (
-          <div className="flex items-center gap-1 mt-0.5">
-            {(message.unreadCount ?? 0) > 0 && (
-              <span className="text-xs text-[#3072E1] font-medium leading-none">
-                {message.unreadCount}
-              </span>
-            )}
-            <span className="text-xs text-gray-400 leading-none">{time}</span>
+      <div className="flex flex-col items-end mb-2 pr-1">
+        <div className="flex items-end gap-1.5 justify-end">
+          {showTime && (
+            <div className="flex flex-col items-end gap-0.5 mb-0.5">
+              {(message.unreadCount ?? 0) > 0 && (
+                <span className="text-[10px] text-[#3072E1] font-bold leading-none">
+                  {message.unreadCount}
+                </span>
+              )}
+              <span className="text-[10px] text-gray-400 leading-none">{time}</span>
+            </div>
+          )}
+          <div className="max-w-[240px] rounded-2xl px-3 py-2 text-sm bg-[#3072E1] text-white rounded-tr-sm shadow-sm">
+            <p className="whitespace-pre-wrap break-words">{message.content}</p>
           </div>
-        )}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="flex items-end gap-1 mb-2 justify-start">
-      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 self-end mb-1">
-        <span className="text-blue-600 font-bold text-xs">?</span>
-      </div>
-      <div className="flex items-end gap-1">
-        <div className="max-w-[240px] rounded-2xl px-3 py-2 text-sm bg-gray-100 text-gray-900 rounded-bl-sm">
-          <p className="whitespace-pre-wrap break-words">{message.content}</p>
+    <div className="flex flex-col mb-3 pl-1">
+      <div className="flex items-start gap-2">
+        <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+          <span className="text-blue-500 font-bold text-sm">
+            {message.senderNickname?.charAt(0) || '?'}
+          </span>
         </div>
-        {showTime && (
-          <div className="flex flex-col items-start gap-0.5 mb-1">
-            {(message.unreadCount ?? 0) > 0 && (
-              <span className="text-xs text-[#3072E1] font-medium leading-none">
-                {message.unreadCount}
-              </span>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-semibold text-gray-700 ml-0.5">
+            {message.senderNickname || '알 수 없음'}
+          </span>
+          <div className="flex items-end gap-1.5">
+            <div className="max-w-[240px] rounded-2xl px-3 py-2 text-sm bg-white border border-gray-100 text-gray-900 rounded-tl-sm shadow-sm">
+              <p className="whitespace-pre-wrap break-words">{message.content}</p>
+            </div>
+            {showTime && (
+              <div className="flex flex-col items-start gap-0.5 mb-0.5">
+                {(message.unreadCount ?? 0) > 0 && (
+                  <span className="text-[10px] text-[#3072E1] font-bold leading-none">
+                    {message.unreadCount}
+                  </span>
+                )}
+                <span className="text-[10px] text-gray-400 leading-none">{time}</span>
+              </div>
             )}
-            <span className="text-xs text-gray-400 leading-none">{time}</span>
           </div>
-        )}
+        </div>
       </div>
     </div>
   )

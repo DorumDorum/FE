@@ -18,3 +18,8 @@ export const leaveChatRoom = (chatRoomNo: string) =>
 
 export const getOrCreateDirectChatRoom = (roomNo: string, applicantUserNo: string) =>
   apiClient.post<string>(`/api/rooms/${roomNo}/direct-chat/${applicantUserNo}`)
+
+export const getChatRoomMembers = (chatRoomNo: string) =>
+  apiClient.get<{ userNo: string; nickname: string; isHost: boolean }[]>(
+    `/api/chat/rooms/${chatRoomNo}/members`
+  )
