@@ -156,8 +156,19 @@ function App() {
 
     const onAuthChange = (e: Event) => {
       const detail = (e as CustomEvent<{ loggedIn: boolean }>).detail
-      if (detail?.loggedIn && document.visibilityState === 'visible') connectSSE()
-      else disconnectSSE()
+      if (detail?.loggedIn && document.visibilityState === 'visible') {
+        connectSSE()
+        const seq = ++chatRoomsSeqRef.current
+        getChatRooms()
+          .then((r) => {
+            if (seq < chatRoomsSeqRef.current) return
+            const rooms = Array.isArray(r.data) ? r.data : []
+            setChatRooms(rooms)
+          })
+          .catch(() => {})
+      } else {
+        disconnectSSE()
+      }
     }
 
     const onVisibilityChange = () => {
