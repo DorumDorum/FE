@@ -5,7 +5,8 @@ import BottomNavigationBar from '../components/ui/BottomNavigationBar'
 import SectionLoading from '../components/ui/SectionLoading'
 import GuestOnlyMessage from '../components/ui/GuestOnlyMessage'
 import { getApiUrl } from '../utils/api'
-// import toast from 'react-hot-toast' // 토스트 알림 비활성화
+import { getOrCreateDirectChatRoom } from '@/services/chatApi'
+import toast from 'react-hot-toast'
 
 const MyRoomPage = () => {
   const navigate = useNavigate()
@@ -117,6 +118,7 @@ const MyRoomPage = () => {
     userNo: string
   }>>([])
   const [applicantsLoading, setApplicantsLoading] = useState(false)
+  const [directChatLoadingId, setDirectChatLoadingId] = useState<string | null>(null)
   const [applicantChecklists, setApplicantChecklists] = useState<Record<string, ChecklistSection[]>>({}) // userNo를 키로 사용
   const [applicantOtherNotes, setApplicantOtherNotes] = useState<Record<string, string>>({}) // userNo를 키로 사용
   const [showConfirmAssignment, setShowConfirmAssignment] = useState(false) // 방 배정 확정 확인
@@ -1863,11 +1865,28 @@ const MyRoomPage = () => {
                     >
                       수락
                     </button>
-                    <button 
-                      onClick={() => navigate(`/chat/${applicant.id}`)}
-                      className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 transition-colors"
+                    <button
+                      onClick={async () => {
+                        if (!room?.roomNo) return
+                        setDirectChatLoadingId(applicant.userNo)
+                        try {
+                          const res = await getOrCreateDirectChatRoom(String(room.roomNo), applicant.userNo)
+                          const chatRoomNo = res.data
+                          if (chatRoomNo) {
+                            navigate(`/chats/${chatRoomNo}`)
+                          } else {
+                            toast.error('채팅방을 찾을 수 없습니다.')
+                          }
+                        } catch {
+                          toast.error('채팅방 조회에 실패했습니다.')
+                        } finally {
+                          setDirectChatLoadingId(null)
+                        }
+                      }}
+                      disabled={directChatLoadingId === applicant.userNo}
+                      className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 transition-colors disabled:opacity-50"
                     >
-                      채팅
+                      {directChatLoadingId === applicant.userNo ? '...' : '채팅'}
                     </button>
                     <button 
                       onClick={() => setApplicantToReject({ id: applicant.id, name: applicant.name, requestNo: applicant.requestNo })}
@@ -2450,7 +2469,7 @@ const MyRoomPage = () => {
                   try {
                     const roomNo = String(room.roomNo)
                     const response = await fetch(
-                      getApiUrl(`/api/rooms/${roomNo}/join-request/${applicantToAccept.requestNo}/approve`),
+                      getApiUrl(`/api/rooms/${roomNo}/request/${applicantToAccept.requestNo}/approve`),
                       {
                         method: 'POST',
                         headers: {
@@ -2502,10 +2521,10 @@ const MyRoomPage = () => {
               <button
                 onClick={async () => {
                   if (!applicantToReject) return
-                  
+
                   try {
                     const response = await fetch(
-                      getApiUrl(`/api/join-request/${applicantToReject.requestNo}/reject`),
+                      getApiUrl(`/api/request/${applicantToReject.requestNo}/reject`),
                       {
                         method: 'POST',
                         headers: {
