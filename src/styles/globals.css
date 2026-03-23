@@ -74,7 +74,7 @@
 
   #root {
     height: 100vh;
-    height: calc(var(--vh, 1vh) * 100); /* JavaScript로 설정된 실제 사용 가능한 높이 */
+    height: var(--vh, 100dvh); /* JavaScript로 설정된 실제 사용 가능한 높이 */
     max-width: 100%;
     margin: 0 auto;
     background: white;

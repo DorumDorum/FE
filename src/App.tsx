@@ -13,6 +13,7 @@ import IntroPage from '@/pages/IntroPage'
 import SignupFlowPage from '@/pages/SignupFlowPage'
 import LoginPage from '@/pages/LoginPage'
 import ChatPage from '@/pages/ChatPage'
+import ChatRoomPage from '@/pages/ChatRoomPage'
 import NotificationsPage from '@/pages/NotificationsPage'
 import { useFcmToken } from '@/hooks/useFcmToken'
 import SwipeableTabLayout from '@/components/layout/SwipeableTabLayout'
@@ -24,9 +25,12 @@ import {
   subscribeNotificationStream,
 } from '@/services/notification'
 import { getApiUrl } from '@/utils/api'
+import { useChatStore } from '@/store/chatStore'
+import { getChatRooms } from '@/services/chatApi'
 
 function App() {
   const navigate = useNavigate()
+  const { incrementUnreadCount, setChatRooms, updateRoomOnNewMessage } = useChatStore()
   useFcmToken()
 
   // [DEBUG] 환경변수 주입 확인 (배포 후 제거)
@@ -43,30 +47,67 @@ function App() {
   }, [])
 
   const sseUnsubscribeRef = useRef<(() => void) | null>(null)
+  const chatRoomsSeqRef = useRef(0)
 
   const connectSSE = () => {
     if (sseUnsubscribeRef.current) return
     const deviceId = getOrCreateDeviceId()
     sseUnsubscribeRef.current = subscribeNotificationStream(deviceId, (event: NotificationEvent) => {
       const path = event.redirectPath || '/notifications'
-      toast.custom(
-        (t) => (
-          <button
-            type="button"
-            onClick={() => {
-              toast.dismiss(t.id)
-              navigate(path)
-            }}
-            className="flex flex-col items-start gap-0.5 w-full max-w-full rounded-xl bg-blue-50 px-4 py-2.5 shadow-lg border border-blue-100 text-left hover:bg-blue-100 active:bg-blue-100 transition-colors"
-          >
-            <span className="font-semibold text-black truncate w-full">{event.title}</span>
-            {event.body && (
-              <span className="text-sm text-black line-clamp-2 w-full opacity-90">{event.body}</span>
-            )}
-          </button>
-        ),
-        { id: 'sse-notification', position: 'top-center', duration: 4000 }
-      )
+
+      // 새 채팅 메시지 알림 처리
+      if (event.type === 'NEW_MESSAGE_RECEIVED' && event.relatedId) {
+        const currentPath = window.location.pathname
+        // 서버에서 최신 채팅방 목록을 다시 fetch해 스토어 갱신
+        const seq = ++chatRoomsSeqRef.current
+        getChatRooms()
+          .then((r) => {
+            if (seq < chatRoomsSeqRef.current) return
+            const rooms = Array.isArray(r.data) ? r.data : []
+            setChatRooms(rooms)
+          })
+          .catch(() => {
+            // fetch 실패 시 incremental 업데이트로 fallback
+            if (!currentPath.endsWith(`/chats/${event.relatedId}`)) {
+              incrementUnreadCount(event.relatedId)
+            }
+            updateRoomOnNewMessage(event.relatedId!, {
+              messageNo: '',
+              chatRoomNo: event.relatedId!,
+              senderNo: '',
+              content: event.body ?? '',
+              messageType: 'TEXT',
+              sentAt: new Date().toISOString(),
+            })
+          })
+      }
+
+      // 현재 보고 있는 채팅방의 메시지 알림은 토스트 표시 안 함
+      const isInRelatedChatRoom =
+        event.type === 'NEW_MESSAGE_RECEIVED' &&
+        event.relatedId &&
+        window.location.pathname.endsWith(`/chats/${event.relatedId}`)
+
+      if (!isInRelatedChatRoom) {
+        toast.custom(
+          (t) => (
+            <button
+              type="button"
+              onClick={() => {
+                toast.dismiss(t.id)
+                navigate(path)
+              }}
+              className="flex flex-col items-start gap-0.5 w-full max-w-full rounded-xl bg-blue-50 px-4 py-2.5 shadow-lg border border-blue-100 text-left hover:bg-blue-100 active:bg-blue-100 transition-colors"
+            >
+              <span className="font-semibold text-black truncate w-full">{event.title}</span>
+              {event.body && (
+                <span className="text-sm text-black line-clamp-2 w-full opacity-90">{event.body}</span>
+              )}
+            </button>
+          ),
+          { id: 'sse-notification', position: 'top-center', duration: 4000 }
+        )
+      }
     })
   }
 
@@ -82,11 +123,30 @@ function App() {
     let cancelled = false
 
     const checkAndConnect = async () => {
+      if (localStorage.getItem('isLoggedIn') !== 'true') {
+        disconnectSSE()
+        return
+      }
       try {
         const res = await fetch(getApiUrl('/api/users/profile/me'), { credentials: 'include' })
         if (cancelled) return
-        if (res.ok && document.visibilityState === 'visible') connectSSE()
-        else if (!res.ok) disconnectSSE()
+        if (res.ok) {
+          if (document.visibilityState === 'visible') connectSSE()
+          // 채팅방 목록을 미리 로드해 두어 SSE 수신 시 뱃지가 즉시 갱신되도록 함
+          const seq = ++chatRoomsSeqRef.current
+          getChatRooms()
+            .then((r) => {
+              if (cancelled || seq < chatRoomsSeqRef.current) return
+              const rooms = Array.isArray(r.data) ? r.data : []
+              setChatRooms(rooms)
+            })
+            .catch(() => {})
+        } else {
+          disconnectSSE()
+          if (res.status === 401 || res.status === 404) {
+            localStorage.removeItem('isLoggedIn')
+          }
+        }
       } catch {
         if (!cancelled) disconnectSSE()
       }
@@ -96,8 +156,19 @@ function App() {
 
     const onAuthChange = (e: Event) => {
       const detail = (e as CustomEvent<{ loggedIn: boolean }>).detail
-      if (detail?.loggedIn && document.visibilityState === 'visible') connectSSE()
-      else disconnectSSE()
+      if (detail?.loggedIn && document.visibilityState === 'visible') {
+        connectSSE()
+        const seq = ++chatRoomsSeqRef.current
+        getChatRooms()
+          .then((r) => {
+            if (seq < chatRoomsSeqRef.current) return
+            const rooms = Array.isArray(r.data) ? r.data : []
+            setChatRooms(rooms)
+          })
+          .catch(() => {})
+      } else {
+        disconnectSSE()
+      }
     }
 
     const onVisibilityChange = () => {
@@ -117,7 +188,7 @@ function App() {
   }, [])
 
   return (
-    <div className="bg-white" style={{ height: 'calc(var(--vh, 1vh) * 100)' }}>
+    <div className="bg-white" style={{ height: 'var(--vh, 100dvh)' }}>
       <Toaster position="top-center" containerClassName="sse-toast-container" />
       <Routes>
         <Route path="/" element={<SplashPage />} />
@@ -130,6 +201,7 @@ function App() {
         
         {/* 채팅 */}
         <Route path="/chats" element={<SwipeableTabLayout><ChatPage /></SwipeableTabLayout>} />
+        <Route path="/chats/:chatRoomNo" element={<ChatRoomPage />} />
         
         {/* 알림 */}
         <Route path="/notifications" element={<NotificationsPage />} />

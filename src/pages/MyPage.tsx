@@ -67,14 +67,20 @@ const MyPage = () => {
     if (activeTab !== '프로필') return
 
     const fetchProfile = async () => {
+      if (localStorage.getItem('isLoggedIn') !== 'true') {
+        setIsGuest(true)
+        setLoading(false)
+        return
+      }
       try {
         const res = await fetch(getApiUrl('/api/users/profile/me'), {
           credentials: 'include',
         })
 
-        if (res.status === 401) {
+        if (res.status === 401 || res.status === 404) {
           setIsGuest(true)
           setLoading(false)
+          localStorage.removeItem('isLoggedIn')
           return
         }
 
