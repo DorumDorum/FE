@@ -42,7 +42,7 @@ const ApplyRoomModal = ({ onClose, roomInfo, roomId, onSuccess }: ApplyRoomModal
 
     setIsSubmitting(true)
     try {
-      const res = await fetch(getApiUrl(`/api/rooms/${roomId}/join-request`), {
+      const res = await fetch(getApiUrl(`/api/rooms/${roomId}/request`), {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -55,12 +55,16 @@ const ApplyRoomModal = ({ onClose, roomInfo, roomId, onSuccess }: ApplyRoomModal
       })
 
       if (!res.ok) {
+        const errorBody = await res.text().catch(() => '')
+        console.error('[rooms] apply room failed', res.status, errorBody)
+        alert('지원에 실패했습니다. 이미 지원했거나 방에 참여 중일 수 있습니다.')
         return
       }
       onSuccess?.()
       onClose()
     } catch (err) {
       console.error('[rooms] apply room error', err)
+      alert('지원 중 오류가 발생했습니다. 다시 시도해주세요.')
     } finally {
       setIsSubmitting(false)
     }

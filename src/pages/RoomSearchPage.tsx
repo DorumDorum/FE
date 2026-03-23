@@ -1183,7 +1183,7 @@ const RoomSearchPage = () => {
           ? selectedRoom.id.replace('room-', '')
           : selectedRoom.id
 
-        const res = await fetch(getApiUrl(`/api/rooms/${roomNo}/join-request`), {
+        const res = await fetch(getApiUrl(`/api/rooms/${roomNo}/request`), {
           method: 'DELETE',
           credentials: 'include',
         })
