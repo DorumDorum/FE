@@ -5,14 +5,20 @@ import { Client } from '@stomp/stompjs'
 import type { IMessage } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
 import toast from 'react-hot-toast'
-import { ChevronLeft, Menu, X, LogOut, User, Users } from 'lucide-react'
+import { ChevronLeft, Menu, X, LogOut, User, Users, Crown } from 'lucide-react'
 import MessageBubble from '@/components/chat/MessageBubble'
 import MessageInput from '@/components/chat/MessageInput'
-import { getChatMessages, markAsRead, leaveChatRoom } from '@/services/chatApi'
+import { getChatMessages, markAsRead, leaveChatRoom, getChatRoomMembers } from '@/services/chatApi'
 import { useChatStore } from '@/store/chatStore'
 import { API_BASE_URL } from '@/utils/api'
 import apiClient from '@/services/apiClient'
 import type { ChatMessage } from '@/types/chat'
+
+interface RoomMember {
+  userNo: string
+  nickname: string
+  isHost: boolean
+}
 
 const ChatRoomPage = () => {
   const { chatRoomNo } = useParams<{ chatRoomNo: string }>()
@@ -36,6 +42,7 @@ const ChatRoomPage = () => {
   const [connected, setConnected] = useState(false)
   const [showInfoPanel, setShowInfoPanel] = useState(false)
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
+  const [members, setMembers] = useState<RoomMember[]>([])
 
   const stompClientRef = useRef<Client | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -94,6 +101,21 @@ const ChatRoomPage = () => {
     }
   }, [loading])
 
+  // 멤버 목록 조회
+  const fetchMembers = useCallback(() => {
+    if (!chatRoomNo || isDirect) return
+    getChatRoomMembers(chatRoomNo)
+      .then(res => setMembers(res.data))
+      .catch(() => {})
+  }, [chatRoomNo, isDirect])
+
+  // 패널 열릴 때 멤버 목록 로드
+  useEffect(() => {
+    if (showInfoPanel && !isDirect) {
+      fetchMembers()
+    }
+  }, [showInfoPanel])
+
   // STOMP 연결
   useEffect(() => {
     if (!chatRoomNo) return
@@ -108,6 +130,11 @@ const ChatRoomPage = () => {
           const message: ChatMessage = JSON.parse(msg.body)
           appendMessage(chatRoomNo, message)
           updateRoomOnNewMessage(chatRoomNo, message)
+
+          // 시스템 메시지(입장/퇴장)이면 멤버 목록 갱신
+          if (message.messageType === 'SYSTEM' && showInfoPanelRef.current && !isDirect) {
+            fetchMembers()
+          }
 
           // 채팅방을 보고 있는 중이면 즉시 읽음 처리
           if (document.visibilityState === 'visible') {
@@ -141,6 +168,12 @@ const ChatRoomPage = () => {
       stompClientRef.current = null
     }
   }, [chatRoomNo])
+
+  // showInfoPanel을 ref로 STOMP 콜백에서 최신 값 참조
+  const showInfoPanelRef = useRef(showInfoPanel)
+  useEffect(() => {
+    showInfoPanelRef.current = showInfoPanel
+  }, [showInfoPanel])
 
   // 포그라운드 복귀 시 읽음 처리
   useEffect(() => {
@@ -317,8 +350,7 @@ const ChatRoomPage = () => {
                 </>
               ) : (
                 <>
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">그룹 채팅</p>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 mb-4">
                     <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
                       <Users className="w-6 h-6 text-blue-600" />
                     </div>
@@ -326,6 +358,28 @@ const ChatRoomPage = () => {
                       <p className="font-semibold text-gray-900">{currentRoom?.roomName ?? '그룹 채팅'}</p>
                       <p className="text-xs text-gray-400">그룹 채팅방</p>
                     </div>
+                  </div>
+
+                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
+                    멤버 {members.length > 0 ? `(${members.length})` : ''}
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    {members.map(member => (
+                      <div key={member.userNo} className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                          <User className="w-4 h-4 text-gray-500" />
+                        </div>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-sm font-medium text-gray-900 truncate">{member.nickname}</span>
+                          {member.isHost && (
+                            <Crown className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" />
+                          )}
+                          {member.userNo === myUserNo && (
+                            <span className="text-xs text-gray-400 flex-shrink-0">(나)</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </>
               )}

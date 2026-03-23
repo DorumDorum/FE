@@ -16,6 +16,7 @@ export interface ChatMessage {
   messageNo: string
   chatRoomNo: string
   senderNo: string
+  senderNickname?: string
   content: string
   messageType: 'TEXT' | 'SYSTEM'
   sentAt: string
