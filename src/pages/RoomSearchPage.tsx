@@ -934,7 +934,7 @@ const RoomSearchPage = () => {
     title: api.title || '방',
     roomType: mapApiRoomTypeToDisplay(api.roomType),
     capacity: api.capacity,
-    currentMembers: api.currentMateCount,
+    currentMembers: Math.min(api.currentMateCount, api.capacity),
     description: '',
     hostName: api.hostNickname || '',
     tags: api.additionalTag || [],
