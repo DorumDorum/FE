@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, Search, Plus, Filter, Star } from 'lucide-react'
 import BottomNavigationBar from '@/components/ui/BottomNavigationBar'
@@ -590,11 +590,6 @@ const RoomSearchPage = () => {
   const [likedRoomIds, setLikedRoomIds] = useState<Set<string>>(() => new Set())
   const [loadingTab, setLoadingTab] = useState<Relation | null>(null)
   const loadingDelayTimerRef = useRef<number | null>(null)
-  const lastFetchedKeyRef = useRef<Record<Relation, string | null>>({
-    recruiting: null,
-    applied: null,
-    joined: null,
-  })
 
   const resetFilters = () => {
     setFilters({ roomType: [], roomSize: [], residencePeriod: [], sort: 'recent', checklist: {} })
@@ -934,7 +929,7 @@ const RoomSearchPage = () => {
     title: api.title || '방',
     roomType: mapApiRoomTypeToDisplay(api.roomType),
     capacity: api.capacity,
-    currentMembers: api.currentMateCount,
+    currentMembers: Math.min(api.currentMateCount, api.capacity),
     description: '',
     hostName: api.hostNickname || '',
     tags: api.additionalTag || [],
@@ -962,7 +957,7 @@ const RoomSearchPage = () => {
     return `${y}-${m}-${d}`
   }
 
-  const fetchRooms = async (
+  const fetchRooms = useCallback(async (
     relation: Relation,
     opts?: { showLoading?: boolean; requestKey?: string }
   ) => {
@@ -977,49 +972,41 @@ const RoomSearchPage = () => {
       let url: string
       let expectsCursorPage = false
 
+      let fetchOptions: RequestInit = {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+
       if (relation === 'recruiting') {
-        // 공개 모집 방 목록: 서버에서 기본 정보 필터/정렬까지 처리
-        const params = new URLSearchParams()
-        const relationMap = {
-          recruiting: 'RECRUITING',
-          applied: 'APPLIED',
-          joined: 'LIKED',
-        } as const
-        params.set('relation', relationMap[relation])
+        const firstRoomType = filters.roomType[0]
+        const firstCapacity = filters.roomSize[0]
+        const firstResidencePeriod = filters.residencePeriod[0]
 
-        if (filters.roomType.length > 0) {
-          filters.roomType.forEach((type) => {
-            const apiRoomType = mapRoomTypeToApi(type)
-            if (apiRoomType) params.append('types', apiRoomType)
-          })
+        const requestBody = {
+          sortType: filters.sort === 'remaining' ? 'REMAINING' : 'LATEST',
+          cursor: null,
+          roomType: firstRoomType ? mapRoomTypeToApi(firstRoomType) : undefined,
+          capacity: firstCapacity ? Number(firstCapacity) : undefined,
+          residencePeriod: firstResidencePeriod || undefined,
         }
 
-        if (filters.roomSize.length > 0) {
-          filters.roomSize.forEach((size) => {
-            params.append('capacities', size)
-          })
+        url = getApiUrl('/api/rooms/search')
+        fetchOptions = {
+          ...fetchOptions,
+          method: 'POST',
+          body: JSON.stringify(requestBody),
         }
-
-        if (filters.residencePeriod.length > 0) {
-          filters.residencePeriod.forEach((period) => {
-            params.append('residencePeriods', period)
-          })
-        }
-
-        if (filters.sort === 'remaining') {
-          params.set('sort', 'REMAINING')
-        } else {
-          params.set('sort', 'CREATED_AT')
-        }
-
-        url = `${getApiUrl('/api/rooms')}?${params.toString()}`
         expectsCursorPage = true
       } else if (relation === 'applied') {
         // 내가 지원한 방: 서버에서 userNo 기준으로만 조회, 필터링/정렬은 FE에서 처리
         url = getApiUrl('/api/rooms/me/applied')
+        fetchOptions = { ...fetchOptions, method: 'GET' }
       } else {
         // joined 탭 = 내가 관심(좋아요)한 방
         url = getApiUrl('/api/rooms/me/liked')
+        fetchOptions = { ...fetchOptions, method: 'GET' }
       }
 
       console.log('[rooms] request', {
@@ -1029,12 +1016,7 @@ const RoomSearchPage = () => {
       })
 
       const startedAt = performance.now()
-      const res = await fetch(url, {
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const res = await fetch(url, fetchOptions)
       const elapsedMs = Math.round(performance.now() - startedAt)
       console.log('[rooms] response meta', {
         relation,
@@ -1086,7 +1068,9 @@ const RoomSearchPage = () => {
         setLikedRoomIds(new Set(mapped.map((r) => r.id)))
       }
 
-      if (opts?.requestKey) lastFetchedKeyRef.current[relation] = opts.requestKey
+      if (opts?.requestKey) {
+        console.debug('[rooms] fetchRooms', relation, opts.requestKey)
+      }
     } catch (err) {
       console.error('[rooms] fetch error', {
         relation,
@@ -1100,7 +1084,7 @@ const RoomSearchPage = () => {
         setLoadingTab(null)
       }
     }
-  }
+  }, [filters.roomType, filters.roomSize, filters.residencePeriod, filters.sort])
 
   useEffect(() => {
     const requestKey = JSON.stringify({
@@ -1118,13 +1102,9 @@ const RoomSearchPage = () => {
           ? appliedRooms
           : joinedRooms
 
-    // 이미 같은 조건으로 데이터를 받아왔고 리스트도 있으면, 탭 전환 시 재호출하지 않음 (슬라이드가 더 자연스러움)
-    if (lastFetchedKeyRef.current[activeTab] === requestKey && currentList.length > 0) return
-
     // 해당 탭에 데이터가 이미 있으면 UI는 그대로 두고 백그라운드로 갱신 (로딩 문구 미표시)
     fetchRooms(activeTab, { showLoading: currentList.length === 0, requestKey })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, filters.roomType, filters.roomSize, filters.residencePeriod, filters.sort])
+  }, [activeTab, filters.roomType, filters.roomSize, filters.residencePeriod, filters.sort, fetchRooms])
 
   // 내가 속한 방이 생기면 '내가 지원한 방' 탭은 숨기므로, 그 상태에서 activeTab이 'applied'이면 기본 탭으로 돌려준다
   useEffect(() => {
@@ -1183,7 +1163,7 @@ const RoomSearchPage = () => {
           ? selectedRoom.id.replace('room-', '')
           : selectedRoom.id
 
-        const res = await fetch(getApiUrl(`/api/rooms/${roomNo}/join-request`), {
+        const res = await fetch(getApiUrl(`/api/rooms/${roomNo}/request`), {
           method: 'DELETE',
           credentials: 'include',
         })
@@ -1208,10 +1188,24 @@ const RoomSearchPage = () => {
   }
 
   const handleConfirmLeave = () => {
-    // TODO: 방 나가기 API 연동 시 구현
     setShowLeaveConfirm(false)
     setSelectedRoom(null)
   }
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && activeTab === 'recruiting') {
+        const refreshKey = `recruiting-refresh-${Date.now()}`
+        void fetchRooms('recruiting', { showLoading: false, requestKey: refreshKey })
+      }
+    }
+    window.addEventListener('focus', handleVisibility)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      window.removeEventListener('focus', handleVisibility)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [activeTab, fetchRooms])
 
   return (
     <div className="page-with-bottom-nav h-screen bg-white flex flex-col overflow-hidden animate-fade-in">

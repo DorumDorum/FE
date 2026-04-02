@@ -230,7 +230,7 @@ const HomePage = () => {
   const displayRoomType = room ? mapApiRoomTypeToDisplay(room.roomType) : ''
   const displayCapacity = room ? `${room.capacity}인실` : ''
   const displayResidencePeriod = room ? mapResidencePeriodToDisplay(room.residencePeriod) : undefined
-  const displayMembers = room ? `${room.currentMateCount}/${room.capacity}명` : ''
+  const displayMembers = room ? `${Math.min(room.currentMateCount, room.capacity)}/${room.capacity}명` : ''
   const displayStatus = room ? mapApiStatusToDisplay(room.roomStatus) : ''
 
   return (

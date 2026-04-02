@@ -71,8 +71,7 @@ export const subscribeNotificationStream = (
   // heartbeat 이벤트는 별도 이름으로 오므로 필요시 addEventListener('heartbeat', ...)에서 처리
 
   eventSource.onerror = (event) => {
-    console.error('[notifications] SSE connection error', event)
-    eventSource.close()
+    // close()를 호출하지 않음 — EventSource가 브라우저 자동 재연결(backoff)을 처리하도록 위임
     if (onError) {
       onError(event)
     }

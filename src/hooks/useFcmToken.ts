@@ -58,11 +58,14 @@ export const useFcmToken = () => {
     }
 
     const checkAndRegister = async () => {
+      if (localStorage.getItem('isLoggedIn') !== 'true') return
       try {
         const res = await fetch(getApiUrl('/api/users/profile/me'), { credentials: 'include' })
         if (res.ok) {
           console.log('[FCM] 로그인 상태 확인됨, 토큰 등록 시도')
           void registerToken()
+        } else if (res.status === 401 || res.status === 404) {
+          localStorage.removeItem('isLoggedIn')
         }
       } catch {
         // 비로그인 시 skip

@@ -1,9 +1,12 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Home, Users, MessageCircle, Menu, Building2 } from 'lucide-react'
+import { useChatStore } from '@/store/chatStore'
 
 const BottomNavigationBar = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const { chatRooms } = useChatStore()
+  const totalUnread = chatRooms.reduce((sum, r) => sum + (r.unreadCount ?? 0), 0)
 
   const isActive = (path: string) => {
     if (path === '/home') {
@@ -72,8 +75,11 @@ const BottomNavigationBar = () => {
         >
           <div className="relative">
             <MessageCircle className={getIconClass('/chats')} />
-            {/* TODO: 새 메시지 있으면 빨간 점 표시 */}
-            {/* <span className="absolute -top-1 -right-1 bg-red-500 w-2 h-2 rounded-full"></span> */}
+            {totalUnread > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
+                {totalUnread > 99 ? '99+' : totalUnread}
+              </span>
+            )}
           </div>
         </button>
         <button
