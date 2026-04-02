@@ -16,3 +16,6 @@ cursor_*
 # Build configs for other projects
 tsup.config.ts
 .env
+
+# macOS artefacts
+.DS_Store

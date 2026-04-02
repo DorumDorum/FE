@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useEffect, useRef } from 'react'
-import toast, { Toaster } from 'react-hot-toast'
+import toast, { Toaster, ToastBar } from 'react-hot-toast'
 import RoomGatePage from '@/pages/RoomGatePage'
 import RoomSearchPage from '@/pages/RoomSearchPage'
 import MyRoomPage from '@/pages/MyRoomPage'
@@ -33,20 +33,7 @@ function App() {
   const { incrementUnreadCount, setChatRooms, updateRoomOnNewMessage } = useChatStore()
   useFcmToken()
 
-  // [DEBUG] 환경변수 주입 확인 (배포 후 제거)
-  useEffect(() => {
-    const env = {
-      VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL || '(fallback)',
-      VITE_FIREBASE_API_KEY: import.meta.env.VITE_FIREBASE_API_KEY ? '✓' : '✗',
-      VITE_FIREBASE_AUTH_DOMAIN: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ? '✓' : '✗',
-      VITE_FIREBASE_PROJECT_ID: import.meta.env.VITE_FIREBASE_PROJECT_ID ? '✓' : '✗',
-      VITE_FIREBASE_VAPID_KEY: import.meta.env.VITE_FIREBASE_VAPID_KEY ? '✓' : '✗',
-    }
-    console.warn('[ENV DEBUG] 환경변수:', env)
-    ;(window as unknown as Record<string, unknown>).__ENV_DEBUG__ = env
-  }, [])
-
-  const sseUnsubscribeRef = useRef<(() => void) | null>(null)
+const sseUnsubscribeRef = useRef<(() => void) | null>(null)
   const chatRoomsSeqRef = useRef(0)
 
   const connectSSE = () => {
@@ -91,21 +78,40 @@ function App() {
       if (!isInRelatedChatRoom) {
         toast.custom(
           (t) => (
-            <button
-              type="button"
-              onClick={() => {
-                toast.dismiss(t.id)
-                navigate(path)
+            <div
+              className="flex items-start gap-2 w-full max-w-full rounded-xl bg-blue-50 px-4 py-2.5 shadow-lg border border-blue-100"
+              style={{
+                animation: t.visible
+                  ? 'slideDownFromTop 0.3s ease-out forwards'
+                  : 'slideUpToTop 0.3s ease-in forwards',
               }}
-              className="flex flex-col items-start gap-0.5 w-full max-w-full rounded-xl bg-blue-50 px-4 py-2.5 shadow-lg border border-blue-100 text-left hover:bg-blue-100 active:bg-blue-100 transition-colors"
             >
-              <span className="font-semibold text-black truncate w-full">{event.title}</span>
-              {event.body && (
-                <span className="text-sm text-black line-clamp-2 w-full opacity-90">{event.body}</span>
-              )}
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  toast.dismiss(t.id)
+                  navigate(path)
+                }}
+                className="flex flex-col items-start gap-0.5 flex-1 min-w-0 text-left"
+              >
+                <span className="font-semibold text-black truncate w-full">{event.title}</span>
+                {event.body && (
+                  <span className="text-sm text-black line-clamp-2 w-full opacity-90">{event.body}</span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => toast.dismiss(t.id)}
+                className="flex-shrink-0 mt-0.5 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+                aria-label="닫기"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
           ),
-          { id: 'sse-notification', position: 'top-center', duration: 4000 }
+          { id: 'sse-notification', position: 'top-center', duration: 2000 }
         )
       }
     })
@@ -189,7 +195,22 @@ function App() {
 
   return (
     <div className="bg-white" style={{ height: 'var(--vh, 100dvh)' }}>
-      <Toaster position="top-center" containerClassName="sse-toast-container" />
+      <Toaster
+        position="top-center"
+        containerClassName="sse-toast-container"
+        toastOptions={{ duration: 2000 }}
+      >
+        {(t) => (
+          <ToastBar
+            toast={t}
+            style={{
+              animation: t.visible
+                ? 'slideDownFromTop 0.3s ease-out forwards'
+                : 'slideUpToTop 0.3s ease-in forwards',
+            }}
+          />
+        )}
+      </Toaster>
       <Routes>
         <Route path="/" element={<SplashPage />} />
         <Route path="/intro" element={<IntroPage />} />

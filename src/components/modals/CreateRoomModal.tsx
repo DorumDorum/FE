@@ -479,11 +479,13 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
       return item?.extraValue || ''
     }
 
+    const ensureTimeValue = (value: string) => (value && value.trim() !== '' ? value : '00:00')
+
     const rule = {
       bedtime: getItemValue('취침'),
       wakeUp: getItemValue('기상'),
       returnHome: mapReturnHome(getSelectedOption('귀가') || ''),
-      returnHomeTime: getExtraValue('귀가'),
+      returnHomeTime: ensureTimeValue(getExtraValue('귀가')),
       cleaning: mapCleaning(getSelectedOption('청소') || ''),
       phoneCall: mapPhoneCall(getSelectedOption('방에서 전화') || ''),
       sleepLight: mapSleepLight(getSelectedOption('잠귀') || ''),
@@ -492,7 +494,7 @@ const CreateRoomModal = ({ onClose, onCreated }: CreateRoomModalProps) => {
       showerTime: mapShowerTime(getSelectedOption('샤워시간') || ''),
       eating: mapEating(getSelectedOption('방에서 취식') || ''),
       lightsOut: mapLightsOut(getSelectedOption('소등') || ''),
-      lightsOutTime: getExtraValue('소등'),
+      lightsOutTime: ensureTimeValue(getExtraValue('소등')),
       homeVisit: mapHomeVisit(getSelectedOption('본가 주기') || ''),
       smoking: mapSmoking(getSelectedOption('흡연') || ''),
       refrigerator: mapRefrigerator(getSelectedOption('냉장고') || ''),

@@ -23,8 +23,16 @@ interface RoomMember {
 const ChatRoomPage = () => {
   const { chatRoomNo } = useParams<{ chatRoomNo: string }>()
   const navigate = useNavigate()
-  const { chatRooms, messages, cursors, hasMore, setMessages, prependMessages, appendMessage, updateRoomOnNewMessage, resetUnreadCount } =
-    useChatStore()
+  const {
+    chatRooms,
+    messages,
+    cursors,
+    hasMore,
+    setMessages,
+    prependMessages,
+    appendMessage,
+    updateRoomOnNewMessage,
+  } = useChatStore()
 
   const currentRoom = chatRooms.find(r => r.chatRoomNo === chatRoomNo)
   const isDirect = currentRoom?.chatRoomType === 'DIRECT'
@@ -43,10 +51,14 @@ const ChatRoomPage = () => {
   const [showInfoPanel, setShowInfoPanel] = useState(false)
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
   const [members, setMembers] = useState<RoomMember[]>([])
+  const [isWideLayout, setIsWideLayout] = useState(false)
+  const [containerRightOffset, setContainerRightOffset] = useState(0)
 
   const stompClientRef = useRef<Client | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const myUserNoRef = useRef(myUserNo)
 
   const roomMessages = messages[chatRoomNo!] ?? []
   const nextCursor = cursors[chatRoomNo!]
@@ -57,7 +69,8 @@ const ChatRoomPage = () => {
     const fetchProfile = async () => {
       try {
         const res = await apiClient.get('/api/users/profile/me')
-        setMyUserNo(res.data?.userNo ?? '')
+        const userNo = res.data?.userNo ?? ''
+        setMyUserNo(userNo)
       } catch {
         // 무시
       }
@@ -65,34 +78,55 @@ const ChatRoomPage = () => {
     void fetchProfile()
   }, [])
 
-  // 초기 메시지 로드 + 입장 시 읽음 처리 및 카운트 리셋
   useEffect(() => {
+    myUserNoRef.current = myUserNo
+  }, [myUserNo])
+
+  const fetchMessages = useCallback(async (options?: { silent?: boolean }) => {
     if (!chatRoomNo) return
-
-    resetUnreadCount(chatRoomNo)
-
-    const fetchMessages = async () => {
+    if (!options?.silent) {
       setLoading(true)
-      try {
-        const res = await getChatMessages(chatRoomNo)
-        const { items: msgs, nextCursor, hasNext } = res.data
-        setMessages(chatRoomNo, msgs, nextCursor, hasNext)
-      } catch (e: unknown) {
-        const code = (e as { response?: { data?: { code?: string } } })?.response?.data?.code
-        if (code === 'NOT_CHAT_ROOM_MEMBER') {
-          toast.error('채팅방 멤버가 아닙니다.')
-          navigate('/chats')
-        } else {
-          toast.error('메시지를 불러오지 못했습니다.')
-        }
-      } finally {
+    }
+    try {
+      const res = await getChatMessages(chatRoomNo)
+      const { items: msgs, nextCursor, hasNext } = res.data
+      setMessages(chatRoomNo, msgs, nextCursor, hasNext)
+    } catch (e: unknown) {
+      const code = (e as { response?: { data?: { code?: string } } })?.response?.data?.code
+      if (code === 'NOT_CHAT_ROOM_MEMBER') {
+        toast.error('채팅방 멤버가 아닙니다.')
+        navigate('/chats')
+      } else {
+        toast.error('메시지를 불러오지 못했습니다.')
+      }
+    } finally {
+      if (!options?.silent) {
         setLoading(false)
       }
     }
+  }, [chatRoomNo, navigate, setMessages])
 
-    void fetchMessages()
-    void markAsRead(chatRoomNo).catch(() => {})
-  }, [chatRoomNo])
+  const markAsReadAndSync = useCallback(async () => {
+    if (!chatRoomNo) return
+    try {
+      await markAsRead(chatRoomNo)
+      await fetchMessages({ silent: true })
+    } catch (error) {
+      console.warn('[chat] markAsRead failed', error)
+    }
+  }, [chatRoomNo, fetchMessages])
+
+  // 초기 메시지 로드 + 읽음 처리
+  useEffect(() => {
+    if (!chatRoomNo) return
+
+    void (async () => {
+      await fetchMessages()
+      if (document.visibilityState === 'visible') {
+        await markAsReadAndSync()
+      }
+    })()
+  }, [chatRoomNo, fetchMessages, markAsReadAndSync])
 
   // 초기 로드 완료 시 하단 스크롤
   useEffect(() => {
@@ -101,12 +135,28 @@ const ChatRoomPage = () => {
     }
   }, [loading])
 
+  useEffect(() => {
+    const updateLayout = () => {
+      const width = window.innerWidth
+      setIsWideLayout(width >= 768)
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        setContainerRightOffset(Math.max(0, width - rect.right))
+      } else {
+        setContainerRightOffset(0)
+      }
+    }
+    updateLayout()
+    window.addEventListener('resize', updateLayout)
+    return () => window.removeEventListener('resize', updateLayout)
+  }, [])
+
   // 멤버 목록 조회
   const fetchMembers = useCallback(() => {
     if (!chatRoomNo || isDirect) return
     getChatRoomMembers(chatRoomNo)
       .then(res => setMembers(res.data))
-      .catch(() => {})
+      .catch(() => { })
   }, [chatRoomNo, isDirect])
 
   // 패널 열릴 때 멤버 목록 로드
@@ -138,7 +188,7 @@ const ChatRoomPage = () => {
 
           // 채팅방을 보고 있는 중이면 즉시 읽음 처리
           if (document.visibilityState === 'visible') {
-            void markAsRead(chatRoomNo).catch(() => {})
+            void markAsReadAndSync()
           }
 
           // 하단 근처에 있을 때만 자동 스크롤
@@ -150,6 +200,10 @@ const ChatRoomPage = () => {
               setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
             }
           }
+        })
+
+        client.subscribe(`/topic/chat-room/${chatRoomNo}/read`, () => {
+          void fetchMessages({ silent: true })
         })
 
         client.subscribe('/user/queue/errors', (msg: IMessage) => {
@@ -180,12 +234,12 @@ const ChatRoomPage = () => {
     if (!chatRoomNo) return
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
-        void markAsRead(chatRoomNo).catch(() => {})
+        void markAsReadAndSync()
       }
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [chatRoomNo])
+  }, [chatRoomNo, markAsReadAndSync])
 
   // 이전 메시지 더 불러오기
   const handleLoadMore = useCallback(async () => {
@@ -255,7 +309,11 @@ const ChatRoomPage = () => {
   }
 
   return (
-    <div className="flex flex-col bg-white" style={{ height: 'var(--vh, 100dvh)' }}>
+    <div
+      ref={containerRef}
+      className="flex flex-col bg-white max-w-3xl mx-auto w-full"
+      style={{ height: 'var(--vh, 100dvh)' }}
+    >
       {/* 헤더 */}
       <header className="bg-white border-b border-gray-100 px-2 py-3 flex items-center flex-shrink-0">
         <button onClick={() => navigate('/chats')} className="p-2">
@@ -293,12 +351,34 @@ const ChatRoomPage = () => {
           </div>
         ) : (
           roomMessages.map((msg, index) => {
+            const prevMsg = roomMessages[index - 1]
             const nextMsg = roomMessages[index + 1]
-            const showTime =
-              !nextMsg ||
-              format(new Date(msg.sentAt), 'HH:mm') !== format(new Date(nextMsg.sentAt), 'HH:mm')
+
+            const isSameGroupAsPrev =
+              !!prevMsg &&
+              prevMsg.senderNo === msg.senderNo &&
+              prevMsg.messageType !== 'SYSTEM' &&
+              msg.messageType !== 'SYSTEM' &&
+              format(new Date(prevMsg.sentAt), 'HH:mm') === format(new Date(msg.sentAt), 'HH:mm')
+
+            const isSameGroupAsNext =
+              !!nextMsg &&
+              nextMsg.senderNo === msg.senderNo &&
+              nextMsg.messageType !== 'SYSTEM' &&
+              msg.messageType !== 'SYSTEM' &&
+              format(new Date(nextMsg.sentAt), 'HH:mm') === format(new Date(msg.sentAt), 'HH:mm')
+
+            const showProfile = !isSameGroupAsPrev
+            const showTime = !isSameGroupAsNext
+
             return (
-              <MessageBubble key={msg.messageNo} message={msg} myUserNo={myUserNo} showTime={showTime} />
+              <MessageBubble
+                key={msg.messageNo}
+                message={msg}
+                myUserNo={myUserNo}
+                showProfile={showProfile}
+                showTime={showTime}
+              />
             )
           })
         )}
@@ -319,8 +399,12 @@ const ChatRoomPage = () => {
           />
           {/* 슬라이드 패널 */}
           <div
-            className="fixed top-0 right-0 bg-white z-50 flex flex-col shadow-2xl"
-            style={{ height: 'var(--vh, 100dvh)', width: 'min(18rem, 85vw)' }}
+            className="fixed top-0 bg-white z-50 flex flex-col shadow-2xl"
+            style={{
+              height: 'var(--vh, 100dvh)',
+              width: 'min(18rem, 85vw)',
+              right: isWideLayout ? containerRightOffset : 0,
+            }}
           >
             {/* 패널 헤더 */}
             <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100">
