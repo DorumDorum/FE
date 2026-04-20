@@ -10,7 +10,6 @@ import ChatRequestModal from '@/components/modals/ChatRequestModal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { Room } from '@/types/room'
 import { getApiUrl } from '@/utils/api'
-import { pruneDeletedRoomState } from './roomSearchDeleteState.js'
 
 const RoomSearchPage = () => {
   const navigate = useNavigate()
@@ -895,26 +894,14 @@ const RoomSearchPage = () => {
   useEffect(() => {
     if (!deletedRoomNo) return
 
-    const nextState = pruneDeletedRoomState(
-      {
-        recruitingRooms,
-        appliedRooms,
-        joinedRooms,
-        expandedRoomIds,
-        roomRules,
-        roomOtherNotes,
-        likedRoomIds,
-      },
-      deletedRoomNo
-    )
-
-    setRecruitingRooms(nextState.recruitingRooms)
-    setAppliedRooms(nextState.appliedRooms)
-    setJoinedRooms(nextState.joinedRooms)
-    setExpandedRoomIds(nextState.expandedRoomIds)
-    setRoomRules(nextState.roomRules)
-    setRoomOtherNotes(nextState.roomOtherNotes)
-    setLikedRoomIds(nextState.likedRoomIds)
+    const id = deletedRoomNo
+    setRecruitingRooms(prev => prev.filter(r => r.id !== id))
+    setAppliedRooms(prev => prev.filter(r => r.id !== id))
+    setJoinedRooms(prev => prev.filter(r => r.id !== id))
+    setExpandedRoomIds(prev => { const next = new Set(prev); next.delete(id); return next })
+    setRoomRules(prev => { const { [id]: _, ...rest } = prev; return rest })
+    setRoomOtherNotes(prev => { const { [id]: _, ...rest } = prev; return rest })
+    setLikedRoomIds(prev => { const next = new Set(prev); next.delete(id); return next })
   }, [deletedRoomNo])
 
   const mapRoomTypeToApi = (type: string) => {

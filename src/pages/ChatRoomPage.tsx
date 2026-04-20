@@ -74,6 +74,7 @@ const ChatRoomPage = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fetchMembersRef = useRef<() => Promise<void>>(() => Promise.resolve())
   const markAsReadAndSyncRef = useRef<() => Promise<void>>(() => Promise.resolve())
+  const fetchMessagesRef = useRef<(opts?: { silent?: boolean }) => Promise<void>>(() => Promise.resolve())
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const myUserNoRef = useRef(myUserNo)
 
@@ -229,6 +230,7 @@ const ChatRoomPage = () => {
   // ref를 최신 함수로 동기화 (STOMP 클로저에서 stale 방지)
   useEffect(() => { fetchMembersRef.current = fetchMembers }, [fetchMembers])
   useEffect(() => { markAsReadAndSyncRef.current = markAsReadAndSync }, [markAsReadAndSync])
+  useEffect(() => { fetchMessagesRef.current = fetchMessages }, [fetchMessages])
 
   // 패널 열릴 때 멤버 목록 로드
   useEffect(() => {
@@ -274,11 +276,16 @@ const ChatRoomPage = () => {
         })
 
         client.subscribe(`/topic/chat-room/${chatRoomNo}/read`, () => {
-          void fetchMessages({ silent: true })
+          void fetchMessagesRef.current({ silent: true })
         })
 
         client.subscribe('/user/queue/notification', (msg: IMessage) => {
-          const notification: NotificationMessage = JSON.parse(msg.body)
+          let notification: NotificationMessage
+          try {
+            notification = JSON.parse(msg.body) as NotificationMessage
+          } catch {
+            return
+          }
 
           if (notification.chatRoomNo !== chatRoomNo) return
 
@@ -311,7 +318,7 @@ const ChatRoomPage = () => {
       client.deactivate()
       stompClientRef.current = null
     }
-  }, [chatRoomNo])
+  }, [chatRoomNo, appendMessage, updateRoomOnNewMessage, removeChatRoom, navigate])
 
   // showInfoPanel을 ref로 STOMP 콜백에서 최신 값 참조
   const showInfoPanelRef = useRef(showInfoPanel)
