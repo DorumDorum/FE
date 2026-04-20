@@ -14,6 +14,8 @@ interface ChatStore {
   setMessages: (chatRoomNo: string, msgs: ChatMessage[], nextCursor: string | null, hasNext: boolean) => void
   prependMessages: (chatRoomNo: string, msgs: ChatMessage[], nextCursor: string | null, hasNext: boolean) => void
   appendMessage: (chatRoomNo: string, message: ChatMessage) => void
+  removeChatRoom: (chatRoomNo: string) => void
+  removeGroupChatRoomsByRoomNo: (roomNo: string) => void
 }
 
 export const useChatStore = create<ChatStore>((set) => ({
@@ -67,4 +69,38 @@ export const useChatStore = create<ChatStore>((set) => ({
         [chatRoomNo]: [...(state.messages[chatRoomNo] ?? []), message],
       },
     })),
+  removeChatRoom: (chatRoomNo) =>
+    set((state) => ({
+      chatRooms: state.chatRooms.filter((room) => room.chatRoomNo !== chatRoomNo),
+      messages: Object.fromEntries(
+        Object.entries(state.messages).filter(([key]) => key !== chatRoomNo)
+      ),
+      cursors: Object.fromEntries(
+        Object.entries(state.cursors).filter(([key]) => key !== chatRoomNo)
+      ),
+      hasMore: Object.fromEntries(
+        Object.entries(state.hasMore).filter(([key]) => key !== chatRoomNo)
+      ),
+    })),
+  removeGroupChatRoomsByRoomNo: (roomNo) =>
+    set((state) => {
+      const targetChatRoomNos = state.chatRooms
+        .filter((room) => room.chatRoomType === 'GROUP' && room.roomNo === roomNo)
+        .map((room) => room.chatRoomNo)
+
+      return {
+        chatRooms: state.chatRooms.filter(
+          (room) => !(room.chatRoomType === 'GROUP' && room.roomNo === roomNo)
+        ),
+        messages: Object.fromEntries(
+          Object.entries(state.messages).filter(([key]) => !targetChatRoomNos.includes(key))
+        ),
+        cursors: Object.fromEntries(
+          Object.entries(state.cursors).filter(([key]) => !targetChatRoomNos.includes(key))
+        ),
+        hasMore: Object.fromEntries(
+          Object.entries(state.hasMore).filter(([key]) => !targetChatRoomNos.includes(key))
+        ),
+      }
+    }),
 }))
