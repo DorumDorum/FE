@@ -5,10 +5,11 @@ import { Client } from '@stomp/stompjs'
 import type { IMessage } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
 import toast from 'react-hot-toast'
-import { ChevronLeft, Menu, X, LogOut, User, Users, Crown } from 'lucide-react'
+import { ChevronLeft, Menu, X, LogOut, User, Users, Crown, MoreHorizontal } from 'lucide-react'
 import MessageBubble from '@/components/chat/MessageBubble'
 import MessageInput from '@/components/chat/MessageInput'
 import { getChatMessages, markAsRead, leaveChatRoom, getChatRoomMembers } from '@/services/chatApi'
+import { kickRoommate } from '@/services/roomApi'
 import { useChatStore } from '@/store/chatStore'
 import { API_BASE_URL } from '@/utils/api'
 import apiClient from '@/services/apiClient'
@@ -18,6 +19,17 @@ interface RoomMember {
   userNo: string
   nickname: string
   isHost: boolean
+}
+
+interface RoomMemberWithRoomMeta extends RoomMember {
+  confirmStatus?: 'PENDING' | 'ACCEPTED' | 'COMPLETED'
+  isMe?: boolean
+}
+
+interface NotificationMessage {
+  type: 'KICKED_FROM_ROOM' | 'ROOM_DELETED'
+  roomNo: string
+  chatRoomNo: string
 }
 
 const ChatRoomPage = () => {
@@ -32,6 +44,7 @@ const ChatRoomPage = () => {
     prependMessages,
     appendMessage,
     updateRoomOnNewMessage,
+    removeChatRoom,
   } = useChatStore()
 
   const currentRoom = chatRooms.find(r => r.chatRoomNo === chatRoomNo)
@@ -50,13 +63,17 @@ const ChatRoomPage = () => {
   const [connected, setConnected] = useState(false)
   const [showInfoPanel, setShowInfoPanel] = useState(false)
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
-  const [members, setMembers] = useState<RoomMember[]>([])
+  const [members, setMembers] = useState<RoomMemberWithRoomMeta[]>([])
+  const [openMemberMenuUserNo, setOpenMemberMenuUserNo] = useState<string | null>(null)
+  const [roommateToKick, setRoommateToKick] = useState<RoomMemberWithRoomMeta | null>(null)
   const [isWideLayout, setIsWideLayout] = useState(false)
   const [containerRightOffset, setContainerRightOffset] = useState(0)
 
   const stompClientRef = useRef<Client | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const fetchMembersRef = useRef<() => Promise<void>>(() => Promise.resolve())
+  const markAsReadAndSyncRef = useRef<() => Promise<void>>(() => Promise.resolve())
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const myUserNoRef = useRef(myUserNo)
 
@@ -81,6 +98,14 @@ const ChatRoomPage = () => {
   useEffect(() => {
     myUserNoRef.current = myUserNo
   }, [myUserNo])
+
+  useEffect(() => {
+    setMembers([])
+    setOpenMemberMenuUserNo(null)
+    setRoommateToKick(null)
+    setShowInfoPanel(false)
+    setShowLeaveConfirm(false)
+  }, [chatRoomNo])
 
   const fetchMessages = useCallback(async (options?: { silent?: boolean }) => {
     if (!chatRoomNo) return
@@ -152,19 +177,65 @@ const ChatRoomPage = () => {
   }, [])
 
   // 멤버 목록 조회
-  const fetchMembers = useCallback(() => {
-    if (!chatRoomNo || isDirect) return
-    getChatRoomMembers(chatRoomNo)
-      .then(res => setMembers(res.data))
-      .catch(() => { })
-  }, [chatRoomNo, isDirect])
+  const fetchMembers = useCallback(async () => {
+    if (!chatRoomNo || isDirect || !currentRoom?.roomNo) return
+
+    try {
+      const [chatMembersRes, roommatesRes] = await Promise.all([
+        getChatRoomMembers(chatRoomNo),
+        apiClient.get('/api/rooms/me/roommates'),
+      ])
+
+      const chatMembers = Array.isArray(chatMembersRes.data) ? chatMembersRes.data : []
+      const roommates = Array.isArray(roommatesRes.data) ? roommatesRes.data : []
+
+      const roommateMap = new Map(
+        roommates.map((mate: { userNo: string | number; confirmStatus?: string; isMe?: boolean }) => [
+          String(mate.userNo),
+          {
+            confirmStatus: mate.confirmStatus,
+            isMe: mate.isMe,
+          },
+        ])
+      )
+
+      const merged: RoomMemberWithRoomMeta[] = chatMembers.map((member: RoomMember) => {
+        const extra = roommateMap.get(String(member.userNo))
+        return {
+          ...member,
+          confirmStatus: extra?.confirmStatus as RoomMemberWithRoomMeta['confirmStatus'],
+          isMe: extra?.isMe,
+        }
+      })
+
+      setMembers(merged)
+    } catch {
+      // noop
+    }
+  }, [chatRoomNo, isDirect, currentRoom?.roomNo])
+
+  const amIHost = members.some((member) => member.userNo === myUserNo && member.isHost)
+  const isRoomCompleted = members.length > 0 && members.every(
+    (member) => member.confirmStatus === 'COMPLETED'
+  )
+
+  const canKickMember = (member: RoomMemberWithRoomMeta) =>
+    amIHost &&
+    !isRoomCompleted &&
+    !member.isMe &&
+    !member.isHost &&
+    currentRoom?.chatRoomType === 'GROUP'
+
+  // ref를 최신 함수로 동기화 (STOMP 클로저에서 stale 방지)
+  useEffect(() => { fetchMembersRef.current = fetchMembers }, [fetchMembers])
+  useEffect(() => { markAsReadAndSyncRef.current = markAsReadAndSync }, [markAsReadAndSync])
 
   // 패널 열릴 때 멤버 목록 로드
   useEffect(() => {
     if (showInfoPanel && !isDirect) {
-      fetchMembers()
+      void fetchMembers()
     }
-  }, [showInfoPanel])
+  }, [showInfoPanel, isDirect, fetchMembers])
 
   // STOMP 연결
   useEffect(() => {
@@ -182,13 +253,13 @@ const ChatRoomPage = () => {
           updateRoomOnNewMessage(chatRoomNo, message)
 
           // 시스템 메시지(입장/퇴장)이면 멤버 목록 갱신
-          if (message.messageType === 'SYSTEM' && showInfoPanelRef.current && !isDirect) {
-            fetchMembers()
+          if (message.messageType === 'SYSTEM' && showInfoPanelRef.current) {
+            void fetchMembersRef.current()
           }
 
           // 채팅방을 보고 있는 중이면 즉시 읽음 처리
           if (document.visibilityState === 'visible') {
-            void markAsReadAndSync()
+            void markAsReadAndSyncRef.current()
           }
 
           // 하단 근처에 있을 때만 자동 스크롤
@@ -204,6 +275,25 @@ const ChatRoomPage = () => {
 
         client.subscribe(`/topic/chat-room/${chatRoomNo}/read`, () => {
           void fetchMessages({ silent: true })
+        })
+
+        client.subscribe('/user/queue/notification', (msg: IMessage) => {
+          const notification: NotificationMessage = JSON.parse(msg.body)
+
+          if (notification.chatRoomNo !== chatRoomNo) return
+
+          if (notification.type === 'KICKED_FROM_ROOM') {
+            removeChatRoom(notification.chatRoomNo)
+            toast.error('방에서 강퇴되었습니다.')
+            navigate('/rooms/search')
+            return
+          }
+
+          if (notification.type === 'ROOM_DELETED') {
+            removeChatRoom(notification.chatRoomNo)
+            toast.error('방이 삭제되었습니다.')
+            navigate('/rooms/search')
+          }
         })
 
         client.subscribe('/user/queue/errors', (msg: IMessage) => {
@@ -293,6 +383,7 @@ const ChatRoomPage = () => {
     if (!chatRoomNo) return
     try {
       await leaveChatRoom(chatRoomNo)
+      removeChatRoom(chatRoomNo)
       toast.success('채팅방을 나갔습니다.')
       navigate('/chats')
     } catch (e: unknown) {
@@ -305,6 +396,29 @@ const ChatRoomPage = () => {
     } finally {
       setShowLeaveConfirm(false)
       setShowInfoPanel(false)
+    }
+  }
+
+  const handleKickFromChatPanel = async () => {
+    if (!currentRoom?.roomNo || !roommateToKick) return
+
+    try {
+      await kickRoommate(String(currentRoom.roomNo), roommateToKick.userNo)
+      toast.success(`${roommateToKick.nickname}님을 내보냈습니다.`)
+      setRoommateToKick(null)
+      setOpenMemberMenuUserNo(null)
+      void fetchMembers()
+    } catch (e: unknown) {
+      const code = (e as { response?: { data?: { code?: string } } })?.response?.data?.code
+      if (code === 'ROOM005') {
+        toast.error('방장만 룸메이트를 내보낼 수 있습니다.')
+      } else if (code === 'ROOM009') {
+        toast.error('룸메이트를 찾을 수 없습니다.')
+      } else if (code === 'ROOM012') {
+        toast.error('자기 자신은 내보낼 수 없습니다.')
+      } else {
+        toast.error('내보내기에 실패했습니다.')
+      }
     }
   }
 
@@ -449,19 +563,49 @@ const ChatRoomPage = () => {
                   </p>
                   <div className="flex flex-col gap-2">
                     {members.map(member => (
-                      <div key={member.userNo} className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-                          <User className="w-4 h-4 text-gray-500" />
+                      <div key={member.userNo} className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                            <User className="w-4 h-4 text-gray-500" />
+                          </div>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-sm font-medium text-gray-900 truncate">{member.nickname}</span>
+                            {member.isHost && (
+                              <Crown className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" />
+                            )}
+                            {member.userNo === myUserNo && (
+                              <span className="text-xs text-gray-400 flex-shrink-0">(나)</span>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-sm font-medium text-gray-900 truncate">{member.nickname}</span>
-                          {member.isHost && (
-                            <Crown className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" />
-                          )}
-                          {member.userNo === myUserNo && (
-                            <span className="text-xs text-gray-400 flex-shrink-0">(나)</span>
-                          )}
-                        </div>
+
+                        {canKickMember(member) && (
+                          <div className="relative">
+                            <button
+                              onClick={() =>
+                                setOpenMemberMenuUserNo((prev) => (prev === member.userNo ? null : member.userNo))
+                              }
+                              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"
+                              aria-label="멤버 관리"
+                            >
+                              <MoreHorizontal className="w-4 h-4" />
+                            </button>
+
+                            {openMemberMenuUserNo === member.userNo && (
+                              <div className="absolute right-0 top-9 z-10 min-w-[7rem] bg-white border border-gray-200 rounded-xl shadow-lg p-1">
+                                <button
+                                  onClick={() => {
+                                    setRoommateToKick(member)
+                                    setOpenMemberMenuUserNo(null)
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg"
+                                >
+                                  내보내기
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -501,6 +645,32 @@ const ChatRoomPage = () => {
             </div>
           </div>
         </>
+      )}
+
+      {roommateToKick && (
+        <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center">
+          <div className="bg-white rounded-2xl p-6 max-w-sm mx-4 shadow-xl">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">룸메이트 내보내기</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              <span className="font-semibold text-gray-900">{roommateToKick.nickname}</span>님을 내보내시겠습니까?<br />
+              방이 최종 확정된 뒤에는 내보낼 수 없습니다.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setRoommateToKick(null)}
+                className="flex-1 px-4 py-3 text-sm font-semibold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => void handleKickFromChatPanel()}
+                className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors"
+              >
+                내보내기
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

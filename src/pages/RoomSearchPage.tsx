@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Bell, Search, Plus, Filter, Star } from 'lucide-react'
 import BottomNavigationBar from '@/components/ui/BottomNavigationBar'
 import SectionLoading from '@/components/ui/SectionLoading'
@@ -10,9 +10,11 @@ import ChatRequestModal from '@/components/modals/ChatRequestModal'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import { Room } from '@/types/room'
 import { getApiUrl } from '@/utils/api'
+import { pruneDeletedRoomState } from './roomSearchDeleteState.js'
 
 const RoomSearchPage = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   type Relation = 'recruiting' | 'applied' | 'joined'
   type ApiRoom = {
     roomNo: number
@@ -48,6 +50,7 @@ const RoomSearchPage = () => {
   const [roomRules, setRoomRules] = useState<Record<string, ChecklistSection[]>>({})
   const [roomOtherNotes, setRoomOtherNotes] = useState<Record<string, string>>({})
   const [hasMyRoom, setHasMyRoom] = useState<boolean | null>(null)
+  const isGuest = hasMyRoom === null
   
   // Enum을 한글로 변환하는 함수들 (재사용)
   const mapReturnHomeFromEnum = (enumValue: string): string => {
@@ -591,6 +594,20 @@ const RoomSearchPage = () => {
   const [loadingTab, setLoadingTab] = useState<Relation | null>(null)
   const loadingDelayTimerRef = useRef<number | null>(null)
 
+  const deletedRoomNo =
+    typeof location.state === 'object' &&
+    location.state !== null &&
+    'deletedRoomNo' in location.state &&
+    typeof (location.state as { deletedRoomNo?: unknown }).deletedRoomNo === 'string'
+      ? (location.state as { deletedRoomNo: string }).deletedRoomNo
+      : null
+
+  const refreshRoomsOnEnter =
+    typeof location.state === 'object' &&
+    location.state !== null &&
+    'refreshRooms' in location.state &&
+    Boolean((location.state as { refreshRooms?: unknown }).refreshRooms)
+
   const resetFilters = () => {
     setFilters({ roomType: [], roomSize: [], residencePeriod: [], sort: 'recent', checklist: {} })
   }
@@ -834,42 +851,71 @@ const RoomSearchPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.checklist, activeTab, recruitingRooms, appliedRooms, joinedRooms])
 
+  const checkRoomExist = useCallback(async () => {
+    try {
+      const res = await fetch(getApiUrl('/api/rooms/me/exists'), {
+        credentials: 'include',
+      })
+
+      if (res.status === 401) {
+        setHasMyRoom(null)
+        return
+      }
+      if (!res.ok) {
+        setHasMyRoom(false)
+        return
+      }
+
+      const contentType = res.headers.get('content-type') ?? ''
+      const rawBody = await res.text()
+
+      let data: any
+      try {
+        data = rawBody ? JSON.parse(rawBody) : null
+      } catch (e) {
+        console.error('[rooms] check exists parse error', { contentType, rawBody }, e)
+        setHasMyRoom(false)
+        return
+      }
+
+      // ResponseEntity 형식: 직접 접근
+      const payload = data
+      setHasMyRoom(!!payload?.isExist)
+    } catch (err) {
+      console.error('[rooms] check exists error', err)
+      setHasMyRoom(false)
+    }
+  }, [])
+
   // 내가 속한 방 존재 여부 조회
   useEffect(() => {
-    const checkRoomExist = async () => {
-      try {
-        const res = await fetch(getApiUrl('/api/rooms/me/exists'), {
-          credentials: 'include',
-        })
+    void checkRoomExist()
+  }, [checkRoomExist])
 
-        if (!res.ok) {
-          setHasMyRoom(false)
-          return
-        }
+  useEffect(() => {
+    if (!deletedRoomNo) return
 
-        const contentType = res.headers.get('content-type') ?? ''
-        const rawBody = await res.text()
+    const nextState = pruneDeletedRoomState(
+      {
+        recruitingRooms,
+        appliedRooms,
+        joinedRooms,
+        expandedRoomIds,
+        roomRules,
+        roomOtherNotes,
+        likedRoomIds,
+      },
+      deletedRoomNo
+    )
 
-        let data: any
-        try {
-          data = rawBody ? JSON.parse(rawBody) : null
-        } catch (e) {
-          console.error('[rooms] check exists parse error', { contentType, rawBody }, e)
-          setHasMyRoom(false)
-          return
-        }
-
-        // ResponseEntity 형식: 직접 접근
-        const payload = data
-        setHasMyRoom(!!payload?.isExist)
-      } catch (err) {
-        console.error('[rooms] check exists error', err)
-        setHasMyRoom(false)
-      }
-    }
-
-    checkRoomExist()
-  }, [])
+    setRecruitingRooms(nextState.recruitingRooms)
+    setAppliedRooms(nextState.appliedRooms)
+    setJoinedRooms(nextState.joinedRooms)
+    setExpandedRoomIds(nextState.expandedRoomIds)
+    setRoomRules(nextState.roomRules)
+    setRoomOtherNotes(nextState.roomOtherNotes)
+    setLikedRoomIds(nextState.likedRoomIds)
+  }, [deletedRoomNo])
 
   const mapRoomTypeToApi = (type: string) => {
     switch (type) {
@@ -1196,6 +1242,7 @@ const RoomSearchPage = () => {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && activeTab === 'recruiting') {
         const refreshKey = `recruiting-refresh-${Date.now()}`
+        void checkRoomExist()
         void fetchRooms('recruiting', { showLoading: false, requestKey: refreshKey })
       }
     }
@@ -1205,7 +1252,16 @@ const RoomSearchPage = () => {
       window.removeEventListener('focus', handleVisibility)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [activeTab, fetchRooms])
+  }, [activeTab, checkRoomExist, fetchRooms])
+
+  useEffect(() => {
+    if (!refreshRoomsOnEnter) return
+
+    void checkRoomExist()
+    void fetchRooms('recruiting', { showLoading: false, requestKey: `location-refresh-recruiting-${Date.now()}` })
+    void fetchRooms('joined', { showLoading: false, requestKey: `location-refresh-joined-${Date.now()}` })
+    void fetchRooms('applied', { showLoading: false, requestKey: `location-refresh-applied-${Date.now()}` })
+  }, [checkRoomExist, fetchRooms, refreshRoomsOnEnter])
 
   return (
     <div className="page-with-bottom-nav h-screen bg-white flex flex-col overflow-hidden animate-fade-in">
@@ -1405,9 +1461,8 @@ const RoomSearchPage = () => {
             </div>
           </div>
 
-          {/* 방 만들기 버튼 - 로그인한 사용자만 표시 */}
-        {/* 로그인 여부는 서버의 인증 쿠키 기준으로 판단 */}
-        {true && (
+          {/* 방 만들기 버튼 - 로그인했고 아직 속한 방이 없는 사용자에게만 표시 */}
+        {!isGuest && hasMyRoom === false && (
             <button
               onClick={handleCreateRoom}
               className="w-full bg-[#3072E1] text-white px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center space-x-2 hover:bg-[#2563E1] mb"
@@ -1433,8 +1488,8 @@ const RoomSearchPage = () => {
               >
                 모집 중인 방
               </button>
-              {/* 로그인한 사용자만 다른 탭 표시 - 인증은 서버에서 처리 */}
-              {true && (
+              {/* 로그인한 사용자만 관심/지원 탭 표시 */}
+              {!isGuest && (
                 <>
                   <button
                     onClick={() => setActiveTab('joined')}
@@ -1590,12 +1645,10 @@ const RoomSearchPage = () => {
                                 
                                 if (payload) {
                                   // 기타 메모 저장
-                                  if (payload.otherNotes) {
-                                    setRoomOtherNotes((prev) => ({
-                                      ...prev,
-                                      [room.id]: payload.otherNotes || '',
-                                    }))
-                                  }
+                                  setRoomOtherNotes((prev) => ({
+                                    ...prev,
+                                    [room.id]: payload.otherNotes ?? '',
+                                  }))
 
                                   // API 응답을 체크리스트 섹션 형식으로 변환
                                   const checklistSections = convertApiRuleToChecklistSections(payload)
@@ -1936,12 +1989,10 @@ const RoomSearchPage = () => {
                                 
                                 if (payload) {
                                   // 기타 메모 저장
-                                  if (payload.otherNotes) {
-                                    setRoomOtherNotes((prev) => ({
-                                      ...prev,
-                                      [room.id]: payload.otherNotes || '',
-                                    }))
-                                  }
+                                  setRoomOtherNotes((prev) => ({
+                                    ...prev,
+                                    [room.id]: payload.otherNotes ?? '',
+                                  }))
 
                                   // API 응답을 체크리스트 섹션 형식으로 변환
                                   const checklistSections = convertApiRuleToChecklistSections(payload)

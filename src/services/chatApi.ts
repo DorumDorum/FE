@@ -23,3 +23,9 @@ export const getChatRoomMembers = (chatRoomNo: string) =>
   apiClient.get<{ userNo: string; nickname: string; isHost: boolean }[]>(
     `/api/chat/rooms/${chatRoomNo}/members`
   )
+
+export const findMyGroupChatRoomByRoomNo = async (roomNo: string) => {
+  const res = await getChatRooms()
+  const rooms = Array.isArray(res.data) ? res.data : []
+  return rooms.find((room) => room.chatRoomType === 'GROUP' && room.roomNo === roomNo) ?? null
+}
