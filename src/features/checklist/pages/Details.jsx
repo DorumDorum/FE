@@ -1,0 +1,2565 @@
+import React from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Icon, StatusBar, Avatar, goBack } from '../../../shared/components';
+import { ChatBubble, ChatComposer, ChatAttachmentCard } from '../../chat';
+
+// details.jsx — Detail screens for each tab
+
+// ─── Common: simple top nav with back arrow ─────────────────
+export function TopNav({ title, right, backTo }) {
+  const navigate = useNavigate();
+  const navRef = React.useRef(null);
+  const [collapsed, setCollapsed] = React.useState(false);
+
+  React.useEffect(() => {
+    const parent = navRef.current?.parentElement;
+    const scroller = parent?.querySelector(':scope > .scroll') || parent?.querySelector('.scroll');
+    if (!scroller) return undefined;
+
+    let lastTop = scroller.scrollTop;
+    let ticking = false;
+
+    const update = () => {
+      const currentTop = scroller.scrollTop;
+      const scrollingDown = currentTop > lastTop + 2;
+      const scrollingUp = currentTop < lastTop - 2;
+
+      if (currentTop < 12 || scrollingUp) {
+        setCollapsed(false);
+      } else if (scrollingDown && currentTop > 32) {
+        setCollapsed(true);
+      }
+
+      lastTop = Math.max(0, currentTop);
+      ticking = false;
+    };
+
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(update);
+    };
+
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => scroller.removeEventListener('scroll', onScroll);
+  }, []);
+
+  return (
+    <div ref={navRef} style={{
+      padding: collapsed ? '0 12px' : '6px 12px 8px',
+      display: 'grid',
+      gridTemplateColumns: '72px 1fr 72px',
+      alignItems: 'center',
+      minHeight: collapsed ? 0 : 48,
+      height: collapsed ? 0 : 48,
+      opacity: collapsed ? 0 : 1,
+      overflow: 'hidden',
+      transform: collapsed ? 'translateY(-8px)' : 'translateY(0)',
+      transition: 'height 160ms ease, min-height 160ms ease, padding 160ms ease, opacity 120ms ease, transform 160ms ease',
+      flexShrink: 0,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+        <button onClick={() => goBack(navigate, backTo)} style={{ background: 'transparent', border: 0, padding: 8, color: 'var(--ink)', cursor: 'pointer' }}><Icon.back /></button>
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)', textAlign: 'center', minWidth: 0 }}>{title}</div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', whiteSpace: 'nowrap' }}>{right || null}</div>
+    </div>);
+
+}
+
+// ─── Time range slider (drag both ends) ─────────────────────
+export function TimeRangeSlider({ value, onChange }) {
+  const trackRef = React.useRef(null);
+  const [drag, setDrag] = React.useState(null);
+
+  const fmt = (h) => `${h}시`;
+  const span = value.end >= value.start ? value.end - value.start : 24 - value.start + value.end;
+
+  React.useEffect(() => {
+    if (!drag) return;
+    const move = (e) => {
+      const rect = trackRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+      const ratio = Math.max(0, Math.min(1, x / rect.width));
+      const h = Math.round(ratio * 24);
+      const next = h === 24 ? 0 : h;
+      onChange(drag === 'start' ? { ...value, start: next } : { ...value, end: next });
+    };
+    const up = () => setDrag(null);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    window.addEventListener('touchmove', move, { passive: false });
+    window.addEventListener('touchend', up);
+    return () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      window.removeEventListener('touchmove', move);
+      window.removeEventListener('touchend', up);
+    };
+  }, [drag, value]);
+
+  const sPct = value.start / 24 * 100;
+  const ePct = value.end / 24 * 100;
+  const wraps = value.end < value.start;
+
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginBottom: 8 }}>
+        {fmt(value.start)} <span style={{ color: 'var(--ink-3)' }}>—</span> {fmt(value.end)}
+        <span style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 500, marginLeft: 8 }}>({span}시간)</span>
+      </div>
+      <div
+        ref={trackRef}
+        style={{
+          position: 'relative', height: 6, background: 'var(--surface-2)', borderRadius: 99,
+          margin: '14px 12px',
+          touchAction: 'none'
+        }}>
+        
+        {/* selected range */}
+        {wraps ?
+        <>
+            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${ePct}%`, background: 'var(--brand)', borderRadius: 99 }} />
+            <div style={{ position: 'absolute', left: `${sPct}%`, top: 0, bottom: 0, right: 0, background: 'var(--brand)', borderRadius: 99 }} />
+          </> :
+
+        <div style={{ position: 'absolute', left: `${sPct}%`, top: 0, bottom: 0, width: `${ePct - sPct}%`, background: 'var(--brand)' }} />
+        }
+        {/* thumbs */}
+        {[
+        { id: 'start', pct: sPct },
+        { id: 'end', pct: ePct }].
+        map((t) =>
+        <div
+          key={t.id}
+          onMouseDown={(e) => {e.preventDefault();setDrag(t.id);}}
+          onTouchStart={(e) => {e.preventDefault();setDrag(t.id);}}
+          style={{
+            position: 'absolute',
+            left: `calc(${t.pct}% - 12px)`, top: -9,
+            width: 24, height: 24, borderRadius: '50%',
+            background: 'white',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.04)',
+            border: '3px solid var(--brand)',
+            cursor: drag === t.id ? 'grabbing' : 'grab',
+            touchAction: 'none'
+          }} />
+
+        )}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 4px', fontSize: 10, color: 'var(--ink-4)', fontWeight: 500 }}>
+        <span>0</span><span>6</span><span>12</span><span>18</span><span>24</span>
+      </div>
+    </div>);
+
+}
+
+export function TimeRangeSelect({ value, onChange }) {
+  const [activeKey, setActiveKey] = React.useState('start');
+  const hours = Array.from({ length: 24 }, (_, hour) => hour);
+  const fmt = (hour) => String(hour).padStart(2, '0') + ':00';
+  const shortFmt = (hour) => String(hour).padStart(2, '0') + '시';
+  const setHour = (hour) => onChange({ ...value, [activeKey]: hour });
+
+  const RangeButton = ({ id, label }) => {
+    const active = activeKey === id;
+    return (
+      <button
+        type="button"
+        onClick={() => setActiveKey(id)}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          border: active ? '1.5px solid var(--brand)' : '1px solid var(--line)',
+          borderRadius: 14,
+          background: active ? 'var(--brand-soft)' : 'var(--surface)',
+          padding: '10px 12px',
+          textAlign: 'left',
+          fontFamily: 'inherit',
+          cursor: 'pointer',
+          transition: 'border-color .15s ease, background .15s ease',
+        }}
+      >
+        <span style={{ display: 'block', fontSize: 11, color: active ? 'var(--brand-deep)' : 'var(--ink-3)', fontWeight: 800, marginBottom: 3 }}>{label}</span>
+        <span style={{ display: 'block', fontSize: 16, color: active ? 'var(--brand-deep)' : 'var(--ink)', fontWeight: 900, letterSpacing: '-0.2px' }}>{fmt(value[id])}</span>
+      </button>
+    );
+  };
+
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
+        <RangeButton id="start" label="시작" />
+        <RangeButton id="end" label="끝" />
+      </div>
+
+      <div style={{ marginTop: 9, display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2, WebkitOverflowScrolling: 'touch' }}>
+        {hours.map((hour) => {
+          const selected = value[activeKey] === hour;
+          const otherSelected = value[activeKey === 'start' ? 'end' : 'start'] === hour;
+          return (
+            <button
+              key={hour}
+              type="button"
+              onClick={() => setHour(hour)}
+              style={{
+                minWidth: 48,
+                height: 34,
+                borderRadius: 999,
+                border: selected ? 0 : otherSelected ? '1px solid var(--brand-soft)' : '1px solid var(--line-2)',
+                background: selected ? 'var(--brand)' : otherSelected ? 'var(--brand-soft)' : 'var(--surface)',
+                color: selected ? 'white' : otherSelected ? 'var(--brand-deep)' : 'var(--ink-2)',
+                fontSize: 12,
+                fontWeight: selected || otherSelected ? 800 : 700,
+                fontFamily: 'inherit',
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              {shortFmt(hour)}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Chip picker (single-select) ────────────────────────────
+export function ChipPick({ value, options, onChange }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+      {options.map((o) => {
+        const sel = o === value;
+        return (
+          <button
+            key={o}
+            type="button"
+            onClick={() => onChange(o)}
+            style={{
+              padding: '7px 12px',
+              borderRadius: 999,
+              border: sel ? 'none' : '1px solid var(--line-2)',
+              background: sel ? 'var(--ink)' : 'transparent',
+              color: sel ? 'white' : 'var(--ink-2)',
+              fontSize: 13, fontWeight: sel ? 700 : 500,
+              fontFamily: 'inherit',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}>
+            {o}</button>);
+
+      })}
+    </div>);
+
+}
+
+// ─── Row layout (label left, control right) ─────────────────
+export function ChecklistRow({ label, children, align = 'center', required = false }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: align === 'top' ? 'flex-start' : 'center',
+      gap: 14,
+      padding: '12px 0',
+      borderBottom: '1px solid var(--line)'
+    }}>
+      <div style={{ width: 76, flexShrink: 0, fontSize: 14, color: 'var(--ink-2)', fontWeight: 500, paddingTop: align === 'top' ? 6 : 0 }}>
+        {label}
+        {required && <span style={{ color: 'var(--brand)', marginLeft: 3, fontWeight: 700 }}>*</span>}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+    </div>);
+
+}
+
+// ─── Checklist edit (full form) ─────────────────────────────
+// mode: 'personal' (내 체크리스트) | 'room' (모집방 생성 2단계) | 'roomEdit' (방 체크리스트 수정)
+export function ChecklistEditScreen({ mode = 'personal' }) {
+  const navigate = useNavigate();
+  const isRoomCreate = mode === 'room';
+  const isRoomEdit = mode === 'roomEdit';
+  const isRoom = isRoomCreate || isRoomEdit;
+  const [v, setV] = React.useState({
+    sleep: { start: 23, end: 1 },
+    wake: { start: 7, end: 9 },
+    dryer: null,
+    homing: '유동적', cleaning: '주기적', call: '가능', dim: '어두움',
+    sleepHabit: '약함', snore: '약함~없음', shower: '저녁', eating: '가능+환기필수',
+    lightsOut: '시간 지정', lightsOutHour: 23, visitHome: '2주', smoke: '비흡연', fridge: '협의 후 결정',
+    alarm: '진동', earphone: '항상', skinCare: '유동적', silentMouse: '사용', hot: '중간', cold: '중간', study: '유동적', trash: '개별'
+  });
+  const upd = (k, val) => setV({ ...v, [k]: val });
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      {isRoomCreate ?
+      <>
+          <TopNav title="모집방 만들기" backTo="/rooms/create/1" />
+          <div style={{ padding: '0 20px 10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>
+              <span>2 / 3 단계</span>
+              <span>방 체크리스트</span>
+            </div>
+            <div style={{ height: 6, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden' }}>
+              <div style={{ width: '66%', height: '100%', background: 'var(--brand)' }} />
+            </div>
+          </div>
+          <div style={{ padding: '6px 20px 0' }}>
+            <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.4px', lineHeight: 1.35 }}>
+              어떤 룸메이트를 찾으시나요?
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4, lineHeight: 1.5 }}>우리 방의 체크리스트예요. 신청자의 체크리스트와 비교돼요.
+
+          </div>
+          </div>
+        </> :
+
+      isRoomEdit ?
+      <>
+          <TopNav
+          title="방 체크리스트"
+          backTo="/rooms/checklist"
+          right={<button onClick={() => navigate('/rooms/checklist')} style={{ background: 'transparent', border: 0, fontSize: 13, color: 'var(--brand)', fontWeight: 700, cursor: 'pointer' }}>저장</button>}
+        />
+          <div style={{ padding: '6px 20px 0' }}>
+            <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.4px', lineHeight: 1.35 }}>
+              방 기준 체크리스트를 수정해요
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4, lineHeight: 1.5 }}>
+              신청자의 체크리스트와 비교될 기준이에요.
+            </div>
+          </div>
+        </> :
+
+      <TopNav
+        title="내 체크리스트"
+        backTo="/me"
+        right={<button onClick={() => navigate('/me')} style={{ background: 'transparent', border: 0, fontSize: 13, color: 'var(--brand)', fontWeight: 700, cursor: 'pointer' }}>저장</button>}
+      />
+      }
+
+      <div className="scroll" style={{ padding: isRoom ? '12px 20px 0' : '0 20px' }}>
+        {/* Section 1 */}
+        <div style={{ padding: '10px 0 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={{ margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: '-0.4px' }}>생활 패턴</h2>
+          <span className="chip brand" style={{ fontSize: 10, padding: '3px 8px', fontWeight: 700 }}>필수</span>
+        </div>
+        <div className="card" style={{ padding: '0 16px', marginBottom: 16 }}>
+          <ChecklistRow label="취침 시간" align="top" required>
+            <TimeRangeSelect value={v.sleep} onChange={(x) => upd('sleep', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="기상 시간" align="top" required>
+            <TimeRangeSelect value={v.wake} onChange={(x) => upd('wake', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="귀가" required>
+            <ChipPick value={v.homing} options={['유동적', '고정적']} onChange={(x) => upd('homing', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="청소" required>
+            <ChipPick value={v.cleaning} options={['주기적', '비주기적']} onChange={(x) => upd('cleaning', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="방에서 전화" required>
+            <ChipPick value={v.call} options={['가능', '불가능']} onChange={(x) => upd('call', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="잠귀" required>
+            <ChipPick value={v.dim} options={['밝음', '어두움']} onChange={(x) => upd('dim', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="잠버릇" required>
+            <ChipPick value={v.sleepHabit} options={['심함', '중간', '약함']} onChange={(x) => upd('sleepHabit', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="코골이" required>
+            <ChipPick value={v.snore} options={['심함', '중간', '약함~없음']} onChange={(x) => upd('snore', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="샤워시간" required>
+            <ChipPick value={v.shower} options={['아침', '저녁']} onChange={(x) => upd('shower', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="방에서 취식" required>
+            <ChipPick value={v.eating} options={['가능', '불가능', '가능+환기필수']} onChange={(x) => upd('eating', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="소등" align="top" required>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+              <ChipPick value={v.lightsOut} options={['시간 지정', '한명 잘 때 알아서']} onChange={(x) => upd('lightsOut', x)} />
+              {v.lightsOut === '시간 지정' &&
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--brand-soft)', borderRadius: 10, padding: '6px 10px', alignSelf: 'flex-start' }}>
+                  <button
+                  type="button"
+                  onClick={() => upd('lightsOutHour', Math.max(0, v.lightsOutHour - 1))}
+                  style={{ width: 26, height: 26, borderRadius: 7, border: 0, background: 'var(--surface)', color: 'var(--brand-deep)', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                  −</button>
+                  <span style={{ minWidth: 70, textAlign: 'center', fontSize: 14, fontWeight: 700, color: 'var(--brand-deep)' }}>{v.lightsOutHour}시 이후</span>
+                  <button
+                  type="button"
+                  onClick={() => upd('lightsOutHour', Math.min(24, v.lightsOutHour + 1))}
+                  style={{ width: 26, height: 26, borderRadius: 7, border: 0, background: 'var(--surface)', color: 'var(--brand-deep)', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                  +</button>
+                </div>
+              }
+            </div>
+          </ChecklistRow>
+          <ChecklistRow label="본가 주기" required>
+            <ChipPick value={v.visitHome} options={['매주', '2주', '한달이상', '거의 안 감']} onChange={(x) => upd('visitHome', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="흡연" required>
+            <ChipPick value={v.smoke} options={['연초', '전자담배', '비흡연']} onChange={(x) => upd('smoke', x)} />
+          </ChecklistRow>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 0' }}>
+            <div style={{ width: 76, flexShrink: 0, fontSize: 14, color: 'var(--ink-2)', fontWeight: 500 }}>
+              냉장고<span style={{ color: 'var(--brand)', marginLeft: 3, fontWeight: 700 }}>*</span>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <ChipPick value={v.fridge} options={['대여·구매·보유', '협의 후 결정', '필요 없음']} onChange={(x) => upd('fridge', x)} />
+            </div>
+          </div>
+        </div>
+
+        {/* Section 2 */}
+        <div style={{ padding: '4px 0 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={{ margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: '-0.4px' }}>추가 규칙</h2>
+          <span className="chip line" style={{ fontSize: 10, padding: '3px 8px', fontWeight: 700 }}>선택</span>
+        </div>
+        <div className="card" style={{ padding: '0 16px', marginBottom: 16 }}>
+          <ChecklistRow label="드라이기 제한" align="top">
+            <div>
+              <div style={{ display: 'flex', gap: 6, marginBottom: v.dryer ? 8 : 0 }}>
+                <span onClick={() => upd('dryer', null)} className={!v.dryer ? 'chip ink' : 'chip line'} style={{ fontSize: 12, padding: '6px 12px', cursor: 'pointer' }}>제한 없음</span>
+                <span onClick={() => upd('dryer', v.dryer || { start: 12, end: 19 })} className={v.dryer ? 'chip ink' : 'chip line'} style={{ fontSize: 12, padding: '6px 12px', cursor: 'pointer' }}>제한 시간</span>
+              </div>
+              {v.dryer && <TimeRangeSelect value={v.dryer} onChange={(x) => upd('dryer', x)} />}
+            </div>
+          </ChecklistRow>
+          <ChecklistRow label="알람">
+            <ChipPick value={v.alarm} options={['진동', '소리']} onChange={(x) => upd('alarm', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="이어폰">
+            <ChipPick value={v.earphone} options={['항상', '유동적']} onChange={(x) => upd('earphone', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="키스킨">
+            <ChipPick value={v.skinCare} options={['항상', '유동적']} onChange={(x) => upd('skinCare', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="무소음 마우스">
+            <ChipPick value={v.silentMouse} options={['사용', '미사용', '유동적']} onChange={(x) => upd('silentMouse', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="더위">
+            <ChipPick value={v.hot} options={['많이 탐', '중간', '적게 탐']} onChange={(x) => upd('hot', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="추위">
+            <ChipPick value={v.cold} options={['많이 탐', '중간', '적게 탐']} onChange={(x) => upd('cold', x)} />
+          </ChecklistRow>
+          <ChecklistRow label="공부">
+            <ChipPick value={v.study} options={['기숙사 밖', '기숙사 안', '유동적']} onChange={(x) => upd('study', x)} />
+          </ChecklistRow>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 0' }}>
+            <div style={{ width: 76, flexShrink: 0, fontSize: 14, color: 'var(--ink-2)', fontWeight: 500 }}>쓰레기통</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <ChipPick value={v.trash} options={['개별', '공유']} onChange={(x) => upd('trash', x)} />
+            </div>
+          </div>
+        </div>
+
+        {/* Info banner */}
+        <div style={{
+          background: 'var(--brand-soft)', borderRadius: 12, padding: '10px 14px',
+          fontSize: 12, color: 'var(--brand-deep)', lineHeight: 1.5,
+          display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 16
+        }}>
+          <span style={{ fontWeight: 700 }}>*</span>
+          <span>생활 패턴 항목은 모집방을 만들기 위해 모두 작성해야 해요. 추가 규칙은 선택이에요.</span>
+        </div>
+
+        <div style={{ height: isRoom ? 100 : 24 }} />
+      </div>
+
+      {isRoomCreate &&
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
+          <button onClick={() => navigate('/rooms/create/1')} className="btn ghost" style={{ width: 80, height: 52 }}>이전</button>
+          <button onClick={() => navigate('/rooms/create/3')} className="btn full" style={{ flex: 1, height: 52 }}>다음</button>
+        </div>
+      }
+      {isRoomEdit &&
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
+          <button onClick={() => navigate('/rooms/checklist')} className="btn ghost" style={{ width: 80, height: 52 }}>취소</button>
+          <button onClick={() => navigate('/rooms/checklist')} className="btn full" style={{ flex: 1, height: 52 }}>저장</button>
+        </div>
+      }
+    </div>);
+
+}
+
+// ─── Create-room Step 3: Preview & publish ──────────────────
+const CREATE_ROOM_DRAFT_KEY = 'dorumdorum:create-room-draft';
+const DEFAULT_CREATE_ROOM_DRAFT = {
+  title: '아침형 룸메 구해요',
+  dorm: '2생활관',
+  roomSize: '4인실',
+  note: '아침 7시쯤 일어나는 사람이면 좋아요. 청소는 일주일에 두 번 같이 하면 좋겠어요.',
+};
+export const CREATE_ROOM_DORMS = [
+  { name: '1생활관', sizesLabel: '1·2·3인실', sizes: ['1인실', '2인실', '3인실'] },
+  { name: '2생활관', sizesLabel: '1·2·4인실', sizes: ['1인실', '2인실', '4인실'] },
+  { name: '3생활관', sizesLabel: '2·4인실', sizes: ['2인실', '4인실'] },
+  { name: '메디컬', sizesLabel: '1·2·3·4인실', sizes: ['1인실', '2인실', '3인실', '4인실'] },
+];
+export const ROOM_SIZE_OPTIONS = ['1인실', '2인실', '3인실', '4인실'];
+
+function readCreateRoomDraft() {
+  if (typeof window === 'undefined') return DEFAULT_CREATE_ROOM_DRAFT;
+  try {
+    const saved = window.sessionStorage.getItem(CREATE_ROOM_DRAFT_KEY);
+    return saved ? { ...DEFAULT_CREATE_ROOM_DRAFT, ...JSON.parse(saved) } : DEFAULT_CREATE_ROOM_DRAFT;
+  } catch {
+    return DEFAULT_CREATE_ROOM_DRAFT;
+  }
+}
+
+export function CreateRoomStep3Screen() {
+  const navigate = useNavigate();
+  const draft = readCreateRoomDraft();
+  const capacity = Number.parseInt(draft.roomSize, 10) || 4;
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <TopNav title="모집방 만들기" backTo="/rooms/create/2" />
+
+      <div style={{ padding: '0 20px 10px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>
+          <span>3 / 3 단계</span>
+          <span>미리보기</span>
+        </div>
+        <div style={{ height: 6, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden' }}>
+          <div style={{ width: '100%', height: '100%', background: 'var(--brand)' }} />
+        </div>
+      </div>
+
+      <div style={{ padding: '12px 20px 4px' }}>
+        <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.4px', lineHeight: 1.35 }}>
+          이대로 모집글을 올릴까요?
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4 }}>
+          신청자에게 이렇게 보여요. 언제든 수정할 수 있어요.
+        </div>
+      </div>
+
+      <div className="scroll" style={{ padding: '14px 16px 0' }}>
+        {/* Preview card */}
+        <div className="card" style={{ padding: 16, marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-3)', letterSpacing: '0.4px', marginBottom: 8 }}>미리보기</div>
+          <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>{draft.title || DEFAULT_CREATE_ROOM_DRAFT.title}</div>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4 }}>{draft.dorm} · {draft.roomSize}</div>
+          <div style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.55, marginTop: 12 }}>
+            {draft.note || '방장의 한마디가 비어 있어요.'}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+            <Avatar name="강민지" size={28} />
+            <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>방장 · <b>강민지</b></span>
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--ink-3)', fontWeight: 600 }}>1/{capacity} 모집중</span>
+          </div>
+        </div>
+
+        {/* Summary */}
+        <div style={{ background: 'var(--surface)', borderRadius: 16, padding: 4 }}>
+          {[
+          { l: '기본 정보', v: `${draft.title || DEFAULT_CREATE_ROOM_DRAFT.title} · ${draft.dorm} ${draft.roomSize}`, i: 1 },
+          { l: '방 체크리스트', v: '생활 패턴 14개 · 추가 규칙 9개 작성됨', i: 2 }].
+          map((r, i, a) =>
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: 12, padding: '14px 14px',
+            borderBottom: i === a.length - 1 ? 'none' : '1px solid var(--line)'
+          }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 600 }}>{r.l}</div>
+                <div style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 600, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.v}</div>
+              </div>
+              {r.i &&
+            <button
+              type="button"
+              onClick={() => navigate(`/rooms/create/${r.i}`)}
+              style={{ background: 'transparent', border: 0, padding: 0, fontSize: 12, fontWeight: 700, color: 'var(--brand)', cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              {r.i}단계 수정
+            </button>
+            }
+            </div>
+          )}
+        </div>
+
+        <div style={{ height: 110 }} />
+      </div>
+
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
+        <button onClick={() => navigate('/rooms/create/2')} className="btn ghost" style={{ width: 80, height: 52 }}>이전</button>
+        <button onClick={() => navigate('/rooms/create/success')} className="btn full" style={{ flex: 1, height: 52 }}>모집방 올리기</button>
+      </div>
+    </div>);
+
+}
+
+// ─── Create recruitment room — Step 1: Basic info ───────────
+export function CreateRoomScreen() {
+  const navigate = useNavigate();
+  const [form, setForm] = React.useState(readCreateRoomDraft);
+  const selectedDorm = CREATE_ROOM_DORMS.find((d) => d.name === form.dorm) || CREATE_ROOM_DORMS[1];
+  const titleMax = 30;
+  const noteMax = 180;
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(CREATE_ROOM_DRAFT_KEY, JSON.stringify(form));
+    }
+  }, [form]);
+
+  const update = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const selectDorm = (dorm) => {
+    setForm((prev) => ({
+      ...prev,
+      dorm: dorm.name,
+      roomSize: dorm.sizes.includes(prev.roomSize) ? prev.roomSize : dorm.sizes[0],
+    }));
+  };
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <TopNav title="모집방 만들기" backTo="/rooms/find" />
+
+      <div style={{ padding: '0 20px 16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>
+          <span>1 / 3 단계</span>
+          <span>기본 정보</span>
+        </div>
+        <div style={{ height: 6, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden' }}>
+          <div style={{ width: '33%', height: '100%', background: 'var(--brand)' }} />
+        </div>
+      </div>
+
+      <div className="scroll" style={{ padding: '8px 20px 0' }}>
+        <h1 style={{ margin: '4px 0 24px', fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.35 }}>
+          어떤 룸메이트를<br />찾으시나요?
+        </h1>
+
+        {/* Inputs */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>모집글 제목</label>
+            <input
+              value={form.title}
+              onChange={(e) => update('title', e.target.value)}
+              maxLength={titleMax}
+              placeholder="예: 아침형 룸메 구해요"
+              style={{
+                width: '100%',
+                background: 'var(--surface)',
+                border: '1.5px solid var(--brand)',
+                borderRadius: 14,
+                padding: '14px 16px',
+                fontSize: 15,
+                color: 'var(--ink)',
+                fontWeight: 600,
+                fontFamily: 'inherit',
+                outline: 'none',
+              }}
+            />
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4, textAlign: 'right' }}>{form.title.length} / {titleMax}</div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>기숙사</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {CREATE_ROOM_DORMS.map((d) => {
+                const selected = d.name === form.dorm;
+                return (
+                  <button key={d.name} type="button" onClick={() => selectDorm(d)} style={{
+                background: selected ? 'var(--brand-soft)' : 'var(--surface)',
+                border: selected ? '1.5px solid var(--brand)' : '1.5px solid var(--line)',
+                borderRadius: 12, padding: '12px 14px', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer'
+              }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: selected ? 'var(--brand-deep)' : 'var(--ink)' }}>{d.name}</div>
+                  <div style={{ fontSize: 11, color: selected ? 'var(--brand-deep)' : 'var(--ink-3)', marginTop: 3, opacity: 0.75, fontWeight: 500 }}>{d.sizesLabel}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>모집 인원 <span style={{ color: 'var(--ink-4)', fontWeight: 500 }}>· {selectedDorm.name} 선택 가능</span></label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {ROOM_SIZE_OPTIONS.map((size) => {
+                const disabled = !selectedDorm.sizes.includes(size);
+                const selected = form.roomSize === size;
+                return (
+                  <button
+                    key={size}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => update('roomSize', size)}
+                    className={"chip " + (selected ? 'ink' : 'line')}
+                    style={{
+                flex: 1, justifyContent: 'center', fontSize: 14, padding: '10px 0', borderRadius: 12,
+                opacity: disabled ? 0.35 : 1,
+                textDecoration: disabled ? 'line-through' : 'none',
+                border: selected ? 0 : '1px solid var(--line-2)',
+                cursor: disabled ? 'not-allowed' : 'pointer',
+              }}>{size}</button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>방장의 한마디 <span style={{ color: 'var(--ink-4)', fontWeight: 500 }}>(선택)</span></label>
+            <textarea
+              value={form.note}
+              onChange={(e) => update('note', e.target.value)}
+              maxLength={noteMax}
+              placeholder="예: 생활 패턴이 잘 맞는 분이면 좋아요."
+              style={{
+                width: '100%',
+                minHeight: 96,
+                background: 'var(--surface)',
+                border: '1px solid var(--line)',
+                borderRadius: 12,
+                padding: 14,
+                fontSize: 14,
+                color: 'var(--ink)',
+                lineHeight: 1.5,
+                resize: 'none',
+                outline: 'none',
+                fontFamily: 'inherit',
+              }}
+            />
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4, textAlign: 'right' }}>{form.note.length} / {noteMax}</div>
+          </div>
+        </div>
+
+        <div style={{ height: 24 }} />
+      </div>
+
+      <div style={{ padding: '14px 16px 30px', borderTop: '1px solid var(--line)', background: 'var(--surface)' }}>
+        <button onClick={() => navigate('/rooms/create/2')} className="btn full" style={{ height: 52 }}>다음</button>
+      </div>
+    </div>);
+
+}
+
+// ─── Applicant detail (host viewing applicant's checklist) ──
+export function ApplicantDetailScreen() {
+  const navigate = useNavigate();
+  const [confirmAction, setConfirmAction] = React.useState(null);
+  const ITEMS = [
+  { cat: '생활 패턴', rows: [
+    { q: '취침', room: '23시 – 01시', other: '23시 – 01시', match: true },
+    { q: '기상', room: '07시 – 09시', other: '07시 – 08시', match: true },
+    { q: '귀가', room: '고정적', other: '고정적', match: true },
+    { q: '청소', room: '주기적', other: '주기적', match: true },
+    { q: '방에서 전화', room: '가능', other: '가능', match: true },
+    { q: '잠귀', room: '어두움', other: '어두움', match: true },
+    { q: '잠버릇', room: '약함', other: '약함', match: true },
+    { q: '코골이', room: '약함~없음', other: '약함~없음', match: true },
+    { q: '샤워시간', room: '저녁', other: '아침', match: false },
+    { q: '방에서 취식', room: '가능+환기필수', other: '가능', match: false },
+    { q: '소등', room: '23시 이후', other: '23시 이후', match: true },
+    { q: '본가 주기', room: '2주', other: '매주', match: false },
+    { q: '흡연', room: '비흡연', other: '비흡연', match: true },
+    { q: '냉장고', room: '협의 후 결정', other: '협의 후 결정', match: true }]
+  },
+  { cat: '추가 규칙', rows: [
+    { q: '드라이기 제한', room: '12–19시 사용 제한', other: '00–06시 사용 제한', match: false },
+    { q: '알람', room: '진동', other: '진동', match: true },
+    { q: '이어폰', room: '항상', other: '항상', match: true },
+    { q: '키스킨', room: '유동적', other: '유동적', match: true },
+        { q: '무소음 마우스', room: '사용', other: '미사용', match: false },
+    { q: '더위', room: '중간', other: '중간', match: true },
+    { q: '추위', room: '중간', other: '중간', match: true },
+    { q: '공부', room: '유동적', other: '기숙사 안', match: false },
+    { q: '쓰레기통', room: '개별', other: '개별', match: true }]
+  }];
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <TopNav title="신청자 정보" backTo="/rooms/applicants" />
+
+      <div className="scroll">
+        {/* Profile header */}
+        <div style={{ padding: '0 20px 16px', display: 'flex', alignItems: 'center', gap: 16 }}>
+          <Avatar name="지원" size={64} style={{ fontSize: 26 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 19, fontWeight: 700 }}>지원</span>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 2 }}>컴공 22</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>2026.05.21 10:42 신청</div>
+          </div>
+        </div>
+
+        {/* Match summary */}
+        <div style={{ margin: '0 16px 16px' }} className="card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 6 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 11, background: 'var(--brand)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Icon.check size={20} weight={2.6} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>방과 잘 맞아요</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>10개 항목 중 7개 일치</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Message */}
+        <div className="h-section"><h2>신청 메시지</h2></div>
+        <div className="card" style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--ink-2)', margin: '0 16px', padding: 16 }}>
+          안녕하세요! 컴공 22학번 안녕하세요! 조용히 지내고 체크리스트 매칭도 잘 맞을 것 같아서 신청 드립니다. 잘 부탁드려요!
+        </div>
+
+        {/* Checklist comparison */}
+        <div className="h-section">
+          <h2>체크리스트 비교</h2>
+        </div>
+        <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 18, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 84px 84px 24px', alignItems: 'center', padding: '12px 14px', fontSize: 11, fontWeight: 600, color: 'var(--ink-3)' }}>
+            <span />
+            <span style={{ textAlign: 'center' }}>방</span>
+            <span style={{ textAlign: 'center' }}>신청자</span>
+            <span />
+          </div>
+          {ITEMS.map((cat) =>
+          <div key={cat.cat}>
+              <div style={{ padding: '8px 14px 6px', fontSize: 11, fontWeight: 700, color: 'var(--ink-2)', background: 'var(--surface-2)' }}>{cat.cat}</div>
+              {cat.rows.map((it, i) =>
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 84px 84px 24px', alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid var(--line)', fontSize: 13 }}>
+                  <span style={{ color: 'var(--ink-2)' }}>{it.q}</span>
+                  <span style={{ textAlign: 'center', fontWeight: 600 }}>{it.room}</span>
+                  <span style={{ textAlign: 'center', fontWeight: 600, color: it.match ? 'var(--ink)' : 'var(--ink-3)' }}>{it.other}</span>
+                  <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    {it.match ?
+                <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--brand)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon.check size={12} weight={3} /></span> :
+                <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--surface-2)', color: 'var(--ink-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>−</span>}
+                  </span>
+                </div>
+            )}
+            </div>
+          )}
+        </div>
+
+        <div style={{ height: 110 }} />
+      </div>
+
+	      {/* Action bar */}
+	      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
+	        <button onClick={() => setConfirmAction('reject')} className="btn ghost" style={{ flex: 1, height: 52 }}>거절</button>
+	        <button onClick={() => navigate('/chat/dm')} className="btn ghost" style={{ width: 52, height: 52, padding: 0 }}><Icon.chat size={22} /></button>
+	        <button onClick={() => setConfirmAction('accept')} className="btn full" style={{ flex: 1, height: 52 }}>수락</button>
+	      </div>
+	      {confirmAction && (
+	        <div onClick={() => setConfirmAction(null)} style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(23,24,28,0.28)', display: 'flex', alignItems: 'flex-end' }}>
+	          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--surface)', borderRadius: '22px 22px 0 0', padding: '10px 16px 30px', boxShadow: '0 -16px 40px rgba(23,24,28,0.14)' }}>
+	            <div style={{ width: 38, height: 4, borderRadius: 99, background: 'var(--line-2)', margin: '0 auto 14px' }} />
+	            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 2px 18px' }}>
+	              <Avatar name="지원" size={44} />
+	              <div style={{ flex: 1, minWidth: 0 }}>
+	                <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>
+	                  {confirmAction === 'accept' ? '신청을 수락할까요?' : '신청을 거절할까요?'}
+	                </div>
+	                <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>지원 · 컴공 22</div>
+	              </div>
+	            </div>
+	            <div style={{ borderRadius: 14, background: 'var(--surface-2)', padding: 14, fontSize: 12, lineHeight: 1.5, color: 'var(--ink-2)', marginBottom: 12 }}>
+	              {confirmAction === 'accept'
+	                ? '수락하면 지원님이 방 멤버로 이동하고 신청은 완료 처리돼요.'
+	                : '거절하면 지원님의 신청이 목록에서 사라져요. 다시 되돌릴 수 없어요.'}
+	            </div>
+	            <div style={{ display: 'flex', gap: 8 }}>
+	              <button type="button" onClick={() => setConfirmAction(null)} className="btn ghost" style={{ width: 92, height: 52 }}>취소</button>
+	              <button
+	                type="button"
+	                onClick={() => navigate(confirmAction === 'accept' ? '/rooms/members' : '/rooms/applicants')}
+	                className="btn full"
+	                style={{ flex: 1, height: 52, background: confirmAction === 'accept' ? 'var(--brand)' : 'var(--danger)' }}
+	              >
+	                {confirmAction === 'accept' ? '수락하기' : '거절하기'}
+	              </button>
+	            </div>
+	          </div>
+	        </div>
+	      )}
+	    </div>);
+
+}
+
+// ─── Notice list/detail ─────────────────────────────────────
+export const NOTICES = [
+  { id: 1, tag: '필독', tagBrand: true, title: '6월 입사식 일정 안내', desc: '5월 28일 18:00 다목적실 B동 1층 집합', date: '05.21', read: false },
+  { id: 2, tag: '안전', title: '소화기 점검으로 인한 알람 테스트 안내', desc: 'B동 전체 소방 점검이 5월 24일 진행돼요', date: '05.20', read: false },
+  { id: 3, tag: '시설', title: 'B동 세탁실 4번 기기 교체 완료', desc: '교체 완료 후 정상 이용 가능해요', date: '05.18', read: true },
+  { id: 4, tag: '행사', title: '룸메이트 매칭 데이 안내', desc: '5월 25일 오후 7시 라운지에서 진행돼요', date: '05.17', read: true },
+  { id: 5, tag: '생활', title: '공용 냉장고 정리 일정', desc: '이름이 없는 음식은 정리될 수 있어요', date: '05.15', read: true },
+];
+
+export function NoticeListScreen() {
+  const navigate = useNavigate();
+  const [filter, setFilter] = React.useState('전체');
+  const filters = ['전체', '필독', '안전', '시설', '행사'];
+  const visibleNotices = filter === '전체' ? NOTICES : NOTICES.filter((notice) => notice.tag === filter);
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <TopNav title="공지사항" backTo="/" />
+
+      <div className="scroll" style={{ padding: '0 16px 24px' }}>
+        <div style={{ padding: '4px 4px 14px' }}>
+          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.4px' }}>공지사항</div>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4 }}>생활관 안내와 중요한 일정을 확인해요</div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 12 }}>
+          {filters.map((item) => {
+            const active = filter === item;
+            return (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setFilter(item)}
+                className={"chip " + (active ? 'ink' : 'line')}
+                style={{ fontSize: 13, padding: '7px 12px', border: active ? 0 : '1px solid var(--line-2)', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                {item}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ background: 'var(--surface)', borderRadius: 18, overflow: 'hidden' }}>
+          {visibleNotices.map((notice, index) => (
+            <button
+              key={notice.id}
+              type="button"
+              onClick={() => navigate(`/notice/${notice.id}`)}
+              style={{
+                width: '100%',
+                border: 0,
+                background: 'transparent',
+                padding: '15px 16px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 12,
+                textAlign: 'left',
+                borderBottom: index === visibleNotices.length - 1 ? 'none' : '1px solid var(--line)',
+                fontFamily: 'inherit',
+                cursor: 'pointer',
+              }}
+            >
+              <span className={"chip" + (notice.tagBrand ? ' brand' : '')} style={{ fontSize: 11, padding: '3px 8px', marginTop: 1 }}>{notice.tag}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {!notice.read && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--brand)', flexShrink: 0 }} />}
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{notice.title}</div>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4, lineHeight: 1.45 }}>{notice.desc}</div>
+              </div>
+              <span style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 600, flexShrink: 0 }}>{notice.date}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function NoticeDetailScreen() {
+  return (
+	    <div className="screen" style={{ background: 'var(--surface)' }}>
+	      <StatusBar />
+	      <TopNav title="공지사항" />
+
+      <div className="scroll" style={{ padding: '8px 20px 30px' }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          <span className="chip brand" style={{ fontSize: 11, padding: '3px 9px' }}>필독</span>
+        </div>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, lineHeight: 1.35, letterSpacing: '-0.4px' }}>
+          6월 입사식 일정 안내 (5/28 18:00)
+        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 12, color: 'var(--ink-3)' }}>
+          <Avatar name="사" size={22} style={{ fontSize: 11 }} />
+          <span>사감팀</span>
+          <span>·</span>
+          <span>2026.05.21 09:00</span>
+          <span style={{ marginLeft: 'auto' }}>조회 248</span>
+        </div>
+
+        <div style={{ height: 1, background: 'var(--line)', margin: '18px 0' }} />
+
+        <div style={{ fontSize: 15, lineHeight: 1.7, color: 'var(--ink-2)' }}>
+          <p style={{ margin: '0 0 16px' }}>안녕하세요, 학생생활관 사감팀입니다.</p>
+          <p style={{ margin: '0 0 16px' }}>2026학년도 2학기 신규 입사 룸메이트 매칭 데이를 아래와 같이 안내드립니다. 모든 입주 예정자는 가급적 참석해주시기 바랍니다.</p>
+
+          <div style={{ background: 'var(--surface-2)', borderRadius: 14, padding: 16, margin: '16px 0' }}>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
+              <span style={{ minWidth: 60, fontSize: 13, color: 'var(--ink-3)', fontWeight: 600 }}>일시</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>2026년 5월 28일 (목) 18:00</span>
+            </div>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
+              <span style={{ minWidth: 60, fontSize: 13, color: 'var(--ink-3)', fontWeight: 600 }}>장소</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>2생활관 다목적실</span>
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <span style={{ minWidth: 60, fontSize: 13, color: 'var(--ink-3)', fontWeight: 600 }}>대상</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>2026-2학기 신규 입주자</span>
+            </div>
+          </div>
+
+          <p style={{ margin: '0 0 12px' }}>매칭 데이는 룸메이트를 직접 만나고 체크리스트 결과를 비교해보는 자리입니다. 가벼운 다과가 준비됩니다.</p>
+          <p style={{ margin: 0 }}>문의: 사감실 (내선 1234)</p>
+        </div>
+
+      </div>
+    </div>);
+
+}
+
+// ─── Notifications page (bell icon target) ─────────────────
+export function NotificationsScreen() {
+  const [todayItems, setTodayItems] = React.useState([
+    { i: 'user', t: '지원님이 신청했어요', d: '아침형 룸메 구해요', time: '10분 전', unread: true },
+    { i: 'chat', t: '수민님이 메시지를 보냈어요', d: '"내일 7시에 같이 모닝커피 어때요?"', time: '38분 전', unread: true },
+    { i: 'bell', t: '6월 입사식 일정 안내', d: '5/28 18:00 다목적실', time: '2시간 전' },
+  ]);
+  const hasUnread = todayItems.some((item) => item.unread);
+  const markAllRead = () => {
+    setTodayItems((items) => items.map((item) => ({ ...item, unread: false })));
+  };
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <TopNav
+        title="알림"
+        right={
+          <button
+            type="button"
+            onClick={markAllRead}
+            disabled={!hasUnread}
+            style={{
+              background: 'transparent',
+              border: 0,
+              padding: 8,
+              fontSize: 13,
+              color: hasUnread ? 'var(--brand)' : 'var(--ink-3)',
+              fontWeight: 700,
+              cursor: hasUnread ? 'pointer' : 'default',
+              fontFamily: 'inherit',
+              opacity: hasUnread ? 1 : 0.55,
+            }}
+          >
+            모두 읽음
+          </button>
+        }
+      />
+
+      <div className="scroll" style={{ padding: '0 16px 24px' }}>
+        <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 700, padding: '8px 4px 10px', letterSpacing: '0.3px' }}>오늘</div>
+        <div style={{ background: 'var(--surface)', borderRadius: 16, overflow: 'hidden' }}>
+          {todayItems.map((n, i, a) => {
+            const I = Icon[n.i];
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: i === a.length - 1 ? 'none' : '1px solid var(--line)', background: n.unread ? 'var(--brand-soft)' : 'transparent' }}>
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: n.unread ? 'var(--brand)' : 'var(--surface-2)', color: n.unread ? 'white' : 'var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><I size={18} /></div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{n.t}</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.d}</div>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{n.time}</span>
+              </div>);
+
+          })}
+        </div>
+
+        <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 700, padding: '22px 4px 10px', letterSpacing: '0.3px' }}>이번 주</div>
+        <div style={{ background: 'var(--surface)', borderRadius: 16, overflow: 'hidden' }}>
+          {[
+          { i: 'check', t: '서연님이 메시지를 보냈어요', d: '"체크리스트 확인하고 답장드릴게요"', time: '어제' },
+          { i: 'door', t: '지호님이 입주에 동의했어요', d: '아침형 룸메 구해요', time: '월요일' },
+          { i: 'bell', t: 'B동 세탁실 4번 기기 교체 완료', d: '시설팀 공지', time: '월요일' },
+          { i: 'user', t: '지훈님이 신청했어요', d: '신청 후 24시간 내 응답해주세요', time: '일요일' }].
+          map((n, i, a) => {
+            const I = Icon[n.i];
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: i === a.length - 1 ? 'none' : '1px solid var(--line)' }}>
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--surface-2)', color: 'var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><I size={18} /></div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink-2)' }}>{n.t}</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.d}</div>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{n.time}</span>
+              </div>);
+
+          })}
+        </div>
+      </div>
+    </div>);
+
+}
+
+// ─── Notification settings ──────────────────────────────────
+export function NotificationSettingsScreen() {
+  const navigate = useNavigate();
+  const [enabled, setEnabled] = React.useState(true);
+  const [settings, setSettings] = React.useState({
+    applicants: true,
+    applicantResult: true,
+    chat: true,
+    notice: true,
+    schedule: false,
+  });
+
+  const set = (key) => setSettings((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  const Toggle = ({ checked, onClick, disabled = false }) => (
+    <button
+      type="button"
+      aria-pressed={checked}
+      onClick={disabled ? undefined : onClick}
+      style={{
+        width: 48,
+        height: 28,
+        borderRadius: 999,
+        border: 0,
+        padding: 3,
+        background: checked && !disabled ? 'var(--brand)' : 'var(--line-2)',
+        position: 'relative',
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.6 : 1,
+        transition: 'background .16s ease',
+        flexShrink: 0,
+      }}
+    >
+      <span style={{
+        position: 'absolute',
+        top: 3,
+        left: checked ? 23 : 3,
+        width: 22,
+        height: 22,
+        borderRadius: '50%',
+        background: 'white',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
+        transition: 'left .16s ease',
+      }} />
+    </button>
+  );
+
+  const SettingRow = ({ icon, title, desc, valueKey }) => {
+    const I = Icon[icon];
+    const active = settings[valueKey] && enabled;
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '14px 16px',
+        borderBottom: '1px solid var(--line)',
+        opacity: enabled ? 1 : 0.55,
+      }}>
+        <div style={{
+          width: 38,
+          height: 38,
+          borderRadius: 11,
+          background: active ? 'var(--brand-soft)' : 'var(--surface-2)',
+          color: active ? 'var(--brand-deep)' : 'var(--ink-3)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <I size={18} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{title}</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3, lineHeight: 1.4 }}>{desc}</div>
+        </div>
+        <Toggle checked={settings[valueKey] && enabled} disabled={!enabled} onClick={() => set(valueKey)} />
+      </div>
+    );
+  };
+
+  const Section = ({ title, children }) => (
+    <>
+      <div className="h-section" style={{ marginTop: 22 }}>
+        <h2>{title}</h2>
+      </div>
+      <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 18, overflow: 'hidden' }}>
+        {children}
+      </div>
+    </>
+  );
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <TopNav
+        title="알림 설정"
+        backTo="/me"
+        right={<button onClick={() => navigate('/me')} style={{ background: 'transparent', border: 0, fontSize: 14, color: 'var(--brand)', fontWeight: 700, padding: 8, cursor: 'pointer' }}>완료</button>}
+      />
+
+      <div className="scroll" style={{ paddingBottom: 28 }}>
+        <div style={{ padding: '4px 20px 16px' }}>
+          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.35 }}>
+            필요한 알림만 받을 수 있어요
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
+            방 신청, 채팅, 기숙사 공지 알림을 따로 조절해요.
+          </div>
+        </div>
+
+        <div style={{ margin: '0 16px' }}>
+          <div className="card" style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 14, background: enabled ? 'var(--ink)' : 'var(--surface)' }}>
+            <div style={{
+              width: 44,
+              height: 44,
+              borderRadius: 13,
+              background: enabled ? 'var(--brand)' : 'var(--surface-2)',
+              color: enabled ? 'white' : 'var(--ink-3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <Icon.bell size={22} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: enabled ? 'white' : 'var(--ink)' }}>전체 알림</div>
+              <div style={{ fontSize: 12, color: enabled ? 'rgba(255,255,255,0.62)' : 'var(--ink-3)', marginTop: 3 }}>
+                모든 앱 알림을 한 번에 켜고 꺼요
+              </div>
+            </div>
+            <Toggle checked={enabled} onClick={() => setEnabled(!enabled)} />
+          </div>
+        </div>
+
+        <Section title="방과 신청">
+          <SettingRow icon="user" title="새 신청자" desc="내 모집방에 누군가 신청하면 알려줘요" valueKey="applicants" />
+          <SettingRow icon="check" title="신청 결과" desc="수락, 거절, 대기 상태 변경을 알려줘요" valueKey="applicantResult" />
+        </Section>
+
+        <Section title="채팅과 공지">
+          <SettingRow icon="chat" title="채팅 메시지" desc="1:1 채팅과 방 단체 채팅 알림을 받아요" valueKey="chat" />
+          <SettingRow icon="bell" title="공지사항" desc="필독 공지와 생활관 안내를 알려줘요" valueKey="notice" />
+          <SettingRow icon="moon" title="기숙사 일정" desc="점호, 소등, 청소 일정 알림을 받아요" valueKey="schedule" />
+        </Section>
+
+        <div style={{ height: 24 }} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Account & verification settings ────────────────────────
+export function AccountSettingsScreen() {
+  const navigate = useNavigate();
+
+  const InfoRow = ({ label, value, sub, action }) => (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 12,
+      padding: '14px 16px',
+      borderBottom: '1px solid var(--line)',
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 700 }}>{label}</div>
+        <div style={{ fontSize: 15, color: 'var(--ink)', fontWeight: 700, marginTop: 3 }}>{value}</div>
+        {sub && <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>{sub}</div>}
+      </div>
+      {action && (
+        <button
+          type="button"
+          style={{
+            background: 'var(--surface-2)',
+            border: 0,
+            borderRadius: 10,
+            padding: '8px 11px',
+            color: 'var(--ink-2)',
+            fontSize: 12,
+            fontWeight: 700,
+            fontFamily: 'inherit',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {action}
+        </button>
+      )}
+    </div>
+  );
+
+  const MenuRow = ({ icon, title, desc, right, onClick }) => {
+    const I = Icon[icon];
+    return (
+      <div onClick={onClick} style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '14px 16px',
+        borderBottom: '1px solid var(--line)',
+        cursor: onClick ? 'pointer' : 'default',
+      }}>
+        <div style={{ width: 38, height: 38, borderRadius: 11, background: 'var(--surface-2)', color: 'var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <I size={18} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{title}</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>{desc}</div>
+        </div>
+        {right && <span style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 600 }}>{right}</span>}
+        <Icon.chevron size={14} />
+      </div>
+    );
+  };
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <TopNav
+        title="계정 및 인증"
+        backTo="/me"
+        right={<button onClick={() => navigate('/me')} style={{ background: 'transparent', border: 0, fontSize: 14, color: 'var(--brand)', fontWeight: 700, padding: 8, cursor: 'pointer' }}>완료</button>}
+      />
+
+      <div className="scroll" style={{ paddingBottom: 28 }}>
+        <div style={{ padding: '4px 20px 16px' }}>
+          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.35 }}>
+            학교 인증과 계정 정보를 관리해요
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
+            학교 인증으로 확인된 정보라 앱에서 직접 수정할 수 없어요.
+          </div>
+        </div>
+
+        <div style={{ margin: '0 16px 16px' }}>
+          <div className="card" style={{ padding: 16, background: 'var(--ink)', color: 'white' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 48, height: 48, borderRadius: 14, background: 'var(--brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon.check size={24} weight={2.8} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 16, fontWeight: 700 }}>학교 인증 완료</span>
+                  <span style={{ background: 'rgba(255,255,255,0.12)', color: 'white', borderRadius: 999, padding: '3px 8px', fontSize: 10, fontWeight: 700 }}>재학생</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.62)', marginTop: 4 }}>minji_kang@univ.ac.kr</div>
+              </div>
+            </div>
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.10)', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'rgba(255,255,255,0.62)' }}>
+              <span>최근 인증</span>
+              <span>2026.05.21</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="h-section"><h2>계정 정보</h2></div>
+        <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 18, overflow: 'hidden' }}>
+          <InfoRow label="이름" value="강민지" sub="실명 인증 정보" />
+          <InfoRow label="학번" value="202234511" sub="같은 방 멤버에게만 표시" />
+          <InfoRow label="학과" value="경영학과 22학번" sub="학교 인증 정보" />
+          <InfoRow label="닉네임" value="민지" sub="인증된 계정 정보" />
+        </div>
+
+        <div style={{ margin: '14px 16px 0', background: 'var(--brand-soft)', borderRadius: 14, padding: 14, display: 'flex', alignItems: 'flex-start', gap: 10, color: 'var(--brand-deep)' }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style={{ marginTop: 1, flexShrink: 0 }}>
+            <rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
+            <path d="M8 10V7a4 4 0 018 0v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+          <div style={{ fontSize: 12, lineHeight: 1.5, fontWeight: 600 }}>
+            계정 정보 변경이 필요하면 학교 인증을 다시 진행해야 해요.
+          </div>
+        </div>
+
+        <div className="h-section"><h2>로그인과 보안</h2></div>
+        <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 18, overflow: 'hidden' }}>
+          <MenuRow icon="settings" title="비밀번호 변경" desc="마지막 변경 32일 전" onClick={() => navigate('/find-password', { state: { mode: 'change-password', backTo: '/settings/account', doneTo: '/settings/account' } })} />
+          <MenuRow icon="check" title="자동 로그인" desc="현재 기기에서 유지 중" right="켜짐" />
+        </div>
+
+        <div className="h-section"><h2>계정 관리</h2></div>
+        <div style={{ margin: '0 16px 24px', background: 'var(--surface)', borderRadius: 18, overflow: 'hidden' }}>
+          <div onClick={() => navigate('/', { replace: true })} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--line)', cursor: 'pointer' }}>
+            <span style={{ flex: 1, fontSize: 15, color: 'var(--ink)' }}>로그아웃</span>
+            <Icon.chevron size={14} />
+          </div>
+          <div onClick={() => navigate('/settings/account/delete')} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer' }}>
+            <span style={{ flex: 1, fontSize: 15, color: 'var(--danger)', fontWeight: 600 }}>계정 탈퇴</span>
+            <Icon.chevron size={14} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ─── Delete account ─────────────────────────────────────────
+export function DeleteAccountScreen() {
+  const navigate = useNavigate();
+  const [reason, setReason] = React.useState('');
+  const [confirmText, setConfirmText] = React.useState('');
+  const [confirmed, setConfirmed] = React.useState(false);
+  const reasons = ['졸업했어요', '서비스를 자주 쓰지 않아요', '원하는 기능이 부족해요', '개인정보가 걱정돼요', '다른 이유'];
+  const canDelete = reason && confirmed && confirmText.trim() === '탈퇴';
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <TopNav title="계정 탈퇴" backTo="/settings/account" />
+
+      <div className="scroll" style={{ padding: '4px 20px 156px' }}>
+        <div style={{ padding: '6px 0 18px' }}>
+          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.5px', lineHeight: 1.35 }}>
+            계정을 탈퇴하기 전에
+            <br />확인해주세요
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
+            탈퇴 후에는 내 프로필, 신청 내역, 북마크와 채팅 기록을 복구할 수 없어요.
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: 16, marginBottom: 18, background: '#FFF4F3', color: 'var(--danger)' }}>
+          <div style={{ fontSize: 15, fontWeight: 800 }}>삭제되는 정보</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+            {['프로필 및 학교 인증 정보', '내 체크리스트와 모집방 정보', '신청 내역과 북마크', '채팅 및 룸메이트 기록'].map((item) => (
+              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ink-2)', fontWeight: 600 }}>
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--danger)', flexShrink: 0 }} />
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', fontWeight: 800, marginBottom: 8 }}>탈퇴 사유</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {reasons.map((item) => {
+              const selected = reason === item;
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setReason(item)}
+                  style={{
+                    minHeight: 46,
+                    borderRadius: 13,
+                    border: selected ? '1.5px solid var(--brand)' : '1px solid var(--line)',
+                    background: selected ? 'var(--brand-soft)' : 'var(--surface)',
+                    color: selected ? 'var(--brand-deep)' : 'var(--ink-2)',
+                    fontSize: 14,
+                    fontWeight: 800,
+                    fontFamily: 'inherit',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    padding: '0 14px',
+                  }}
+                >{item}</button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ display: 'block', fontSize: 13, color: 'var(--ink-3)', fontWeight: 800, marginBottom: 8 }}>확인 문구 입력</label>
+          <input
+            value={confirmText}
+            onChange={(event) => setConfirmText(event.target.value)}
+            placeholder="탈퇴"
+            style={{
+              width: '100%',
+              border: '1.5px solid var(--line)',
+              borderRadius: 13,
+              background: 'var(--surface)',
+              color: 'var(--ink)',
+              fontFamily: 'inherit',
+              fontSize: 15,
+              fontWeight: 700,
+              outline: 0,
+              padding: '13px 14px',
+            }}
+          />
+          <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 6 }}>계속하려면 ‘탈퇴’를 입력해주세요.</div>
+        </div>
+
+        <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--surface)', borderRadius: 14, padding: 14, cursor: 'pointer' }}>
+          <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} style={{ marginTop: 2, accentColor: 'var(--brand)' }} />
+          <span style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.5, fontWeight: 700 }}>
+            탈퇴 후 계정과 이용 기록을 복구할 수 없다는 점을 확인했어요.
+          </span>
+        </label>
+        <div style={{ height: 28 }} />
+      </div>
+
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
+        <button onClick={() => navigate('/settings/account')} className="btn ghost" style={{ width: 86, height: 52 }}>취소</button>
+        <button
+          type="button"
+          disabled={!canDelete}
+          onClick={() => navigate('/', { replace: true })}
+          className="btn full"
+          style={{
+            flex: 1,
+            height: 52,
+            background: canDelete ? 'var(--danger)' : 'var(--surface-2)',
+            color: canDelete ? 'white' : 'var(--ink-4)',
+            cursor: canDelete ? 'pointer' : 'default',
+          }}
+        >계정 탈퇴</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Customer support ───────────────────────────────────────
+export function SupportScreen() {
+  const navigate = useNavigate();
+  const [category, setCategory] = React.useState('앱 이용');
+  const [message, setMessage] = React.useState('');
+  const maxLength = 500;
+  const categories = ['앱 이용', '매칭/신청', '계정/인증', '오류 및 사용자 신고'];
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <TopNav
+        title="고객 문의"
+        backTo="/me"
+        right={<button onClick={() => navigate('/me')} style={{ background: 'transparent', border: 0, fontSize: 14, color: 'var(--brand)', fontWeight: 700, padding: 8, cursor: 'pointer' }}>완료</button>}
+      />
+
+      <div className="scroll" style={{ padding: '4px 20px 120px' }}>
+        <div style={{ padding: '6px 0 18px' }}>
+          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.35 }}>
+            무엇을 도와드릴까요?
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
+            문의를 남기면 확인 후 앱 알림으로 답변드려요.
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: 16, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 42, height: 42, borderRadius: 12, background: 'var(--brand-soft)', color: 'var(--brand-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon.chat size={20} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>평균 답변 시간</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>평일 10:00 - 18:00 · 보통 1일 이내</div>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', fontWeight: 700, marginBottom: 8 }}>문의 유형</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {categories.map((c) => {
+              const selected = c === category;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setCategory(c)}
+                  style={{
+                    minHeight: 44,
+                    borderRadius: 12,
+                    border: selected ? '1.5px solid var(--brand)' : '1px solid var(--line)',
+                    background: selected ? 'var(--brand-soft)' : 'var(--surface)',
+                    color: selected ? 'var(--brand-deep)' : 'var(--ink-2)',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    fontFamily: 'inherit',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {c}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 700 }}>문의 내용</span>
+            <span style={{ fontSize: 12, color: message.length > maxLength - 60 ? 'var(--brand)' : 'var(--ink-3)', fontWeight: 600 }}>{message.length} / {maxLength}</span>
+          </label>
+          <textarea
+            value={message}
+            maxLength={maxLength}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="문의 내용을 자세히 적어주세요."
+            style={{
+              width: '100%',
+              minHeight: 170,
+              resize: 'none',
+              border: '1.5px solid var(--line)',
+              outline: 'none',
+              borderRadius: 16,
+              background: 'var(--surface)',
+              color: 'var(--ink)',
+              fontFamily: 'inherit',
+              fontSize: 15,
+              lineHeight: 1.55,
+              padding: 16,
+            }}
+          />
+        </div>
+
+      </div>
+
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)' }}>
+        <button
+          onClick={() => navigate('/me')}
+          className="btn full"
+          style={{ height: 52, opacity: message.trim() ? 1 : 0.55 }}
+        >
+          문의 보내기
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── 1:1 DM chat ────────────────────────────────────────────
+export function ChatDMScreen() {
+  const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [sentMessages, setSentMessages] = React.useState([]);
+  const sendDMMessage = (message) => {
+    setSentMessages((items) => [...items, { ...message, unread: 1 }]);
+  };
+
+  return (
+    <div className="screen" style={{ background: '#EDEEF1' }}>
+      <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--line)' }}>
+        <StatusBar />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px 12px' }}>
+          <button onClick={() => goBack(navigate, '/chat')} style={{ background: 'transparent', border: 0, padding: 6, color: 'var(--ink)', cursor: 'pointer' }}><Icon.back /></button>
+		          <Avatar name="지원" size={36} style={{ fontSize: 14 }} />
+	          <div style={{ flex: 1, minWidth: 0 }}>
+	            <div style={{ fontSize: 15, fontWeight: 700 }}>지원</div>
+	          </div>
+          <button onClick={() => setMenuOpen(true)} aria-label="채팅방 메뉴" style={{ background: 'transparent', border: 0, padding: 6, color: 'var(--ink)', cursor: 'pointer' }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Context card — applicant info */}
+      <div style={{ padding: '10px 12px 0' }}>
+        <div onClick={() => navigate('/rooms/applicants/1')} className="card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, cursor: 'pointer' }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--brand-soft)', color: 'var(--brand-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon.door size={18} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>아침형 룸메 구해요</div>
+            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>지원님이 신청한 모집방</div>
+          </div>
+          <span className="chip line" style={{ fontSize: 11 }}>신청자 정보</span>
+        </div>
+      </div>
+
+      <div className="scroll" style={{ padding: '12px 12px 8px' }}>
+        <div style={{ textAlign: 'center', margin: '4px 0 14px' }}>
+          <span style={{ fontSize: 11, color: 'var(--ink-3)', background: 'rgba(0,0,0,0.05)', padding: '4px 12px', borderRadius: 99 }}>2026년 5월 21일 목요일</span>
+        </div>
+
+        <ChatBubble side="left" name="지원" time="오후 04:18">안녕하세요! 신청 드렸어요 :)</ChatBubble>
+        <ChatBubble side="left" name="지원" time="오후 04:18" showAvatar={false} showName={false}>
+          체크리스트 보니까 잘 맞을 것 같아서요.
+        </ChatBubble>
+
+        <div style={{ height: 8 }} />
+        <ChatBubble side="right" time="오후 04:25" unread={1}>반가워요! 체크리스트 확인했어요</ChatBubble>
+        <ChatBubble side="right" time="오후 04:26" withTail={false} unread={1}>
+          평일 저녁은 보통 몇 시쯤 들어오세요?
+        </ChatBubble>
+
+        <div style={{ height: 8 }} />
+        <ChatBubble side="left" name="지원" time="오후 04:30">
+          학기 중엔 보통 9시쯤 들어와요. 시험 기간엔 새벽까지 도서관에 있고요.
+        </ChatBubble>
+        <ChatBubble side="left" name="지원" time="오후 04:31" showAvatar={false} showName={false}>
+          저녁은 거의 밖에서 해결합니다!
+        </ChatBubble>
+        {sentMessages.map((message) => (
+          <ChatBubble key={message.id} side="right" time={message.time} unread={message.unread}>
+            {message.attachment && <ChatAttachmentCard attachment={message.attachment} mine />}
+            {message.text && <div style={{ marginTop: message.attachment ? 8 : 0 }}>{message.text}</div>}
+          </ChatBubble>
+        ))}
+      </div>
+
+      <ChatComposer onSend={sendDMMessage} />
+      {menuOpen && (
+        <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(23,24,28,0.28)', display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--surface)', borderRadius: '22px 22px 0 0', padding: '10px 16px 30px', boxShadow: '0 -16px 40px rgba(23,24,28,0.14)' }}>
+            <div style={{ width: 38, height: 4, borderRadius: 99, background: 'var(--line-2)', margin: '0 auto 14px' }} />
+            <div style={{ padding: '0 2px 14px' }}>
+              <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>채팅방 메뉴</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>지원님과의 대화</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                navigate('/rooms/applicants/1');
+              }}
+              style={{ width: '100%', minHeight: 52, border: 0, borderRadius: 14, background: 'var(--surface-2)', color: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', fontFamily: 'inherit', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 8 }}
+            >
+              <span>신청자 정보 보기</span>
+              <Icon.chevron size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                navigate('/chat');
+              }}
+              style={{ width: '100%', minHeight: 52, border: 0, borderRadius: 14, background: 'rgba(226,69,60,0.08)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', fontFamily: 'inherit', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
+            >
+              <span>대화방 나가기</span>
+            </button>
+            <button type="button" onClick={() => setMenuOpen(false)} className="btn full ghost" style={{ height: 48, marginTop: 12 }}>닫기</button>
+          </div>
+        </div>
+      )}
+    </div>);
+
+}
+
+// ─── Apply message ──────────────────────────────────────────
+export function ApplyMessageScreen() {
+  const navigate = useNavigate();
+  const { id = '1' } = useParams();
+  const [message, setMessage] = React.useState('');
+  const maxLength = 300;
+  const suggestions = [
+    '안녕하세요! 체크리스트가 잘 맞는 것 같아서 신청드립니다.',
+    '조용히 지내는 편이고 청소 규칙도 잘 맞출 수 있어요.',
+    '입주 전에 채팅으로 더 이야기해보고 싶어요.',
+  ];
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <TopNav title="입주 신청" backTo={`/rooms/`} />
+
+      <div className="scroll" style={{ padding: '4px 20px 120px' }}>
+        <div style={{ padding: '6px 0 18px' }}>
+          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.35 }}>
+            방장에게 보낼<br />신청 메시지를 작성해요
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
+            메시지는 선택 사항이에요. 비워두고 바로 신청할 수도 있어요.
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 42, height: 42, borderRadius: 12, background: 'var(--ink)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon.door size={20} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>아침형 룸메 구해요</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2 }}>2생활관 · 4인실 · 방장 민지</div>
+            </div>
+            <span className="chip brand" style={{ fontSize: 11 }}>잘 맞아요</span>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 700 }}>신청 메시지 <span style={{ color: 'var(--ink-3)', fontWeight: 600 }}>(선택)</span></span>
+            <span style={{ fontSize: 12, color: message.length > maxLength - 30 ? 'var(--brand)' : 'var(--ink-3)', fontWeight: 600 }}>
+              {message.length} / {maxLength}
+            </span>
+          </label>
+          <textarea
+            value={message}
+            maxLength={maxLength}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="예: 안녕하세요! 체크리스트가 잘 맞는 것 같아서 신청드립니다."
+            style={{
+              width: '100%',
+              minHeight: 150,
+              resize: 'none',
+              border: '1.5px solid var(--line)',
+              outline: 'none',
+              borderRadius: 16,
+              background: 'var(--surface)',
+              color: 'var(--ink)',
+              fontFamily: 'inherit',
+              fontSize: 15,
+              lineHeight: 1.55,
+              padding: 16,
+            }}
+          />
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.3px', marginBottom: 8 }}>빠른 문장</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {suggestions.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setMessage(s)}
+                style={{
+                  width: '100%',
+                  textAlign: 'left',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 12,
+                  padding: '12px 14px',
+                  color: 'var(--ink-2)',
+                  fontSize: 13,
+                  lineHeight: 1.45,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                }}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ background: 'var(--brand-soft)', borderRadius: 14, padding: 14, display: 'flex', gap: 10, color: 'var(--brand-deep)' }}>
+          <Icon.check size={18} weight={2.6} />
+          <div style={{ fontSize: 12, lineHeight: 1.5, fontWeight: 600 }}>
+            신청하면 방장이 내 체크리스트와 메시지를 함께 확인할 수 있어요.
+          </div>
+        </div>
+      </div>
+
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
+        <button onClick={() => navigate(`/rooms/${id}`)} className="btn ghost" style={{ width: 84, height: 52 }}>취소</button>
+        <button onClick={() => navigate('/apply/success')} className="btn full" style={{ flex: 1, height: 52 }}>
+          신청 보내기
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Apply success ──────────────────────────────────────────
+export function ApplySuccessScreen() {
+  const navigate = useNavigate();
+
+  return (
+    <div className="screen" style={{ background: 'var(--surface)' }}>
+      <StatusBar />
+      <TopNav
+        title=""
+        backTo="/rooms/find"
+        right={<button onClick={() => navigate('/rooms/find')} style={{ background: 'transparent', border: 0, fontSize: 14, color: 'var(--ink-3)', fontWeight: 600, padding: 8, cursor: 'pointer' }}>닫기</button>}
+      />
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 28px', gap: 24 }}>
+        <div style={{ position: 'relative', width: 120, height: 120 }}>
+          <div className="success-halo" />
+          <div className="success-badge">
+            <svg className="success-check" width="54" height="54" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M5 12l5 5L20 7" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        </div>
+
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: '-0.5px' }}>입주 신청이 완료됐어요</h1>
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--ink-3)', lineHeight: 1.6 }}>방장이 확인 후 24시간 내에<br />응답을 드릴 거예요</p>
+        </div>
+
+        <div style={{ width: '100%', background: 'var(--surface-2)', borderRadius: 14, padding: 16, marginTop: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--ink)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon.door size={20} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>아침형 룸메 구해요</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2 }}>2생활관 · 4인실</div>
+            </div>
+            <span className="chip brand" style={{ fontSize: 11 }}>대기중</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: '0 16px 30px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <button onClick={() => navigate('/chat/dm')} className="btn full" style={{ height: 52 }}>방장과 채팅하기</button>
+        <button onClick={() => navigate('/rooms/find')} className="btn full ghost" style={{ height: 52 }}>다른 방 둘러보기</button>
+      </div>
+    </div>);
+
+}
+
+// ─── Create Room Success ─────────────────────────────────────
+export function CreateRoomSuccessScreen() {
+  const navigate = useNavigate();
+  const draft = typeof window !== 'undefined'
+    ? JSON.parse(window.sessionStorage.getItem('createRoomDraft') || '{}')
+    : {};
+  const title = draft.title || '아침형 룸메 구해요';
+  const dorm = draft.dorm || '2생활관';
+  const roomSize = draft.roomSize || '4인실';
+
+  return (
+    <div className="screen" style={{ background: 'var(--surface)' }}>
+      <StatusBar />
+      <TopNav
+        title=""
+        backTo="/myroom"
+        right={<button onClick={() => navigate('/rooms/me')} style={{ background: 'transparent', border: 0, fontSize: 14, color: 'var(--ink-3)', fontWeight: 600, padding: 8, cursor: 'pointer' }}>닫기</button>}
+      />
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 28px', gap: 24 }}>
+        <div style={{ position: 'relative', width: 120, height: 120 }}>
+          <div className="success-halo" />
+          <div className="success-badge">
+            <svg className="success-check" width="54" height="54" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M5 12l5 5L20 7" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        </div>
+
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: '-0.5px', fontFamily: 'var(--font-sans)' }}>모집방이 등록됐어요!</h1>
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--ink-3)', lineHeight: 1.6 }}>이제 신청자를 기다려 보세요.<br />신청이 오면 알림으로 알려드릴게요.</p>
+        </div>
+
+        <div style={{ width: '100%', background: 'var(--surface-2)', borderRadius: 14, padding: 16, marginTop: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--ink)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon.door size={20} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2 }}>{dorm} · {roomSize}</div>
+            </div>
+            <span className="chip brand" style={{ fontSize: 11 }}>모집중</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: '0 16px 30px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <button onClick={() => navigate('/rooms/me')} className="btn full" style={{ height: 52 }}>내 방 보러가기</button>
+        <button onClick={() => navigate('/home')} className="btn full ghost" style={{ height: 52 }}>홈으로 돌아가기</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── My Applications List ────────────────────────────────────
+const APPLY_MOCK = [
+  {
+    id: 1,
+    room: '아침형 룸메 구해요',
+    dorm: '2생활관',
+    roomType: '4인실',
+    appliedAt: '2026.05.20',
+    status: 'waiting',
+    closed: false,
+  },
+  {
+    id: 2,
+    room: '조용하고 청결한 룸메 구합니다',
+    dorm: '3생활관',
+    roomType: '2인실',
+    appliedAt: '2026.05.14',
+    status: 'accepted',
+    closed: false,
+  },
+  {
+    id: 3,
+    room: '밤형 인간 환영',
+    dorm: '1생활관',
+    roomType: '2인실',
+    appliedAt: '2026.04.30',
+    status: 'rejected',
+    closed: true,
+  },
+];
+
+const STATUS_TABS = [
+  { key: 'all', label: '전체' },
+  { key: 'waiting', label: '대기중' },
+  { key: 'accepted', label: '수락됨' },
+  { key: 'rejected', label: '거절됨' },
+];
+
+const STATUS_META = {
+  waiting: { label: '대기중', chipClass: 'chip brand' },
+  accepted: { label: '수락됨', chipClass: 'chip success' },
+  rejected: { label: '거절됨', chipClass: 'chip' },
+};
+
+export function MyApplicationsScreen() {
+  const navigate = useNavigate();
+  const [tab, setTab] = React.useState('all');
+  const [applications, setApplications] = React.useState(APPLY_MOCK);
+  const [cancelTarget, setCancelTarget] = React.useState(null);
+
+  const filtered = tab === 'all' ? applications : applications.filter(a => a.status === tab);
+
+  const handleCancel = () => {
+    setApplications(prev => prev.filter(a => a.id !== cancelTarget));
+    setCancelTarget(null);
+  };
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <TopNav title="신청 내역" backTo="/me" />
+
+      {/* Status filter tabs */}
+      <div style={{
+        display: 'flex', gap: 6, padding: '4px 16px 12px',
+        overflowX: 'auto', flexShrink: 0,
+      }}>
+        {STATUS_TABS.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            style={{
+              padding: '7px 14px',
+              borderRadius: 999,
+              border: tab === t.key ? 'none' : '1px solid var(--line-2)',
+              background: tab === t.key ? 'var(--ink)' : 'transparent',
+              color: tab === t.key ? 'white' : 'var(--ink-2)',
+              fontSize: 13, fontWeight: tab === t.key ? 700 : 500,
+              fontFamily: 'inherit',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >{t.label}</button>
+        ))}
+      </div>
+
+      <div className="scroll" style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {filtered.length === 0 ? (
+          <div style={{
+            flex: 1, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            padding: '64px 0', gap: 12, color: 'var(--ink-4)',
+          }}>
+            <Icon.clipboard size={36} />
+            <span style={{ fontSize: 14, fontWeight: 500 }}>신청 내역이 없어요</span>
+          </div>
+        ) : filtered.map(app => {
+          const sm = STATUS_META[app.status];
+          return (
+            <div key={app.id} className="card" style={{ padding: 16 }}>
+              {/* Room info row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 12,
+                  background: app.status === 'accepted' ? 'var(--brand-soft)' : 'var(--surface-2)',
+                  color: app.status === 'accepted' ? 'var(--brand)' : 'var(--ink-3)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <Icon.door size={22} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: 15, fontWeight: 700, color: 'var(--ink)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{app.room}</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>
+                    {app.dorm} · {app.roomType}
+                  </div>
+                </div>
+                <span className={sm.chipClass} style={{ fontSize: 11, flexShrink: 0 }}>{sm.label}</span>
+              </div>
+
+              {/* Divider + meta */}
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                paddingTop: 12, borderTop: '1px solid var(--line)',
+              }}>
+                <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>신청일 {app.appliedAt}</span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {app.status === 'waiting' && (
+                    <button
+                      onClick={() => setCancelTarget(app.id)}
+                      className="btn ghost"
+                      style={{ fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 10, height: 'auto', color: 'var(--danger)' }}
+                    >취소하기</button>
+                  )}
+                  <button
+                    onClick={() => navigate('/rooms/1', { state: { appliedStatus: app.status, closed: app.closed } })}
+                    className="btn ghost"
+                    style={{ fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 10, height: 'auto' }}
+                  >방 보기</button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Cancel confirm bottom sheet */}
+      {cancelTarget !== null && (
+        <>
+          <div
+            onClick={() => setCancelTarget(null)}
+            style={{
+              position: 'absolute', inset: 0,
+              background: 'rgba(0,0,0,0.4)',
+              zIndex: 40,
+            }}
+          />
+          <div style={{
+            position: 'absolute', left: 0, right: 0, bottom: 0,
+            background: 'var(--surface)',
+            borderRadius: '20px 20px 0 0',
+            padding: '24px 20px 36px',
+            zIndex: 41,
+            display: 'flex', flexDirection: 'column', gap: 8,
+          }}>
+            <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 6 }}>신청을 취소할까요?</div>
+            <div style={{ fontSize: 14, color: 'var(--ink-3)', lineHeight: 1.6, marginBottom: 12 }}>
+              취소하면 다시 신청해야 해요.<br />정말 취소하시겠어요?
+            </div>
+            <button
+              onClick={handleCancel}
+              className="btn full"
+              style={{ height: 52, background: 'var(--danger)' }}
+            >신청 취소하기</button>
+            <button
+              onClick={() => setCancelTarget(null)}
+              className="btn full ghost"
+              style={{ height: 52 }}
+            >돌아가기</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Bookmarks List ──────────────────────────────────────────
+const BOOKMARK_MOCK = [
+  {
+    id: 1,
+    room: '아침형 룸메 구해요',
+    dorm: '2생활관',
+    roomType: '4인실',
+    savedAt: '2026.05.19',
+    recruiting: true,
+  },
+  {
+    id: 2,
+    room: '청결 최우선! 조용한 룸메 모집',
+    dorm: '1생활관',
+    roomType: '2인실',
+    savedAt: '2026.05.12',
+    recruiting: true,
+  },
+  {
+    id: 3,
+    room: '밤형 인간 환영합니다',
+    dorm: '3생활관',
+    roomType: '4인실',
+    savedAt: '2026.04.28',
+    recruiting: false,
+  },
+  {
+    id: 4,
+    room: '여성 전용 · 취준생 룸메 구해요',
+    dorm: '2생활관',
+    roomType: '2인실',
+    savedAt: '2026.04.15',
+    recruiting: false,
+  },
+];
+
+const BOOKMARK_TABS = [
+  { key: 'all', label: '전체' },
+  { key: 'recruiting', label: '모집중' },
+  { key: 'closed', label: '마감됨' },
+];
+
+export function BookmarksScreen() {
+  const navigate = useNavigate();
+  const [tab, setTab] = React.useState('all');
+  const [bookmarks, setBookmarks] = React.useState(BOOKMARK_MOCK);
+
+  const filtered = tab === 'all'
+    ? bookmarks
+    : bookmarks.filter(b => tab === 'recruiting' ? b.recruiting : !b.recruiting);
+
+  const handleRemove = (id) => setBookmarks(prev => prev.filter(b => b.id !== id));
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <TopNav title="북마크" backTo="/me" />
+
+      {/* Filter tabs */}
+      <div style={{ display: 'flex', gap: 6, padding: '4px 16px 12px', overflowX: 'auto', flexShrink: 0 }}>
+        {BOOKMARK_TABS.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            style={{
+              padding: '7px 14px', borderRadius: 999,
+              border: tab === t.key ? 'none' : '1px solid var(--line-2)',
+              background: tab === t.key ? 'var(--ink)' : 'transparent',
+              color: tab === t.key ? 'white' : 'var(--ink-2)',
+              fontSize: 13, fontWeight: tab === t.key ? 700 : 500,
+              fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+            }}
+          >{t.label}</button>
+        ))}
+      </div>
+
+      <div className="scroll" style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {filtered.length === 0 ? (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            padding: '64px 0', gap: 12, color: 'var(--ink-4)',
+          }}>
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+              <path d="M19 7v14l-7-4-7 4V7a3 3 0 013-3h8a3 3 0 013 3z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+            </svg>
+            <span style={{ fontSize: 14, fontWeight: 500 }}>북마크한 방이 없어요</span>
+          </div>
+        ) : filtered.map(b => (
+          <div key={b.id} className="card" style={{ padding: 16 }}>
+            {/* Room info row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+              <div style={{
+                width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                background: b.recruiting ? 'var(--brand-soft)' : 'var(--surface-2)',
+                color: b.recruiting ? 'var(--brand)' : 'var(--ink-4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Icon.door size={22} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: 15, fontWeight: 700, color: b.recruiting ? 'var(--ink)' : 'var(--ink-3)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>{b.room}</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>{b.dorm} · {b.roomType}</div>
+              </div>
+              <span className={b.recruiting ? 'chip brand' : 'chip'} style={{ fontSize: 11, flexShrink: 0 }}>
+                {b.recruiting ? '모집중' : '마감됨'}
+              </span>
+            </div>
+
+            {/* Divider + meta */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              paddingTop: 12, borderTop: '1px solid var(--line)',
+            }}>
+              <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>저장일 {b.savedAt}</span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  onClick={() => handleRemove(b.id)}
+                  className="btn ghost"
+                  style={{ fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 10, height: 'auto', color: 'var(--ink-3)' }}
+                >북마크 해제</button>
+                <button
+                  onClick={() => navigate('/rooms/1', { state: { closed: !b.recruiting } })}
+                  className="btn ghost"
+                  style={{ fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 10, height: 'auto' }}
+                >방 보기</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function DormInfoScreen() {
+  const navigate = useNavigate();
+
+  const hours = [
+    { day: '학기 중', open: '09:00', close: '24:00' },
+    { day: '방학 중', open: '09:00', close: '24:00' },
+    { day: '점심시간', open: '12:00', close: '13:00' },
+    { day: '저녁시간', open: '18:00', close: '19:00' },
+    { day: '야간휴게', open: '01:00', close: '06:00' },
+  ];
+
+  const Section = ({ title, children }) => (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-3)', letterSpacing: '0.4px', marginBottom: 10 }}>{title}</div>
+      <div style={{ background: 'var(--surface)', borderRadius: 16, overflow: 'hidden' }}>
+        {children}
+      </div>
+    </div>
+  );
+
+  const Row = ({ label, value, last }) => (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '13px 16px', borderBottom: last ? 'none' : '1px solid var(--line)' }}>
+      <div style={{ fontSize: 14, color: 'var(--ink-3)', fontWeight: 500, minWidth: 80 }}>{label}</div>
+      <div style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 600, flex: 1, lineHeight: 1.5 }}>{value}</div>
+    </div>
+  );
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <div style={{ padding: '6px 12px 8px', display: 'flex', alignItems: 'center' }}>
+        <button onClick={() => goBack(navigate, '/home')} style={{ background: 'transparent', border: 0, padding: 8, color: 'var(--ink)', cursor: 'pointer' }}><Icon.back /></button>
+        <div style={{ flex: 1, textAlign: 'center', fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>사감실 운영 안내</div>
+        <div style={{ width: 38 }} />
+      </div>
+
+      <div className="scroll" style={{ padding: '8px 16px 40px' }}>
+        <Section title="사감실 운영 시간">
+          {hours.map((h, i) => (
+            <Row key={i} label={h.day} value={`${h.open} – ${h.close}`} last={i === hours.length - 1} />
+          ))}
+        </Section>
+
+        <div style={{ background: 'var(--brand-soft)', borderRadius: 14, padding: '12px 14px', marginBottom: 24, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <Icon.bell size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ fontSize: 13, color: 'var(--brand-deep)', lineHeight: 1.6 }}>
+            설날·추석 등 연휴, 야간근무자 공석 시에는 유동적으로 변동될 수 있어요.
+          </div>
+        </div>
+
+        <Section title="연락처">
+          <Row label="사감실" value="번호를 입력해주세요" last />
+        </Section>
+
+      </div>
+    </div>
+  );
+}
+
+export function RollCallRulesScreen() {
+  const navigate = useNavigate();
+
+  const CHECKLIST = [
+    { item: '창문', desc: '창틀, 창문유리' },
+    { item: '현관', desc: '머리카락 유무, 신발장 및 바닥' },
+    { item: '세면대', desc: '거울, 타일, 하수구' },
+    { item: '샤워실', desc: '타일, 하수구' },
+    { item: '화장실', desc: '변기, 타일, 하수구' },
+    { item: '개인비품', desc: '의자 머리카락 유무, 침대 커버 유무, 침대·책상 서랍장 아래' },
+  ];
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <div style={{ padding: '6px 12px 8px', display: 'flex', alignItems: 'center' }}>
+        <button onClick={() => goBack(navigate, '/home')} style={{ background: 'transparent', border: 0, padding: 8, color: 'var(--ink)', cursor: 'pointer' }}><Icon.back /></button>
+        <div style={{ flex: 1, textAlign: 'center', fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>점호 및 청소 점검 안내</div>
+        <div style={{ width: 38 }} />
+      </div>
+
+      <div className="scroll" style={{ padding: '4px 16px 40px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ background: 'var(--surface)', borderRadius: 16, overflow: 'hidden' }}>
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', background: 'var(--surface-2)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>정기 점호 일정 (1학기 2회)</div>
+          </div>
+          {[
+            { label: '1차', value: '3월 18일 (수) 진행 예정' },
+            { label: '2차', value: '5월 13일 (수) 진행 예정' },
+          ].map((r, i, arr) => (
+            <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 16px', borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}>
+              <div style={{ fontSize: 14, color: 'var(--ink-3)', fontWeight: 500, minWidth: 36 }}>{r.label}</div>
+              <div style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 600 }}>{r.value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ background: 'var(--brand-soft)', borderRadius: 14, padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <Icon.bell size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ fontSize: 13, color: 'var(--brand-deep)', lineHeight: 1.6 }}>
+            음주·흡연·외부인 출입 등이 의심되는 경우 호실 방문. 청소 상태에 따라 상/벌점 부여.
+          </div>
+        </div>
+
+        <div style={{ background: 'var(--surface)', borderRadius: 16, overflow: 'hidden' }}>
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', background: 'var(--surface-2)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>청소 점검 항목</div>
+          </div>
+          {CHECKLIST.map((row, i) => (
+            <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 16px', borderBottom: i < CHECKLIST.length - 1 ? '1px solid var(--line)' : 'none', alignItems: 'flex-start' }}>
+              <div style={{ fontSize: 14, color: 'var(--ink-3)', fontWeight: 500, minWidth: 60, flexShrink: 0 }}>{row.item}</div>
+              <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6 }}>{row.desc}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ background: 'var(--surface-2)', borderRadius: 14, padding: '12px 14px' }}>
+          <div style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.7 }}>
+            ※ 청소 점검 참고용 사진과 같이 준비해주시길 바랍니다.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function DormRulesScreen() {
+  const navigate = useNavigate();
+
+  const RULES = [
+    {
+      title: '23시 이후 소란행위 금지',
+      items: [
+        '23시 이후 호실 및 기숙사 공용 공간에서의 소란행위 금지, 라운지 음식물 섭취 불가 (음료 제외)',
+        '호실·복도·휴게실·라운지에서 소란스러울 경우 사감실로 신고',
+        '01시 이후에는 다음 날 09시 이후에 사감실로 신고. CCTV 확인 후 벌점 부과',
+      ],
+    },
+    {
+      title: '통금 시간 01:00 ~ 05:00',
+      items: [
+        '해당 시간에는 모든 출입 불가',
+        '출입하는 경우 다음날 사감실 방문하여 사고경위서 작성 및 벌점 부여',
+      ],
+    },
+    {
+      title: '음주 절대 금지',
+      items: [
+        '호실 내 음주 행위, 주류 반입 및 보관 — 징계퇴사 및 입사제한',
+        '기숙사 내 음주 행위 및 인사불성 상태에서 공동생활에 불쾌감을 주는 주정 행위도 생활관 내 규정을 적용하여 퇴사 및 징계',
+        '기숙사 내 음주 행위 신고: 사감실 앞 불편사항 신고 대장에 기록',
+      ],
+    },
+    {
+      title: '실내흡연 금지',
+      items: [
+        '기숙사 실내흡연 금지, 지정된 흡연구역 이용',
+        '흡연구역은 생활관 밖 지정된 구역에서만 가능',
+        '실내흡연 (전자담배 포함) 시 퇴사 및 징계',
+        '룸메이트가 흡연 방조 시 함께 벌점 부과',
+      ],
+    },
+    {
+      title: '반입 금지 물품',
+      items: [
+        '취사도구',
+        '온풍기 및 냉풍기 등 개별 냉난방기, 전기장판, 다리미',
+        '고데기 — 자동꺼짐 기능이 없는 제품 반입 금지',
+        '인화물질 — 모기향, 향초 포함',
+        '위험물 — 가스버너',
+        '전동 킥보드, 자전거 (접이식 포함)',
+        '칼집이 없는 칼 종류 일절 반입 금지',
+      ],
+    },
+    {
+      title: '냉장고 반입 기준',
+      items: [
+        '각 호실에 1인 1대만 반입 가능',
+        '2인실: 1인당 87L까지 용량 제한',
+        '4인실: 1인당 46L까지 용량 제한',
+        '※ 호실 내 24시간 공급되는 전기는 벽면 한 곳에서만 작동되므로 콘센트 사용을 고려하여 설치 바람',
+      ],
+    },
+    {
+      title: '기숙사 내 취사 행위 금지',
+      items: [
+        '기숙사 내 일체의 취사 행위 금지',
+      ],
+    },
+    {
+      title: '우편물 수령 안내',
+      items: [
+        '등기·우편: 사감실에서 가천관 10층 총무인사팀 수령 후 입사생에게 연락 예정',
+        '등기는 사감실 문자 확인 후 사감실 방문하여 수령',
+        '일반우편은 우편함에서 수령',
+      ],
+    },
+    {
+      title: '위탁업체 운영 시설',
+      items: [
+        '학생 식당, 세탁실, 프린트, 무인 택배함은 위탁업체 운영',
+        '문제 발생 시 안내된 고객센터로 직접 문의',
+      ],
+    },
+    {
+      title: 'WIFI',
+      items: [
+        'ID: 호실번호',
+        'PW: 00000호실번호  (예: 200호 → 00000200)',
+      ],
+    },
+    {
+      title: '벌점 기준',
+      items: [
+        '해당 학기 벌점 합계 10점 이상 시 징계퇴사 및 향후 입사제한',
+        '상·벌점 기준표: 각 층 게시판 및 학생생활관 홈페이지 참고',
+      ],
+    },
+    {
+      title: '기타 규칙',
+      items: [
+        '각 층 복도에 물건 적치 금지 (위반 시 벌점 부과)',
+        '지정된 의자 위치 변경 금지',
+        '룸메이트 간 카드키 혼용 주의. 카드에 스티커 등 부착물 부착 금지',
+        '카드 대여: 21시까지 가능 / 반납: 21시 30분까지',
+        '휴게실에서 소란 행위 금지',
+        '호실 내 스티커, 고리 및 기타 부착물 부착 금지',
+      ],
+    },
+    {
+      title: '슬기로운 장학금 신청 안내',
+      items: [
+        '신청 기간: 3월 3일(화) ~ 3월 8일(일) 17시까지',
+        '상세 내용은 공지사항 참조',
+      ],
+    },
+    {
+      title: '주차장 출입 통제',
+      items: [
+        '2026년 2월 2일(월)부터 등록 차량 외 주차장 진입 불가',
+        '차량 등록 관련 상세 내용은 공지사항 참조',
+      ],
+    },
+  ];
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <div style={{ padding: '6px 12px 8px', display: 'flex', alignItems: 'center' }}>
+        <button onClick={() => goBack(navigate, '/home')} style={{ background: 'transparent', border: 0, padding: 8, color: 'var(--ink)', cursor: 'pointer' }}><Icon.back /></button>
+        <div style={{ flex: 1, textAlign: 'center', fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>기숙사 규칙</div>
+        <div style={{ width: 38 }} />
+      </div>
+
+      <div className="scroll" style={{ padding: '4px 16px 40px' }}>
+        <div style={{ padding: '6px 4px 16px', fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.6 }}>
+          가천대학교 제2학생생활관 생활 시 꼭 알아두어야 할 내용입니다.
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {RULES.map((rule, ri) => (
+            <div key={ri} style={{ background: 'var(--surface)', borderRadius: 16, overflow: 'hidden' }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', background: 'var(--surface-2)' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{rule.title}</div>
+              </div>
+              <div style={{ padding: '4px 0' }}>
+                {rule.items.map((item, ii) => (
+                  <div key={ii} style={{ display: 'flex', gap: 10, padding: '9px 16px', borderBottom: ii < rule.items.length - 1 ? '1px solid var(--line)' : 'none' }}>
+                    <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--brand)', marginTop: 6, flexShrink: 0 }} />
+                    <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6 }}>{item}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

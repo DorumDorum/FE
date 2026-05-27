@@ -1,0 +1,989 @@
+import React from 'react';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { Icon, TabBar, StatusBar, Avatar, MarqueeText, ClipText, goBack } from '../../../shared/components';
+import { MemberCard, MEMBER_CHECKLISTS } from '../../members';
+import { CREATE_ROOM_DORMS, ROOM_SIZE_OPTIONS } from '../../checklist';
+
+// rooms.jsx — 방 찾기 (list), 방 상세 (detail w/ checklist), 내 방 (my room)
+
+export const MY_ROOM_RECRUITING_KEY = 'dorumdorum:my-room-recruiting';
+const ROOM_BOOKMARKS_KEY = 'dorumdorum:room-bookmarks';
+
+function readRoomBookmarks() {
+  if (typeof window === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(ROOM_BOOKMARKS_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+// Shared full checklist for each room. Same field set the user fills in
+// on the checklist edit screen, so the data shape is consistent everywhere.
+export const ROOM_CHECKLIST_1 = [
+  { cat: '생활 패턴', items: [
+    { q: '취침', a: '23시 – 01시' },
+    { q: '기상', a: '07시 – 09시' },
+    { q: '귀가', a: '고정적' },
+    { q: '청소', a: '주기적' },
+    { q: '방에서 전화', a: '가능' },
+    { q: '잠귀', a: '어두움' },
+    { q: '잠버릇', a: '약함' },
+    { q: '코골이', a: '약함~없음' },
+    { q: '샤워시간', a: '저녁' },
+    { q: '방에서 취식', a: '가능+환기필수' },
+    { q: '소등', a: '23시 이후' },
+    { q: '본가 주기', a: '2주' },
+    { q: '흡연', a: '비흡연' },
+    { q: '냉장고', a: '협의 후 결정' },
+  ]},
+  { cat: '추가 규칙', items: [
+    { q: '드라이기 제한', a: '12–19시 사용 제한' },
+    { q: '알람', a: '진동' },
+    { q: '이어폰', a: '항상' },
+    { q: '키스킨', a: '유동적' },
+    { q: '무소음 마우스', a: '사용' },
+    { q: '더위', a: '중간' },
+    { q: '추위', a: '중간' },
+    { q: '공부', a: '유동적' },
+    { q: '쓰레기통', a: '개별' },
+  ]},
+];
+
+export const ROOM_CHECKLIST_2 = [
+  { cat: '생활 패턴', items: [
+    { q: '취침', a: '24시 – 02시' },
+    { q: '기상', a: '08시 – 10시' },
+    { q: '귀가', a: '고정적' },
+    { q: '청소', a: '주기적' },
+    { q: '방에서 전화', a: '불가능' },
+    { q: '잠귀', a: '어두움' },
+    { q: '잠버릇', a: '약함' },
+    { q: '코골이', a: '약함~없음' },
+    { q: '샤워시간', a: '저녁' },
+    { q: '방에서 취식', a: '불가능' },
+    { q: '소등', a: '24시 이후' },
+    { q: '본가 주기', a: '한달이상' },
+    { q: '흡연', a: '비흡연' },
+    { q: '냉장고', a: '대여·구매·보유' },
+  ]},
+  { cat: '추가 규칙', items: [
+    { q: '드라이기 제한', a: '23–02시 사용 제한' },
+    { q: '알람', a: '진동' },
+    { q: '이어폰', a: '항상' },
+    { q: '키스킨', a: '항상' },
+    { q: '무소음 마우스', a: '사용' },
+    { q: '더위', a: '적게 탐' },
+    { q: '추위', a: '많이 탐' },
+    { q: '공부', a: '기숙사 안' },
+    { q: '쓰레기통', a: '개별' },
+  ]},
+];
+
+export const ROOM_CHECKLIST_3 = [
+  { cat: '생활 패턴', items: [
+    { q: '취침', a: '23시 – 24시' },
+    { q: '기상', a: '06시 – 07시' },
+    { q: '귀가', a: '유동적' },
+    { q: '청소', a: '주기적' },
+    { q: '방에서 전화', a: '가능' },
+    { q: '잠귀', a: '밝음' },
+    { q: '잠버릇', a: '중간' },
+    { q: '코골이', a: '약함~없음' },
+    { q: '샤워시간', a: '아침' },
+    { q: '방에서 취식', a: '가능+환기필수' },
+    { q: '소등', a: '한명 잘 때 알아서' },
+    { q: '본가 주기', a: '매주' },
+    { q: '흡연', a: '비흡연' },
+    { q: '냉장고', a: '필요 없음' },
+  ]},
+  { cat: '추가 규칙', items: [
+    { q: '드라이기 제한', a: '00–06시 사용 제한' },
+    { q: '알람', a: '소리' },
+    { q: '이어폰', a: '유동적' },
+    { q: '키스킨', a: '유동적' },
+    { q: '무소음 마우스', a: '사용' },
+    { q: '더위', a: '많이 탐' },
+    { q: '추위', a: '적게 탐' },
+    { q: '공부', a: '기숙사 밖' },
+    { q: '쓰레기통', a: '공유' },
+  ]},
+];
+
+export const ROOM_CHECKLIST_4 = [
+  { cat: '생활 패턴', items: [
+    { q: '취침', a: '01시 – 03시' },
+    { q: '기상', a: '09시 – 11시' },
+    { q: '귀가', a: '유동적' },
+    { q: '청소', a: '비주기적' },
+    { q: '방에서 전화', a: '가능' },
+    { q: '잠귀', a: '어두움' },
+    { q: '잠버릇', a: '약함' },
+    { q: '코골이', a: '중간' },
+    { q: '샤워시간', a: '저녁' },
+    { q: '방에서 취식', a: '가능' },
+    { q: '소등', a: '한명 잘 때 알아서' },
+    { q: '본가 주기', a: '거의 안 감' },
+    { q: '흡연', a: '전자담배' },
+    { q: '냉장고', a: '대여·구매·보유' },
+  ]},
+  { cat: '추가 규칙', items: [
+    { q: '드라이기 제한', a: '제한 없음' },
+    { q: '알람', a: '소리' },
+    { q: '이어폰', a: '유동적' },
+    { q: '키스킨', a: '유동적' },
+    { q: '무소음 마우스', a: '사용' },
+    { q: '더위', a: '중간' },
+    { q: '추위', a: '중간' },
+    { q: '공부', a: '기숙사 안' },
+    { q: '쓰레기통', a: '공유' },
+  ]},
+];
+
+export const ROOMS = [
+  {
+    id: 1, title: '아침형 룸메 구해요', dorm: '2생활관', size: '4인실',
+    members: 2, capacity: 4, recruiting: true, host: { name: '민지' },
+    matchLabel: '잘 맞아요', recommended: true,
+    checklist: ROOM_CHECKLIST_1,
+  },
+  {
+    id: 2, title: '조용히 공부할 사람만! 시험기간 새벽까지 집중하시는 분', dorm: '3생활관', size: '2인실',
+    members: 1, capacity: 2, recruiting: true, host: { name: '수민' },
+    matchLabel: '잘 맞아요',
+    checklist: ROOM_CHECKLIST_2,
+  },
+  {
+    id: 3, title: '같이 운동하실 분', dorm: '1생활관', size: '2인실',
+    members: 1, capacity: 2, recruiting: true, host: { name: '진우' },
+    matchLabel: '괜찮아요',
+    checklist: ROOM_CHECKLIST_3,
+  },
+  {
+    id: 4, title: '느긋한 생활 좋아요', dorm: '메디컬', size: '3인실',
+    members: 3, capacity: 3, recruiting: false, host: { name: '예린' },
+    matchLabel: '괜찮아요',
+    checklist: ROOM_CHECKLIST_4,
+  },
+];
+
+export function RoomCard({ room, bookmarked = false, onToggleBookmark }) {
+  const [open, setOpen] = React.useState(false);
+  const navigate = useNavigate();
+  return (
+    <div
+      className="card"
+      onClick={() => navigate(`/rooms/${room.id}`, { state: { closed: room.recruiting === false } })}
+      style={{ padding: 16, marginBottom: 10, transition: 'box-shadow .2s', cursor: 'pointer' }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.3px', marginBottom: 4, minWidth: 0 }}>
+            <MarqueeText>{room.title}</MarqueeText>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>{room.dorm} · {room.size}</span>
+            <span style={{ fontSize: 11, fontWeight: 800, color: room.recruiting === false ? 'var(--ink-3)' : 'var(--brand-deep)', background: room.recruiting === false ? 'var(--surface-2)' : 'var(--brand-soft)', borderRadius: 999, padding: '3px 7px' }}>
+              {room.recruiting === false ? '마감됨' : '모집중'}
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          aria-label={bookmarked ? '북마크 해제' : '북마크 추가'}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleBookmark?.(room.id);
+          }}
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 11,
+            border: 0,
+            background: bookmarked ? 'var(--brand-soft)' : 'var(--surface-2)',
+            color: bookmarked ? 'var(--brand)' : 'var(--ink-3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          <svg width="19" height="19" viewBox="0 0 24 24" fill={bookmarked ? 'currentColor' : 'none'}>
+            <path d="M19 7v14l-7-4-7 4V7a3 3 0 013-3h8a3 3 0 013 3z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Avatar name={room.host.name} size={28}/>
+          <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>방장 · <b>{room.host.name}</b></span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>
+          <div style={{ display: 'flex', gap: 2 }}>
+            {Array.from({ length: room.capacity }).map((_, i) => (
+              <div key={i} style={{
+                width: 9, height: 9, borderRadius: 3,
+                background: i < room.members ? 'var(--brand)' : 'var(--line-2)',
+              }}/>
+            ))}
+          </div>
+          <span style={{ color: 'var(--ink-2)' }}>{room.members}<span style={{ color: 'var(--ink-3)' }}>/{room.capacity}명</span></span>
+        </div>
+      </div>
+
+      {/* Expandable checklist — grid-rows trick for smooth slide */}
+      <div style={{
+        display: 'grid',
+        gridTemplateRows: open ? '1fr' : '0fr',
+        transition: 'grid-template-rows .32s cubic-bezier(.2,.7,.2,1)',
+        marginTop: open ? 12 : 0,
+      }}>
+        <div style={{ overflow: 'hidden' }}>
+          <div style={{
+            background: 'var(--surface)',
+            borderRadius: 12,
+            overflow: 'hidden',
+          }}>
+            {room.checklist && room.checklist.map((cat, ci) => (
+              <React.Fragment key={ci}>
+                {/* Category header bar */}
+                <div style={{
+                  background: 'var(--surface-2)',
+                  padding: '8px 14px',
+                  fontSize: 12, fontWeight: 700,
+                  color: 'var(--ink-2)',
+                  letterSpacing: '-0.1px',
+                }}>{cat.cat}</div>
+                {/* Item rows */}
+                {cat.items.map((it, ii) => (
+                  <div key={ii} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 14px',
+                    borderBottom: ii === cat.items.length - 1 ? 'none' : '1px solid var(--line)',
+                    fontSize: 13,
+                  }}>
+                    <span style={{ color: 'var(--ink-2)' }}>{it.q}</span>
+                    <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{it.a}</span>
+                  </div>
+                ))}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Toggle */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(!open);
+        }}
+        style={{
+          width: '100%', marginTop: 10,
+          background: 'transparent', border: 0, padding: '6px 0',
+          fontSize: 13, fontWeight: 600, color: 'var(--ink-3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+          cursor: 'pointer',
+        }}>
+        {open ? '접기' : '자세히 보기'}
+        <span style={{ display: 'inline-flex', transform: open ? 'rotate(-90deg)' : 'rotate(90deg)', transition: 'transform .25s' }}>
+          <Icon.chevron size={14}/>
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function FilterDropdown({ label, value, setValue, options, display }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  const isAll = value === '전체';
+
+  React.useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flex: 1 }}>
+      <button type="button" onClick={() => setOpen(o => !o)} style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+        width: '100%', padding: '10px 12px', borderRadius: 10,
+        border: isAll ? '1px solid var(--line-2)' : '1.5px solid var(--brand)',
+        background: isAll ? 'var(--surface)' : 'var(--brand-soft)',
+        color: isAll ? 'var(--ink-2)' : 'var(--brand-deep)',
+        fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+      }}>
+        <span>{label}: {display(value)}</span>
+        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
+          <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, background: 'var(--surface)', borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.12)', border: '1px solid var(--line)', zIndex: 100, minWidth: '100%', overflow: 'hidden' }}>
+          {options.map(opt => {
+            const val = typeof opt === 'string' ? opt : opt.key;
+            const lbl = display(val);
+            const active = value === val;
+            return (
+              <div key={val} onClick={() => { setValue(val); setOpen(false); }} style={{
+                padding: '10px 14px', fontSize: 13, fontWeight: active ? 700 : 500,
+                color: active ? 'var(--brand)' : 'var(--ink)', cursor: 'pointer',
+                background: active ? 'var(--brand-soft)' : 'transparent',
+              }}>{lbl}</div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function FindRoomScreen({ activeTab='find' }) {
+  const navigate = useNavigate();
+  const [sortBy, setSortBy] = React.useState('latest');
+  const [dormFilter, setDormFilter] = React.useState('전체');
+  const [sizeFilter, setSizeFilter] = React.useState('전체');
+  const [bookmarkedIds, setBookmarkedIds] = React.useState(readRoomBookmarks);
+  const sortOptions = [
+    { key: 'latest', label: '최신순' },
+    { key: 'openSeats', label: '남은 자리순' },
+  ];
+  const dormOptions = React.useMemo(() => ['전체', ...CREATE_ROOM_DORMS.map((dorm) => dorm.name)], []);
+  const sizeOptions = React.useMemo(() => {
+    const selectedDorm = CREATE_ROOM_DORMS.find((dorm) => dorm.name === dormFilter);
+    return ['전체', ...(selectedDorm ? selectedDorm.sizes : ROOM_SIZE_OPTIONS)];
+  }, [dormFilter]);
+  const formatCapacityOption = (option) => option === '전체' ? option : option.replace('인실', '명');
+
+  React.useEffect(() => {
+    if (!sizeOptions.includes(sizeFilter)) {
+      setSizeFilter('전체');
+    }
+  }, [sizeFilter, sizeOptions]);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(ROOM_BOOKMARKS_KEY, JSON.stringify(bookmarkedIds));
+    }
+  }, [bookmarkedIds]);
+
+  const toggleRoomBookmark = (roomId) => {
+    setBookmarkedIds((ids) => ids.includes(roomId) ? ids.filter((id) => id !== roomId) : [...ids, roomId]);
+  };
+  const sortedRooms = React.useMemo(() => {
+    return ROOMS
+      .filter((room) => room.recruiting !== false)
+      .filter((room) => dormFilter === '전체' || room.dorm === dormFilter)
+      .filter((room) => sizeFilter === '전체' || room.size === sizeFilter)
+      .sort((a, b) => {
+        if (sortBy === 'openSeats') {
+          return (b.capacity - b.members) - (a.capacity - a.members) || b.id - a.id;
+        }
+        return b.id - a.id;
+      });
+  }, [dormFilter, sizeFilter, sortBy]);
+
+	  return (
+	    <div className="screen">
+	      <div className="scroll">
+	        <StatusBar />
+	        <div className="topbar">
+	          <div className="brand">방 찾기</div>
+		          <button onClick={() => navigate('/notifications')} aria-label="알림" style={{ background: 'transparent', border: 0, color: 'var(--ink)', padding: 6, display: 'flex', cursor: 'pointer' }}>
+		            <Icon.bell size={22}/>
+		          </button>
+	        </div>
+
+	        {/* Search */}
+	        <div style={{ padding: '0 16px 12px' }}>
+	          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', borderRadius: 14, padding: '12px 14px' }}>
+	            <Icon.search size={20} weight={1.8}/>
+	            <input type="text" placeholder="생활관, 수용인원 검색" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 14, fontFamily: 'inherit', color: 'var(--ink)', minWidth: 0 }} />
+	            <button onClick={() => navigate('/rooms/find/filter')} style={{ background: 'transparent', border: 0, color: 'var(--ink-2)', padding: 0, display: 'flex', cursor: 'pointer' }}><Icon.filter/></button>
+	          </div>
+	        </div>
+
+        <div style={{ padding: '0 16px 6px', display: 'flex', gap: 8 }}>
+          {[
+            { label: '생활관', value: dormFilter, setValue: setDormFilter, options: dormOptions, display: v => v },
+            { label: '수용인원', value: sizeFilter, setValue: setSizeFilter, options: sizeOptions, display: formatCapacityOption },
+          ].map(group => (
+            <FilterDropdown key={group.label} {...group} />
+          ))}
+        </div>
+
+	        <div style={{ padding: '8px 16px 16px' }}>
+	        {/* Match summary banner */}
+	        <div onClick={() => navigate('/rooms/find/recommended')} style={{ background: 'var(--brand-soft)', borderRadius: 14, padding: '14px 16px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--brand)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon.check size={18} weight={2.6}/>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-deep)' }}>당신과 잘 맞는 방 12곳</div>
+            <div style={{ fontSize: 12, color: 'var(--brand-deep)', opacity: 0.75, marginTop: 2 }}>체크리스트 기반으로 추천했어요</div>
+          </div>
+          <Icon.chevron size={16}/>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '4px 4px 10px' }}>
+          <span style={{ fontSize: 13, color: 'var(--ink-3)', flexShrink: 0 }}>모집중 {sortedRooms.length}개</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {sortOptions.map(option => {
+              const active = sortBy === option.key;
+              return (
+                <button
+                  key={option.key}
+                  onClick={() => setSortBy(option.key)}
+                  style={{
+                    border: 0,
+                    borderRadius: 999,
+                    padding: '7px 10px',
+                    background: active ? 'var(--ink)' : 'var(--surface)',
+                    color: active ? 'white' : 'var(--ink-2)',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+	        {sortedRooms.length > 0 ? sortedRooms.map(r => <RoomCard key={r.id} room={r} bookmarked={bookmarkedIds.includes(r.id)} onToggleBookmark={toggleRoomBookmark} />) : (
+          <div className="card" style={{ padding: 22, textAlign: 'center', color: 'var(--ink-3)', fontSize: 14, fontWeight: 600 }}>
+            선택한 조건에 맞는 모집중 방이 없어요.
+          </div>
+        )}
+	        <div style={{ height: 12 }}/>
+	        </div>
+	      </div>
+
+      {/* FAB */}
+      <button onClick={() => navigate('/rooms/create/1')} style={{
+        position: 'absolute', bottom: 96, right: 18, zIndex: 5,
+        height: 52, padding: '0 18px', borderRadius: 26, border: 0,
+        background: 'var(--ink)', color: 'white', fontWeight: 600, fontSize: 14,
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+        cursor: 'pointer',
+      }}>
+        <Icon.plus size={18}/> 모집방 만들기
+      </button>
+
+      <TabBar active={activeTab} />
+    </div>
+  );
+}
+
+// ── Room detail with checklist comparison ───────────────────
+// Compares room's representative checklist (방) vs my checklist (나).
+export const CHECKLIST = [
+  { cat: '생활 패턴', items: [
+    { q: '취침', room: '23시 – 01시', mine: '23시 – 01시', match: true },
+    { q: '기상', room: '07시 – 09시', mine: '07시 – 08시', match: true },
+    { q: '귀가', room: '고정적', mine: '고정적', match: true },
+    { q: '청소', room: '주기적', mine: '주기적', match: true },
+    { q: '방에서 전화', room: '가능', mine: '가능', match: true },
+    { q: '잠귀', room: '어두움', mine: '어두움', match: true },
+    { q: '잠버릇', room: '약함', mine: '약함', match: true },
+    { q: '코골이', room: '약함~없음', mine: '약함~없음', match: true },
+    { q: '샤워시간', room: '저녁', mine: '아침', match: false },
+    { q: '방에서 취식', room: '가능+환기필수', mine: '가능+환기필수', match: true },
+    { q: '소등', room: '23시 이후', mine: '23시 이후', match: true },
+    { q: '본가 주기', room: '2주', mine: '매주', match: false },
+    { q: '흡연', room: '비흡연', mine: '비흡연', match: true },
+    { q: '냉장고', room: '협의 후 결정', mine: '협의 후 결정', match: true },
+  ]},
+  { cat: '추가 규칙', items: [
+    { q: '드라이기 제한', room: '12–19시 사용 제한', mine: '12–19시 사용 제한', match: true },
+    { q: '알람', room: '진동', mine: '진동', match: true },
+    { q: '이어폰', room: '항상', mine: '항상', match: true },
+    { q: '키스킨', room: '유동적', mine: '유동적', match: true },
+    { q: '무소음 마우스', room: '사용', mine: '사용', match: true },
+    { q: '더위', room: '중간', mine: '중간', match: true },
+    { q: '추위', room: '중간', mine: '적게 탐', match: false },
+    { q: '공부', room: '유동적', mine: '유동적', match: true },
+    { q: '쓰레기통', room: '개별', mine: '개별', match: true },
+  ]},
+];
+
+export function RoomDetailScreen() {
+  const navigate = useNavigate();
+  const { id = '1' } = useParams();
+  const { state } = useLocation();
+  const room = ROOMS.find((item) => String(item.id) === String(id));
+  const isClosed = state?.closed ?? room?.recruiting === false;
+  const isApplied = state?.appliedStatus === 'waiting';
+  const isAccepted = state?.appliedStatus === 'accepted';
+
+  const [bookmarked, setBookmarked] = React.useState(false);
+
+  return (
+    <div className="screen">
+      <StatusBar />
+      <div style={{ padding: '6px 12px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <button onClick={() => goBack(navigate, '/rooms/find')} style={{ background: 'transparent', border: 0, padding: 8, color: 'var(--ink)', cursor: 'pointer' }}><Icon.back/></button>
+        <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>모집방 상세</div>
+        <button onClick={() => setBookmarked(b => !b)} style={{ background: 'transparent', border: 0, padding: 8, color: bookmarked ? 'var(--brand)' : 'var(--ink)', cursor: 'pointer' }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill={bookmarked ? 'currentColor' : 'none'}>
+            <path d="M19 7v14l-7-4-7 4V7a3 3 0 013-3h8a3 3 0 013 3z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <div className="scroll">
+        {/* Header */}
+        <div style={{ padding: '8px 20px 16px' }}>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.3, fontFamily: 'var(--font-sans)' }}>아침형 룸메 구해요</h1>
+          <div style={{ fontSize: 14, color: 'var(--ink-3)', marginTop: 6 }}>2생활관 · 4인실 · 2026년 2학기</div>
+        </div>
+
+        {/* Match summary — no number, just a clear label */}
+        <div style={{ margin: '0 16px 16px' }}>
+          <div className="card" style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 14, background: 'var(--brand-soft)' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--brand)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Icon.check size={22} weight={2.6}/>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--brand-deep)' }}>나와 잘 맞는 방이에요</div>
+              <div style={{ fontSize: 12, color: 'var(--brand-deep)', opacity: 0.75, marginTop: 3 }}>생활 패턴 · 청결도 · 예민도 일치</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Host card */}
+        <div style={{ margin: '0 16px' }}>
+          <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 16 }}>
+            <Avatar name="민지" size={52} style={{ fontSize: 20 }}/>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 15, fontWeight: 700 }}>민지</span>
+                <span className="chip line" style={{ fontSize: 10, padding: '2px 6px' }}>방장</span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>경영 22 · 인증완료</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Members */}
+        <div className="h-section"><h2>현재 멤버 2/4</h2></div>
+        <div style={{ padding: '0 16px', display: 'flex', gap: 8 }}>
+          {[
+            { name: '민지', label: '방장' },
+            { name: '수민', label: '멤버' },
+            { name: '?', label: '모집중', empty: true },
+            { name: '?', label: '모집중', empty: true },
+          ].map((m, i) => (
+            <div key={i} onClick={() => !m.empty && navigate('/rooms/members')} className="card" style={{ flex: 1, padding: 12, textAlign: 'center', border: m.empty ? '1px dashed var(--line-2)' : 'none', background: m.empty ? 'transparent' : 'var(--surface)', cursor: m.empty ? 'default' : 'pointer' }}>
+              {m.empty ? (
+                <div style={{ width: 40, height: 40, borderRadius: '50%', border: '1.5px dashed var(--line-2)', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-4)' }}><Icon.plus size={18}/></div>
+              ) : (
+                <Avatar name={m.name} size={40} style={{ fontSize: 16 }}/>
+              )}
+              <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 6, fontWeight: 600 }}>{m.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Checklist comparison */}
+        <div className="h-section">
+          <h2>체크리스트 비교</h2>
+        </div>
+        <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 18, overflow: 'hidden' }}>
+          {/* Header row */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 84px 84px 24px', alignItems: 'center', padding: '12px 14px', fontSize: 11, fontWeight: 600, color: 'var(--ink-3)', letterSpacing: '0.3px' }}>
+            <span/>
+            <span style={{ textAlign: 'center' }}>방 체크리스트</span>
+            <span style={{ textAlign: 'center' }}>내 체크리스트</span>
+            <span/>
+          </div>
+          {CHECKLIST.map((cat, ci) => (
+            <div key={cat.cat}>
+              <div style={{ padding: '8px 14px 6px', fontSize: 11, fontWeight: 700, color: 'var(--ink-2)', letterSpacing: '0.2px', background: 'var(--surface-2)' }}>{cat.cat}</div>
+              {cat.items.map((it, ii) => (
+                <div key={ii} style={{ display: 'grid', gridTemplateColumns: '1fr 84px 84px 24px', alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid var(--line)', fontSize: 13 }}>
+                  <span style={{ color: 'var(--ink-2)' }}>{it.q}</span>
+                  <span style={{ textAlign: 'center', fontWeight: 600 }}>{it.room}</span>
+                  <span style={{ textAlign: 'center', fontWeight: 600, color: it.match ? 'var(--ink)' : 'var(--ink-3)' }}>{it.mine}</span>
+                  <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    {it.match ? (
+                      <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--brand)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon.check size={12} weight={3}/></span>
+                    ) : (
+                      <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--surface-2)', color: 'var(--ink-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>−</span>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* About */}
+        <div className="h-section"><h2>방장의 한마디</h2></div>
+        <div style={{ margin: '0 16px 24px' }}>
+          <div className="card" style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--ink-2)' }}>
+            아침 7시쯤 일어나는 사람이면 정말 좋아요. 청소는 일주일에 두 번 같이 하면 좋겠고, 평일 저녁엔 각자 시간 갖는 편이에요. 잡담 환영! 너무 늦은 외출이나 시끄러운 통화만 자제해주시면 됩니다.
+          </div>
+        </div>
+
+        <div style={{ height: isAccepted ? 24 : 110 }}/>
+      </div>
+
+      {/* Sticky CTA */}
+      {!isAccepted && (
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'linear-gradient(180deg, transparent 0%, var(--bg) 30%)', display: 'flex', gap: 8 }}>
+        <button onClick={() => navigate('/chat/dm')} className="btn ghost" style={{ width: 52, height: 52, borderRadius: 14, padding: 0 }}>
+          <Icon.chat size={22}/>
+        </button>
+        {isClosed ? (
+          <button disabled className="btn full" style={{ flex: 1, height: 52, background: 'var(--surface-2)', color: 'var(--ink-4)', cursor: 'not-allowed' }}>마감됨</button>
+        ) : isApplied ? (
+          <button disabled className="btn full" style={{ flex: 1, height: 52, background: 'var(--surface-2)', color: 'var(--ink-4)', cursor: 'not-allowed' }}>대기 중</button>
+        ) : (
+          <button onClick={() => navigate(`/rooms/${id}/apply`)} className="btn full" style={{ flex: 1, height: 52 }}>입주 신청하기</button>
+        )}
+      </div>
+      )}
+    </div>
+  );
+}
+
+// ── My Room screen ──────────────────────────────────────────
+export function MyRoomScreen({ activeTab='myroom' }) {
+  const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [isRecruiting, setIsRecruiting] = React.useState(() => {
+    if (typeof window === 'undefined') return true;
+    return window.sessionStorage.getItem(MY_ROOM_RECRUITING_KEY) !== 'false';
+  });
+  const [rules, setRules] = React.useState([
+    '소등은 23:00, 조명은 무드등만 사용',
+    '청소 당번 — 매주 일요일 저녁',
+    '외부인 방문 시 단톡방에 미리 공유',
+    '간식은 함께 나눠 먹기',
+  ]);
+  const [rulesEditing, setRulesEditing] = React.useState(false);
+  const [ruleDraft, setRuleDraft] = React.useState('');
+  const isHost = true;
+  const currentMembers = 2;
+  const roomCapacity = 4;
+  const canLeaveRoom = !isHost || currentMembers <= 1;
+  const openSeats = Math.max(0, roomCapacity - currentMembers);
+  const isRoomFull = currentMembers >= roomCapacity;
+  const canCloseRecruiting = !isRecruiting || isRoomFull;
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(MY_ROOM_RECRUITING_KEY, String(isRecruiting));
+    }
+  }, [isRecruiting]);
+
+  const leaveRoom = () => {
+    if (!canLeaveRoom) return;
+    setMenuOpen(false);
+    navigate('/rooms/find');
+  };
+
+  const toggleRecruiting = () => {
+    if (isRecruiting && !isRoomFull) return;
+    setIsRecruiting((v) => !v);
+    setMenuOpen(false);
+  };
+
+  const addRule = () => {
+    const nextRule = ruleDraft.trim();
+    if (!nextRule) return;
+    setRules((items) => [...items, nextRule]);
+    setRuleDraft('');
+  };
+
+  const removeRule = (index) => {
+    setRules((items) => items.filter((_, itemIndex) => itemIndex !== index));
+  };
+
+	  return (
+	    <div className="screen">
+	      <div className="scroll">
+	        <StatusBar />
+	        <div className="topbar">
+	          <div className="brand">내 방</div>
+	          <button onClick={() => setMenuOpen(true)} aria-label="방 관리 메뉴" style={{ background: 'transparent', border: 0, color: 'var(--ink)', padding: 6, display: 'flex', cursor: 'pointer' }}>
+	            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg>
+	          </button>
+	        </div>
+	        {/* Hero card */}
+        <div style={{ padding: '4px 16px 16px' }}>
+          <div style={{
+            background: 'var(--brand)',
+            color: 'white', borderRadius: 22, padding: 22, position: 'relative', overflow: 'hidden',
+          }}>
+            <div style={{ position: 'absolute', right: -40, top: -40, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,255,255,0.10)' }}/>
+            <div style={{ position: 'absolute', right: -10, bottom: -30, width: 100, height: 100, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }}/>
+            <div style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-1px' }}>아침형 룸메 구해요</div>
+            <div style={{ fontSize: 14, opacity: 0.9, marginTop: 2 }}>2생활관 · 4인실</div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0, marginTop: 22, position: 'relative' }}>
+              <div>
+                <div style={{ fontSize: 11, opacity: 0.7, fontWeight: 600 }}>인원</div>
+                <div style={{ fontSize: 19, fontWeight: 700, marginTop: 2 }}>{currentMembers} <span style={{ fontSize: 12, opacity: 0.7 }}>/ {roomCapacity}명</span></div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, opacity: 0.7, fontWeight: 600 }}>상태</div>
+	                <div style={{ fontSize: 19, fontWeight: 700, marginTop: 2 }}>{isRecruiting ? '모집중' : '모집 완료'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick actions — pill list */}
+        <div style={{ padding: '0 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {[
+            { i: 'chat', l: '방 채팅', sub: '4명 참여', hasNew: true, to: '/chat/group' },
+            { i: 'user', l: '신청자 관리', sub: '5명 대기 중', hasNew: true, to: '/rooms/applicants' },
+            { i: 'clipboard', l: '방 체크리스트', sub: '11/12 작성됨', to: '/rooms/checklist' },
+            { i: 'edit', l: '모집글 수정', sub: '제목·소개 변경', to: '/rooms/edit' },
+          ].map((a, i) => {
+            const I = Icon[a.i];
+            return (
+              <div key={i} onClick={() => navigate(a.to)} className="card" style={{
+                padding: 14,
+                display: 'flex', alignItems: 'center', gap: 12,
+                background: a.primary ? 'var(--ink)' : 'var(--surface)',
+                color: a.primary ? 'white' : 'var(--ink)',
+                position: 'relative',
+                cursor: 'pointer',
+              }}>
+                <div style={{
+                  width: 38, height: 38, borderRadius: 11,
+                  background: a.primary ? 'var(--brand)' : 'var(--brand-soft)',
+                  color: a.primary ? 'white' : 'var(--brand-deep)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}><I size={18}/></div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '-0.2px' }}>{a.l}</div>
+                  <div style={{ fontSize: 11, color: a.primary ? 'rgba(255,255,255,0.6)' : 'var(--ink-3)', marginTop: 2, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.sub}</div>
+                </div>
+                {a.hasNew && (
+                  <span style={{
+                    width: 8, height: 8, borderRadius: '50%',
+                    background: 'var(--brand)',
+                    position: 'absolute', top: 12, right: 12,
+                  }} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Members (현재 룸메이트) */}
+	        <div className="h-section">
+	          <h2>현재 룸메이트 <span style={{ color: 'var(--brand)' }}>2</span></h2>
+	          <span className="more" onClick={() => navigate('/rooms/members')} style={{ cursor: 'pointer' }}>
+		            {isRecruiting ? `${openSeats}자리 모집중` : '모집 완료'}
+	          </span>
+	        </div>
+        <div style={{ margin: '0 16px' }}>
+          {MEMBER_CHECKLISTS.map((m, i) => (
+            <MemberCard key={i} m={m} defaultOpen={false}/>
+          ))}
+        </div>
+
+        {/* Room rules */}
+        <div className="h-section">
+          <h2>우리 방 약속</h2>
+          <button
+            type="button"
+            onClick={() => setRulesEditing((editing) => !editing)}
+            className="more"
+            style={{ border: 0, background: 'transparent', padding: 0, fontFamily: 'inherit', cursor: 'pointer' }}
+          >
+            {rulesEditing ? '완료' : '수정'}
+          </button>
+        </div>
+        {!rulesEditing ? (
+          <div style={{ margin: '0 16px 24px' }} className="card">
+            {rules.map((rule, i, list) => (
+              <div key={`${rule}-${i}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 0', borderBottom: i === list.length - 1 ? 'none' : '1px solid var(--line)' }}>
+                <div style={{ width: 22, height: 22, borderRadius: 7, background: 'var(--brand-soft)', color: 'var(--brand-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>{i + 1}</div>
+                <div style={{ fontSize: 14, color: 'var(--ink)', lineHeight: 1.5 }}>{rule}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+	          <div style={{ margin: '0 16px 24px' }} className="card">
+            {rules.map((rule, i) => (
+              <div key={`${rule}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
+                <div style={{ width: 22, height: 22, borderRadius: 7, background: 'var(--brand-soft)', color: 'var(--brand-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>{i + 1}</div>
+                <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: 'var(--ink)', lineHeight: 1.5 }}>{rule}</div>
+                <button type="button" onClick={() => removeRule(i)} aria-label="약속 삭제" style={{ width: 20, height: 20, borderRadius: '50%', border: 0, background: 'var(--surface-2)', color: 'var(--ink-3)', fontSize: 12, lineHeight: 1, cursor: 'pointer', flexShrink: 0, padding: 0 }}>×</button>
+              </div>
+            ))}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                addRule();
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 12 }}
+            >
+              <input
+                value={ruleDraft}
+                onChange={(e) => setRuleDraft(e.target.value)}
+                placeholder="새 약속 입력"
+                style={{ flex: 1, minWidth: 0, height: 42, border: 0, outline: 'none', borderRadius: 13, background: 'var(--surface-2)', padding: '0 12px', fontFamily: 'inherit', fontSize: 14, color: 'var(--ink)' }}
+              />
+              <button type="submit" disabled={!ruleDraft.trim()} style={{ height: 42, border: 0, borderRadius: 13, background: 'var(--brand)', color: 'white', padding: '0 13px', display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'inherit', fontSize: 13, fontWeight: 700, opacity: ruleDraft.trim() ? 1 : 0.45, cursor: ruleDraft.trim() ? 'pointer' : 'not-allowed' }}>
+                <Icon.plus size={16} /> 추가
+              </button>
+            </form>
+          </div>
+        )}
+
+        <div style={{ height: 24 }}/>
+      </div>
+
+      <TabBar active={activeTab}/>
+
+      {menuOpen && (
+        <div
+          onClick={() => setMenuOpen(false)}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 20,
+            background: 'rgba(23,24,28,0.28)',
+            display: 'flex',
+            alignItems: 'flex-end',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              background: 'var(--surface)',
+              borderRadius: '22px 22px 0 0',
+              padding: '10px 16px 30px',
+              boxShadow: '0 -16px 40px rgba(23,24,28,0.14)',
+            }}
+          >
+            <div style={{ width: 38, height: 4, borderRadius: 99, background: 'var(--line-2)', margin: '0 auto 14px' }} />
+            <div style={{ padding: '0 2px 14px' }}>
+              <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>방 관리</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>방장 · 현재 {currentMembers}명 참여 중</div>
+            </div>
+
+	            <button
+	              type="button"
+	              onClick={() => {
+	                setMenuOpen(false);
+	                navigate('/rooms/edit');
+              }}
+              style={{
+                width: '100%',
+                minHeight: 52,
+                border: 0,
+                borderRadius: 14,
+                background: 'var(--surface-2)',
+                color: 'var(--ink)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '0 14px',
+                fontFamily: 'inherit',
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: 'pointer',
+                marginBottom: 8,
+              }}
+            >
+              <span>모집글 수정</span>
+	              <Icon.chevron size={14} />
+	            </button>
+
+		            <button
+		              type="button"
+		              onClick={toggleRecruiting}
+                  disabled={!canCloseRecruiting}
+		              style={{
+		                width: '100%',
+		                minHeight: 52,
+		                border: 0,
+		                borderRadius: 14,
+		                background: !canCloseRecruiting ? 'var(--surface-2)' : isRecruiting ? 'rgba(245,166,35,0.12)' : 'var(--brand-soft)',
+		                color: !canCloseRecruiting ? 'var(--ink-4)' : isRecruiting ? '#9A6200' : 'var(--brand-deep)',
+		                display: 'flex',
+		                alignItems: 'center',
+		                justifyContent: 'space-between',
+	                padding: '0 14px',
+		                fontFamily: 'inherit',
+		                fontSize: 15,
+		                fontWeight: 700,
+		                cursor: canCloseRecruiting ? 'pointer' : 'not-allowed',
+		                marginBottom: 8,
+		              }}
+		            >
+		              <span>{isRecruiting ? '모집 마감하기' : '모집 다시 열기'}</span>
+		              <span style={{ fontSize: 11, fontWeight: 700 }}>{isRecruiting ? (isRoomFull ? '정원 완료' : `${openSeats}자리 남음`) : '모집 완료'}</span>
+		            </button>
+
+                {isRecruiting && !isRoomFull && (
+                  <div style={{ margin: '-2px 0 8px', borderRadius: 12, background: 'var(--brand-soft)', color: 'var(--brand-deep)', padding: 12, fontSize: 12, lineHeight: 1.5, fontWeight: 600 }}>
+                    모든 인원이 다 찬 뒤에 모집을 마감할 수 있어요.
+                  </div>
+                )}
+
+	            <button
+	              type="button"
+	              onClick={leaveRoom}
+              disabled={!canLeaveRoom}
+              style={{
+                width: '100%',
+                minHeight: 52,
+                border: 0,
+                borderRadius: 14,
+                background: canLeaveRoom ? 'rgba(226,69,60,0.08)' : 'var(--surface-2)',
+                color: canLeaveRoom ? 'var(--danger)' : 'var(--ink-4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '0 14px',
+                fontFamily: 'inherit',
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: canLeaveRoom ? 'pointer' : 'not-allowed',
+              }}
+            >
+              <span>방 나가기</span>
+              {!canLeaveRoom && <span style={{ fontSize: 11, fontWeight: 700 }}>방장 제한</span>}
+            </button>
+
+            {!canLeaveRoom && (
+              <div style={{ marginTop: 10, borderRadius: 12, background: 'var(--brand-soft)', color: 'var(--brand-deep)', padding: 12, fontSize: 12, lineHeight: 1.5, fontWeight: 600 }}>
+                방장은 모든 룸메이트가 나간 뒤에만 방을 나갈 수 있어요.
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setMenuOpen(false)}
+              className="btn full ghost"
+              style={{ height: 48, marginTop: 12 }}
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
