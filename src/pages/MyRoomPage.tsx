@@ -1,15 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, Share2, Pencil, Settings, DoorOpen, CheckCircle, Star } from 'lucide-react'
+import { Bell, Share2, Pencil, Settings, DoorOpen, CheckCircle, Star, Trash2 } from 'lucide-react'
 import BottomNavigationBar from '../components/ui/BottomNavigationBar'
 import SectionLoading from '../components/ui/SectionLoading'
 import GuestOnlyMessage from '../components/ui/GuestOnlyMessage'
 import { getApiUrl } from '../utils/api'
-import { getOrCreateDirectChatRoom } from '@/services/chatApi'
+import { getOrCreateDirectChatRoom, findMyGroupChatRoomByRoomNo, leaveChatRoom } from '@/services/chatApi'
 import toast from 'react-hot-toast'
+import { kickRoommate, deleteRoom } from '@/services/roomApi'
+import { useChatStore } from '@/store/chatStore'
+import {
+  buildRoomRuleFetchPath,
+  normalizeRoomRuleTimeValue,
+  selectSingleOption,
+} from './myRoomRuleUtils'
 
 const MyRoomPage = () => {
   const navigate = useNavigate()
+  const { removeGroupChatRoomsByRoomNo } = useChatStore()
   type ApiRoom = {
     roomNo: number | string  // 백엔드에서 ToStringSerializer로 문자열로 직렬화될 수 있음
     roomType: string
@@ -92,6 +100,13 @@ const MyRoomPage = () => {
   const [activeTab, setActiveTab] = useState<'규칙' | '지원자' | '룸메이트'>('규칙')
   const [roommates, setRoommates] = useState<ApiRoommate[]>([])
   const isHost = useMemo(() => roommates.some((m) => m.isMe && m.roomRole === 'HOST'), [roommates])
+
+  useEffect(() => {
+    if (!isHost && activeTab === '지원자') {
+      setActiveTab('규칙')
+    }
+  }, [isHost, activeTab])
+
   const [roommatesLoading, setRoommatesLoading] = useState(true)
   const [isEditingChecklist, setIsEditingChecklist] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -122,6 +137,7 @@ const MyRoomPage = () => {
   const [applicantChecklists, setApplicantChecklists] = useState<Record<string, ChecklistSection[]>>({}) // userNo를 키로 사용
   const [applicantOtherNotes, setApplicantOtherNotes] = useState<Record<string, string>>({}) // userNo를 키로 사용
   const [showConfirmAssignment, setShowConfirmAssignment] = useState(false) // 방 배정 확정 확인
+  const [showDeleteRoomConfirm, setShowDeleteRoomConfirm] = useState(false)
   const [otherNotes, setOtherNotes] = useState('')
   const [checklistSections, setChecklistSections] = useState<ChecklistSection[]>([])
 
@@ -186,14 +202,6 @@ const MyRoomPage = () => {
   useEffect(() => {
     const fetchMyRoom = async () => {
       try {
-        const isLoggedIn = !!localStorage.getItem('isLoggedIn')
-        if (!isLoggedIn) {
-          setIsGuest(true)
-          setLoading(false)
-          return
-        }
-        setIsGuest(false)
-
         // 1) CheckMyRoom 먼저 호출 - 방 없으면 LoadMyRoom 호출하지 않음
         const existsRes = await fetch(getApiUrl('/api/rooms/me/exists'), {
           credentials: 'include',
@@ -204,6 +212,8 @@ const MyRoomPage = () => {
           setLoading(false)
           return
         }
+
+        setIsGuest(false)
 
         const existsRawBody = await existsRes.text()
         let existsData: any
@@ -270,7 +280,7 @@ const MyRoomPage = () => {
 
     const fetchRoomRule = async () => {
       try {
-        const res = await fetch(getApiUrl(`/api/rooms/${effectiveRoomNo}/rule`), {
+        const res = await fetch(getApiUrl(buildRoomRuleFetchPath(effectiveRoomNo)), {
           credentials: 'include',
         })
 
@@ -1011,22 +1021,15 @@ const MyRoomPage = () => {
       prev.map((section, sIdx) => {
         if (sIdx !== sectionIndex) return section
         
-        // 추가 규칙 섹션인지 확인
-        const isAdditionalRules = section.category === 'ADDITIONAL_RULES'
-        
         return {
           ...section,
           items: section.items.map((item, iIdx) => {
             if (iIdx !== itemIndex || !item.options) return item
             
-            // 추가 규칙이면 토글 방식, 아니면 단일 선택 방식
-            if (isAdditionalRules) {
+            if (section.category === 'ADDITIONAL_RULES') {
               return {
                 ...item,
-                options: item.options.map((option, oIdx) => ({
-                  ...option,
-                  selected: oIdx === optionIndex ? !option.selected : option.selected,
-                })),
+                options: selectSingleOption(item.options, optionIndex),
               }
             } else {
               return {
@@ -1048,16 +1051,144 @@ const MyRoomPage = () => {
     [room]
   )
   const displayCapacity = room ? `${room.capacity}인실` : ''
-  const displayMembers = room ? `${roommates.length}/${room.capacity}명` : ''
+  const displayMembers = room ? `${room.currentMateCount}/${room.capacity}명` : ''
   const displayStatus = room ? mapApiStatusToDisplay(room.roomStatus) : ''
   // const displayCreatedAt = room ? formatRelativeTime(room.createdAt) : '' // 사용되지 않음
   const displayResidencePeriod = room ? mapResidencePeriodToDisplay(room.residencePeriod) : ''
   
+  const handleKickRoommate = async () => {
+    if (!roommateToRemove || !room?.roomNo) return
+
+    const roomNo = String(room.roomNo)
+    const target = roommates.find((mate) => mate.roommateNo === roommateToRemove.roommateNo)
+
+    if (!target) {
+      toast.error('내보낼 룸메이트 정보를 찾을 수 없습니다.')
+      setRoommateToRemove(null)
+      return
+    }
+
+    if (room.roomStatus === 'COMPLETED') {
+      toast.error('방이 최종 확정된 후에는 내보낼 수 없습니다.')
+      setRoommateToRemove(null)
+      setShowRoommateSettings(false)
+      return
+    }
+
+    try {
+      await kickRoommate(roomNo, String(target.userNo))
+      toast.success(`${roommateToRemove.name}님을 내보냈습니다.`)
+      setRoommates((prev) => prev.filter((mate) => mate.roommateNo !== roommateToRemove.roommateNo))
+      setRoom((prev) =>
+        prev
+          ? {
+              ...prev,
+              currentMateCount: Math.max(0, prev.currentMateCount - 1),
+            }
+          : prev
+      )
+      setRoommateToRemove(null)
+      setShowRoommateSettings(false)
+    } catch (e: unknown) {
+      const code = (e as { response?: { data?: { code?: string } } })?.response?.data?.code
+      if (code === 'ROOM005') {
+        toast.error('방장만 룸메이트를 내보낼 수 있습니다.')
+      } else if (code === 'ROOM009') {
+        toast.error('룸메이트를 찾을 수 없습니다.')
+      } else if (code === 'ROOM012') {
+        toast.error('자기 자신은 내보낼 수 없습니다.')
+      } else {
+        toast.error('내보내기에 실패했습니다.')
+      }
+    }
+  }
+
+  const handleLeaveRoom = async () => {
+    if (!room?.roomNo) return
+
+    const roomNo = String(room.roomNo)
+
+    try {
+      const groupChatRoom = await findMyGroupChatRoomByRoomNo(roomNo)
+
+      if (!groupChatRoom?.chatRoomNo) {
+        if (isHost && roommates.length === 1) {
+          await deleteRoom(roomNo)
+          removeGroupChatRoomsByRoomNo(roomNo)
+          toast.success('방이 삭제되었습니다.')
+          setShowLeaveConfirm(false)
+          navigate('/rooms/search', { state: { refreshRooms: true } })
+          return
+        }
+
+        toast.error('연결된 채팅방을 찾을 수 없습니다.')
+        setShowLeaveConfirm(false)
+        return
+      }
+
+      await leaveChatRoom(groupChatRoom.chatRoomNo)
+      removeGroupChatRoomsByRoomNo(roomNo)
+      toast.success('방에서 나갔습니다.')
+      setShowLeaveConfirm(false)
+      navigate('/rooms/search', { state: { deletedRoomNo: roomNo, refreshRooms: true } })
+    } catch (e: unknown) {
+      const code = (e as { response?: { data?: { code?: string } } })?.response?.data?.code
+
+      if (code === 'CHAT005' || code === 'HOST_CANNOT_LEAVE') {
+        toast.error('다른 멤버가 있는 경우 방장은 방을 나갈 수 없습니다.')
+      } else {
+        toast.error('방 나가기에 실패했습니다.')
+      }
+
+      setShowLeaveConfirm(false)
+    }
+  }
+
+  const handleDeleteRoom = async () => {
+    if (!room?.roomNo) return
+
+    const roomNo = String(room.roomNo)
+
+    try {
+      await deleteRoom(roomNo)
+      removeGroupChatRoomsByRoomNo(roomNo)
+      toast.success('방이 삭제되었습니다.')
+      setShowDeleteRoomConfirm(false)
+      navigate('/rooms/search', { state: { refreshRooms: true } })
+    } catch (e: unknown) {
+      const code = (e as { response?: { data?: { code?: string } } })?.response?.data?.code
+
+      if (code === 'ROOM005') {
+        toast.error('방장만 방을 삭제할 수 있습니다.')
+      } else if (code === 'ROOM017') {
+        toast.error('다른 룸메이트가 있으면 방을 삭제할 수 없습니다.')
+      } else if (code === 'ROOM018') {
+        toast.error('확정된 방은 삭제할 수 없습니다.')
+      } else {
+        toast.error('방 삭제에 실패했습니다.')
+      }
+
+      setShowDeleteRoomConfirm(false)
+    }
+  }
+
   // 자신의 confirmStatus 찾기
   const myConfirmStatus = useMemo(() => {
     const myRoommate = roommates.find(mate => mate.isMe)
     return myRoommate?.confirmStatus || null
   }, [roommates])
+
+  const otherRoommates = roommates.filter((mate) => !mate.isMe)
+
+  const allOtherRoommatesConfirmed = otherRoommates.every(
+    (mate) => mate.confirmStatus === 'ACCEPTED' || mate.confirmStatus === 'COMPLETED'
+  )
+
+  const canOpenConfirmModal = (() => {
+    if (!room || myConfirmStatus === 'COMPLETED' || myConfirmStatus === 'ACCEPTED') return false
+    if (!isHost) return true
+    return allOtherRoommatesConfirmed
+  })()
 
   return (
     <div className="page-with-bottom-nav h-screen bg-white flex flex-col overflow-hidden animate-fade-in">
@@ -1175,13 +1306,24 @@ const MyRoomPage = () => {
                 </>
               )}
             </div>
-            <span className={`text-xs px-2 py-1 rounded-md font-semibold whitespace-nowrap ${
-              room?.roomStatus === 'COMPLETED'
-                ? 'bg-green-50 text-green-600 border border-green-200'
-                : 'bg-blue-50 text-blue-600 border border-blue-200'
-            }`}>
-              {displayStatus}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs px-2 py-1 rounded-md font-semibold whitespace-nowrap ${
+                room?.roomStatus === 'COMPLETED'
+                  ? 'bg-green-50 text-green-600 border border-green-200'
+                  : 'bg-blue-50 text-blue-600 border border-blue-200'
+              }`}>
+                {displayStatus}
+              </span>
+              {isHost && room?.roomStatus !== 'COMPLETED' && (
+                <button
+                  onClick={() => setShowDeleteRoomConfirm(true)}
+                  className="p-1 hover:bg-red-50 text-red-400 hover:text-red-500 rounded transition-colors"
+                  title="방 삭제"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
           <div className="text-sm text-gray-600 mb-1">
             <div className="flex items-center space-x-1">
@@ -1214,28 +1356,35 @@ const MyRoomPage = () => {
               초대 링크
             </button>
             <button
-              onClick={() => myConfirmStatus !== 'ACCEPTED' && myConfirmStatus !== 'COMPLETED' && setShowConfirmAssignment(true)}
-              disabled={myConfirmStatus === 'ACCEPTED' || myConfirmStatus === 'COMPLETED'}
+              onClick={() => canOpenConfirmModal && setShowConfirmAssignment(true)}
+              disabled={!canOpenConfirmModal}
               className={`flex-1 rounded-lg py-2 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
                 myConfirmStatus === 'COMPLETED'
                   ? 'bg-green-50 text-green-600 border border-green-200 cursor-default'
-                  : myConfirmStatus === 'ACCEPTED'
-                    ? 'bg-[#3072E1] text-white border border-[#3072E1] cursor-not-allowed opacity-60'
-                    : 'bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100'
+                  : !canOpenConfirmModal
+                    ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                    : myConfirmStatus === 'ACCEPTED'
+                      ? 'bg-[#3072E1] text-white border border-[#3072E1] cursor-not-allowed opacity-60'
+                      : 'bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100'
               }`}
             >
               <CheckCircle className="w-4 h-4" />
-              방 배정 확정
+              {isHost ? '최종 확정' : '방 배정 확정'}
             </button>
           </div>
+          {isHost && room?.roomStatus !== 'COMPLETED' && !allOtherRoommatesConfirmed && (
+            <p className="mt-2 text-xs text-amber-600">
+              다른 룸메이트가 모두 확정한 뒤 방장이 마지막으로 최종 확정할 수 있습니다.
+            </p>
+          )}
         </div>
 
         {/* 탭 */}
         <div className="flex justify-between text-sm text-gray-500 mt-4">
-          {(['규칙', '지원자', '룸메이트'] as const).map((tab) => (
+          {(['규칙', ...(isHost ? ['지원자'] : []), '룸메이트'] as const).map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => setActiveTab(tab as '규칙' | '지원자' | '룸메이트')}
               className={`flex-1 py-3 ${
                 activeTab === tab ? 'text-blue-600 border-b-2 border-blue-600' : ''
               }`}
@@ -1255,6 +1404,7 @@ const MyRoomPage = () => {
                 <h4 className="text-base font-bold text-black">{section.title}</h4>
                 {index === 0 && isHost && (
                   <button
+                    type="button"
                     className="flex items-center gap-1 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg px-2 py-1"
                     onClick={async () => {
                       if (!isEditingChecklist) {
@@ -1274,13 +1424,13 @@ const MyRoomPage = () => {
                       )
 
                       if (hasFixedArrivalWithoutTime) {
-                        // toast.error('귀가 시간을 선택해 주세요.')
+                        toast.error('귀가 시간을 선택해 주세요.')
                         return
                       }
 
                       // API 호출
                       if (!room?.roomNo) {
-                        // toast.error('방 정보를 불러올 수 없습니다.')
+                        toast.error('방 정보를 불러올 수 없습니다.')
                         return
                       }
 
@@ -1292,8 +1442,8 @@ const MyRoomPage = () => {
                         const residencePeriodItem = basicInfoSection?.items.find(item => item.label === '거주기간')
                         
                         const selectedCapacity = capacityItem?.options?.find(opt => opt.selected)?.text.replace('명', '')
-                        const capacity = selectedCapacity ? Number(selectedCapacity) : null
-                        
+                        const capacity = selectedCapacity ? Number(selectedCapacity) : (room.capacity ?? null)
+
                         const selectedDorm = dormItem?.options?.find(opt => opt.selected)?.text
                         const mapDormToRoomType = (dorm: string) => {
                           switch (dorm) {
@@ -1307,8 +1457,8 @@ const MyRoomPage = () => {
                               return null
                           }
                         }
-                        const roomType = selectedDorm ? mapDormToRoomType(selectedDorm) : null
-                        
+                        const roomType = selectedDorm ? mapDormToRoomType(selectedDorm) : (room.roomType ?? null)
+
                         // 거주기간 문자열을 enum 값으로 변환
                         const mapResidencePeriodToEnum = (period: string): string | null => {
                           switch (period) {
@@ -1323,7 +1473,7 @@ const MyRoomPage = () => {
                           }
                         }
                         const selectedResidencePeriod = residencePeriodItem?.options?.find(opt => opt.selected)?.text
-                        const residencePeriod = selectedResidencePeriod ? mapResidencePeriodToEnum(selectedResidencePeriod) : null
+                        const residencePeriod = selectedResidencePeriod ? mapResidencePeriodToEnum(selectedResidencePeriod) : (room.residencePeriod ?? null)
 
                         // Enum 매핑 함수들 (CreateRoomModal과 동일)
                         const mapReturnHome = (text: string): string => {
@@ -1473,7 +1623,7 @@ const MyRoomPage = () => {
                           bedtime: getItemValue('취침'),
                           wakeUp: getItemValue('기상'),
                           returnHome: mapReturnHome(getSelectedOption('귀가') || ''),
-                          returnHomeTime: getExtraValue('귀가'),
+                          returnHomeTime: normalizeRoomRuleTimeValue(getExtraValue('귀가')),
                           cleaning: mapCleaning(getSelectedOption('청소') || ''),
                           phoneCall: mapPhoneCall(getSelectedOption('방에서 전화') || ''),
                           sleepLight: mapSleepLight(getSelectedOption('잠귀') || ''),
@@ -1482,7 +1632,7 @@ const MyRoomPage = () => {
                           showerTime: mapShowerTime(getSelectedOption('샤워시간') || ''),
                           eating: mapEating(getSelectedOption('방에서 취식') || ''),
                           lightsOut: mapLightsOut(getSelectedOption('소등') || ''),
-                          lightsOutTime: getExtraValue('소등'),
+                          lightsOutTime: normalizeRoomRuleTimeValue(getExtraValue('소등')),
                           homeVisit: mapHomeVisit(getSelectedOption('본가 주기') || ''),
                           smoking: mapSmoking(getSelectedOption('흡연') || ''),
                           refrigerator: mapRefrigerator(getSelectedOption('냉장고') || ''),
@@ -1505,10 +1655,10 @@ const MyRoomPage = () => {
                             'Content-Type': 'application/json',
                           },
                           body: JSON.stringify({
-                            rule,
-                            roomType: roomType || null,
-                            capacity: capacity || null,
-                            residencePeriod: residencePeriod || null,
+                            ...rule,
+                            roomType,
+                            capacity,
+                            residencePeriod,
                           }),
                         })
 
@@ -1529,7 +1679,7 @@ const MyRoomPage = () => {
                           throw new Error('방 규칙 수정에 실패했습니다.')
                         }
 
-                        // toast.success('방 규칙이 수정되었습니다.')
+                        toast.success('방 규칙이 수정되었습니다.')
                         setIsEditingChecklist(false)
                         // 방 정보가 변경되었으면 다시 불러오기
                         if (capacity || roomType) {
@@ -1537,8 +1687,7 @@ const MyRoomPage = () => {
                         } else {
                           // capacity나 roomType이 변경되지 않았어도 RoomRule은 다시 불러와야 함
                           const effectiveRoomNo = String(room.roomNo)
-                          const params = new URLSearchParams({ roomNo: effectiveRoomNo })
-                          const refreshRes = await fetch(getApiUrl(`/api/rooms/me/rule?${params.toString()}`), {
+                          const refreshRes = await fetch(getApiUrl(buildRoomRuleFetchPath(effectiveRoomNo)), {
                             credentials: 'include',
                           })
                           if (refreshRes.ok) {
@@ -1557,7 +1706,8 @@ const MyRoomPage = () => {
                         }
                       } catch (err) {
                         console.error('[rooms] update rule error', err)
-                        // toast.error('방 규칙 수정에 실패했습니다.')
+                        toast.error('방 규칙 수정에 실패했습니다.')
+                        setIsEditingChecklist(false)
                       }
                     }}
                   >
@@ -1820,12 +1970,10 @@ const MyRoomPage = () => {
                         [applicant.userNo]: sections,
                       }))
 
-                      if (payload.otherNotes) {
-                        setApplicantOtherNotes((prev) => ({
-                          ...prev,
-                          [applicant.userNo]: payload.otherNotes,
-                        }))
-                      }
+                      setApplicantOtherNotes((prev) => ({
+                        ...prev,
+                        [applicant.userNo]: payload.otherNotes ?? '',
+                      }))
                     } catch (err) {
                       console.error('[rooms] applicant checklist fetch error', applicant.userNo, err)
                     }
@@ -1858,43 +2006,45 @@ const MyRoomPage = () => {
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => setApplicantToAccept({ id: applicant.id, name: applicant.name, requestNo: applicant.requestNo })}
-                      className="px-3 py-1 text-xs font-semibold text-blue-600 bg-[#DBEAFE] rounded hover:bg-[#BFDBFE] transition-colors"
-                    >
-                      수락
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!room?.roomNo) return
-                        setDirectChatLoadingId(applicant.userNo)
-                        try {
-                          const res = await getOrCreateDirectChatRoom(String(room.roomNo), applicant.userNo)
-                          const chatRoomNo = res.data
-                          if (chatRoomNo) {
-                            navigate(`/chats/${chatRoomNo}`)
-                          } else {
-                            toast.error('채팅방을 찾을 수 없습니다.')
+                  {isHost && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setApplicantToAccept({ id: applicant.id, name: applicant.name, requestNo: applicant.requestNo })}
+                        className="px-3 py-1 text-xs font-semibold text-blue-600 bg-[#DBEAFE] rounded hover:bg-[#BFDBFE] transition-colors"
+                      >
+                        수락
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!room?.roomNo) return
+                          setDirectChatLoadingId(applicant.userNo)
+                          try {
+                            const res = await getOrCreateDirectChatRoom(String(room.roomNo), applicant.userNo)
+                            const chatRoomNo = res.data
+                            if (chatRoomNo) {
+                              navigate(`/chats/${chatRoomNo}`)
+                            } else {
+                              toast.error('채팅방을 찾을 수 없습니다.')
+                            }
+                          } catch {
+                            toast.error('채팅방 조회에 실패했습니다.')
+                          } finally {
+                            setDirectChatLoadingId(null)
                           }
-                        } catch {
-                          toast.error('채팅방 조회에 실패했습니다.')
-                        } finally {
-                          setDirectChatLoadingId(null)
-                        }
-                      }}
-                      disabled={directChatLoadingId === applicant.userNo}
-                      className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 transition-colors disabled:opacity-50"
-                    >
-                      {directChatLoadingId === applicant.userNo ? '...' : '채팅'}
-                    </button>
-                    <button 
-                      onClick={() => setApplicantToReject({ id: applicant.id, name: applicant.name, requestNo: applicant.requestNo })}
-                      className="px-3 py-1 text-xs font-semibold text-red-600 bg-[#FEDCDC] rounded hover:bg-[#FED0D0] transition-colors"
-                    >
-                      거절
-                    </button>
-                  </div>
+                        }}
+                        disabled={directChatLoadingId === applicant.userNo}
+                        className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 transition-colors disabled:opacity-50"
+                      >
+                        {directChatLoadingId === applicant.userNo ? '...' : '채팅'}
+                      </button>
+                      <button
+                        onClick={() => setApplicantToReject({ id: applicant.id, name: applicant.name, requestNo: applicant.requestNo })}
+                        className="px-3 py-1 text-xs font-semibold text-red-600 bg-[#FEDCDC] rounded hover:bg-[#FED0D0] transition-colors"
+                      >
+                        거절
+                      </button>
+                    </div>
+                  )}
                   <button
                     onClick={toggleApplicantChecklist}
                     className="px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200 rounded hover:bg-gray-200 transition-colors whitespace-nowrap"
@@ -1987,39 +2137,25 @@ const MyRoomPage = () => {
             </h3>
             {isHost ? (
               <div className="flex gap-2">
-              <button 
-                onClick={() => setShowRoommateSettings(!showRoommateSettings)}
-                className={`p-2 rounded-lg transition-colors ${
-                    showRoommateSettings ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-600'
-                }`}
-              >
-                <Settings className="w-5 h-5" />
-              </button>
-                {myConfirmStatus === 'PENDING' && (
-                  <button 
-                    onClick={() => {
-                      if (roommates.length === 1) {
-                        // 방장이고 혼자만 있을 때만 나가기 가능
-                        setShowLeaveConfirm(true)
-                      } else {
-                        // 방장이지만 다른 사람이 있을 때는 알림
-                        setShowHostLeaveAlert(true)
-                      }
-                    }}
-                    className="p-2 hover:bg-gray-100 text-gray-600 rounded-lg transition-colors"
+                {room?.roomStatus !== 'COMPLETED' && (
+                  <button
+                    onClick={() => setShowRoommateSettings(!showRoommateSettings)}
+                    className={`p-2 rounded-lg transition-colors ${
+                      showRoommateSettings ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-600'
+                    }`}
                   >
-                    <DoorOpen className="w-5 h-5" />
+                    <Settings className="w-5 h-5" />
                   </button>
                 )}
               </div>
             ) : (
               myConfirmStatus === 'PENDING' && (
-              <button 
-                onClick={() => setShowLeaveConfirm(true)}
-                className="p-2 hover:bg-gray-100 text-gray-600 rounded-lg transition-colors"
-              >
-                <DoorOpen className="w-5 h-5" />
-              </button>
+                <button
+                  onClick={() => setShowLeaveConfirm(true)}
+                  className="p-2 hover:bg-gray-100 text-gray-600 rounded-lg transition-colors"
+                >
+                  <DoorOpen className="w-5 h-5" />
+                </button>
               )
             )}
           </div>
@@ -2190,7 +2326,7 @@ const MyRoomPage = () => {
                     )}
                   </div>
                 </div>
-                {showRoommateSettings && mate.confirmStatus === 'PENDING' && !mate.isMe ? (
+                {showRoommateSettings && room?.roomStatus !== 'COMPLETED' && !mate.isMe ? (
                   <button 
                     onClick={() => {
                       setRoommateToRemove({ roommateNo: mate.roommateNo, name: displayName })
@@ -2376,13 +2512,7 @@ const MyRoomPage = () => {
                 취소
               </button>
               <button
-                onClick={() => {
-                  // TODO: 내보내기 API 호출
-                  // toast.success(`${roommateToRemove.name}님을 내보냈습니다.`)
-                  setRoommates(prev => prev.filter(r => r.roommateNo !== roommateToRemove.roommateNo))
-                  setRoommateToRemove(null)
-                  setShowRoommateSettings(false)
-                }}
+                onClick={() => void handleKickRoommate()}
                 className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors"
               >
                 내보내기
@@ -2409,12 +2539,7 @@ const MyRoomPage = () => {
                 취소
               </button>
               <button
-                onClick={() => {
-                  // TODO: 방 나가기 API 호출
-                  // toast.success('방에서 나갔습니다.')
-                  setShowLeaveConfirm(false)
-                  navigate('/rooms/search')
-                }}
+                onClick={() => void handleLeaveRoom()}
                 className="flex-1 px-4 py-3 text-sm font-bold text-red-600 bg-[#FEDCDC] rounded-xl hover:bg-[#FED0D0] transition-colors"
               >
                 나가기
@@ -2440,6 +2565,33 @@ const MyRoomPage = () => {
                 className="flex-1 px-4 py-3 text-sm font-bold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
               >
                 확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteRoomConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-sm mx-4 shadow-xl">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">방 삭제</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              정말로 방을 삭제하시겠습니까?<br />
+              조건을 만족하지 않으면 삭제되지 않습니다.<br />
+              삭제가 완료되면 방과 채팅 정보가 함께 정리됩니다.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteRoomConfirm(false)}
+                className="flex-1 px-4 py-3 text-sm font-bold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => void handleDeleteRoom()}
+                className="flex-1 px-4 py-3 text-sm font-bold text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors"
+              >
+                삭제
               </button>
             </div>
           </div>
@@ -2561,11 +2713,23 @@ const MyRoomPage = () => {
       {showConfirmAssignment && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 max-w-sm mx-4 shadow-xl">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">방 배정 확정</h3>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">
+              {isHost ? '방 최종 확정' : '방 배정 확정'}
+            </h3>
             <p className="text-sm text-gray-600 mb-6">
-              방 배정을 확정하시겠습니까?<br />
-              확정 후에는 방에서 나갈 수 없으며<br />
-              되돌릴 수 없습니다.
+              {isHost ? (
+                <>
+                  다른 룸메이트가 모두 확정된 상태입니다.<br />
+                  방장이 최종 확정하면 방 전체가 확정되며<br />
+                  이후에는 강퇴할 수 없습니다.
+                </>
+              ) : (
+                <>
+                  방 배정을 확정하시겠습니까?<br />
+                  확정 후에는 되돌릴 수 없으며<br />
+                  방장이 마지막으로 최종 확정하면 방 전체가 확정됩니다.
+                </>
+              )}
             </p>
             <div className="flex gap-3">
               <button
