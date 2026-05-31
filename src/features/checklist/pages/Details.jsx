@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Icon, StatusBar, Avatar, goBack } from '../../../shared/components';
+import { logout as logoutUser } from '../../../shared/api/auth';
 import { ChatBubble, ChatComposer, ChatAttachmentCard } from '../../chat';
 
 // details.jsx — Detail screens for each tab
@@ -281,16 +282,32 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
   const isRoomCreate = mode === 'room';
   const isRoomEdit = mode === 'roomEdit';
   const isRoom = isRoomCreate || isRoomEdit;
-  const [v, setV] = React.useState({
+  const [v, setV] = React.useState(isRoomCreate ? {
+    sleep: { start: 23, end: 1 },
+    wake: { start: 7, end: 9 },
+    dryer: null,
+    homing: null, cleaning: null, call: null, dim: null,
+    sleepHabit: null, snore: null, shower: null, eating: null,
+    lightsOut: null, lightsOutHour: 23, visitHome: null, smoke: null, fridge: null,
+    alarm: null, earphone: null, skinCare: null, silentMouse: null, hot: null, cold: null, study: null, trash: null,
+  } : {
     sleep: { start: 23, end: 1 },
     wake: { start: 7, end: 9 },
     dryer: null,
     homing: '유동적', cleaning: '주기적', call: '가능', dim: '어두움',
     sleepHabit: '약함', snore: '약함~없음', shower: '저녁', eating: '가능+환기필수',
     lightsOut: '시간 지정', lightsOutHour: 23, visitHome: '2주', smoke: '비흡연', fridge: '협의 후 결정',
-    alarm: '진동', earphone: '항상', skinCare: '유동적', silentMouse: '사용', hot: '중간', cold: '중간', study: '유동적', trash: '개별'
+    alarm: '진동', earphone: '항상', skinCare: '유동적', silentMouse: '사용', hot: '중간', cold: '중간', study: '유동적', trash: '개별',
   });
   const upd = (k, val) => setV({ ...v, [k]: val });
+  const [headerCollapsed, setHeaderCollapsed] = React.useState(false);
+  const scrollRef = React.useRef(null);
+
+  const handleScroll = () => {
+    if (scrollRef.current) {
+      setHeaderCollapsed(scrollRef.current.scrollTop > 10);
+    }
+  };
 
   return (
     <div className="screen">
@@ -307,13 +324,17 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
               <div style={{ width: '66%', height: '100%', background: 'var(--brand)' }} />
             </div>
           </div>
-          <div style={{ padding: '6px 20px 0' }}>
+          <div style={{
+            overflow: 'hidden',
+            maxHeight: headerCollapsed ? 0 : 100,
+            opacity: headerCollapsed ? 0 : 1,
+            transition: 'max-height 0.25s ease, opacity 0.2s ease',
+            padding: headerCollapsed ? '0 20px' : '6px 20px 0',
+          }}>
             <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.4px', lineHeight: 1.35 }}>
               어떤 룸메이트를 찾으시나요?
             </div>
-            <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4, lineHeight: 1.5 }}>우리 방의 체크리스트예요. 신청자의 체크리스트와 비교돼요.
-
-          </div>
+            <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4, lineHeight: 1.5 }}>우리 방의 체크리스트예요. 신청자의 체크리스트와 비교돼요.</div>
           </div>
         </> :
 
@@ -341,7 +362,7 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
       />
       }
 
-      <div className="scroll" style={{ padding: isRoom ? '12px 20px 0' : '0 20px' }}>
+      <div ref={scrollRef} onScroll={handleScroll} className="scroll" style={{ padding: isRoom ? '12px 20px 0' : '0 20px' }}>
         {/* Section 1 */}
         <div style={{ padding: '10px 0 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: '-0.4px' }}>생활 패턴</h2>
@@ -464,15 +485,14 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
           fontSize: 12, color: 'var(--brand-deep)', lineHeight: 1.5,
           display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 16
         }}>
-          <span style={{ fontWeight: 700 }}>*</span>
-          <span>생활 패턴 항목은 모집방을 만들기 위해 모두 작성해야 해요. 추가 규칙은 선택이에요.</span>
+          <span>생활 패턴 항목은 모집방을 만들기 위해 모두 작성해야 해요.<br/>추가 규칙은 선택이에요.</span>
         </div>
 
-        <div style={{ height: isRoom ? 100 : 24 }} />
+        <div style={{ height: 100 }} />
       </div>
 
       {isRoomCreate &&
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px'  , background: 'transparent', display: 'flex', gap: 8 }}>
           <button onClick={() => navigate('/rooms/create/1')} className="btn ghost" style={{ width: 80, height: 52 }}>이전</button>
           <button onClick={() => navigate('/rooms/create/3')} className="btn full" style={{ flex: 1, height: 52 }}>다음</button>
         </div>
@@ -481,6 +501,11 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
           <button onClick={() => navigate('/rooms/checklist')} className="btn ghost" style={{ width: 80, height: 52 }}>취소</button>
           <button onClick={() => navigate('/rooms/checklist')} className="btn full" style={{ flex: 1, height: 52 }}>저장</button>
+        </div>
+      }
+      {!isRoom &&
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'linear-gradient(180deg, transparent 0%, var(--bg) 30%)' }}>
+          <button onClick={() => navigate('/me')} className="btn full" style={{ height: 52 }}>저장</button>
         </div>
       }
     </div>);
@@ -493,8 +518,15 @@ const DEFAULT_CREATE_ROOM_DRAFT = {
   title: '아침형 룸메 구해요',
   dorm: '2생활관',
   roomSize: '4인실',
-  note: '아침 7시쯤 일어나는 사람이면 좋아요. 청소는 일주일에 두 번 같이 하면 좋겠어요.',
+  residencePeriod: 'SEMESTER',
+  notes: '아침 7시쯤 일어나는 사람이면 좋아요. 청소는 일주일에 두 번 같이 하면 좋겠어요.',
 };
+
+const RESIDENCE_PERIOD_OPTIONS = [
+  { key: 'SEMESTER', label: '학기', sub: '16주' },
+  { key: 'HALF_YEAR', label: '반기', sub: '24주' },
+  { key: 'SEASONAL', label: '계절학기', sub: '' },
+];
 export const CREATE_ROOM_DORMS = [
   { name: '1생활관', sizesLabel: '1·2·3인실', sizes: ['1인실', '2인실', '3인실'] },
   { name: '2생활관', sizesLabel: '1·2·4인실', sizes: ['1인실', '2인실', '4인실'] },
@@ -549,7 +581,7 @@ export function CreateRoomStep3Screen() {
           <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>{draft.title || DEFAULT_CREATE_ROOM_DRAFT.title}</div>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4 }}>{draft.dorm} · {draft.roomSize}</div>
           <div style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.55, marginTop: 12 }}>
-            {draft.note || '방장의 한마디가 비어 있어요.'}
+            {draft.notes || '방장의 한마디가 비어 있어요.'}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
             <Avatar name="강민지" size={28} />
@@ -588,7 +620,7 @@ export function CreateRoomStep3Screen() {
         <div style={{ height: 110 }} />
       </div>
 
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px'  , background: 'transparent', display: 'flex', gap: 8 }}>
         <button onClick={() => navigate('/rooms/create/2')} className="btn ghost" style={{ width: 80, height: 52 }}>이전</button>
         <button onClick={() => navigate('/rooms/create/success')} className="btn full" style={{ flex: 1, height: 52 }}>모집방 올리기</button>
       </div>
@@ -638,14 +670,18 @@ export function CreateRoomScreen() {
       </div>
 
       <div className="scroll" style={{ padding: '8px 20px 0' }}>
-        <h1 style={{ margin: '4px 0 24px', fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.35 }}>
+        <h1 style={{ margin: '4px 0 14px', fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.35 }}>
           어떤 룸메이트를<br />찾으시나요?
         </h1>
+
 
         {/* Inputs */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
-            <label style={{ display: 'block', fontSize: 13, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>모집글 제목</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <label style={{ fontSize: 13, color: 'var(--ink-3)', fontWeight: 600 }}>모집글 제목</label>
+              <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{form.title.length} / {titleMax}</span>
+            </div>
             <input
               value={form.title}
               onChange={(e) => update('title', e.target.value)}
@@ -655,16 +691,15 @@ export function CreateRoomScreen() {
                 width: '100%',
                 background: 'var(--surface)',
                 border: '1.5px solid var(--brand)',
-                borderRadius: 14,
-                padding: '14px 16px',
-                fontSize: 15,
+                borderRadius: 12,
+                padding: '12px 14px',
+                fontSize: 14,
                 color: 'var(--ink)',
                 fontWeight: 600,
                 fontFamily: 'inherit',
                 outline: 'none',
               }}
             />
-            <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4, textAlign: 'right' }}>{form.title.length} / {titleMax}</div>
           </div>
 
           <div>
@@ -712,7 +747,35 @@ export function CreateRoomScreen() {
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 13, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>방장의 한마디 <span style={{ color: 'var(--ink-4)', fontWeight: 500 }}>(선택)</span></label>
+            <label style={{ display: 'block', fontSize: 13, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>거주기간</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {RESIDENCE_PERIOD_OPTIONS.map((opt) => {
+                const selected = form.residencePeriod === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => update('residencePeriod', opt.key)}
+                    style={{
+                      flex: 1, borderRadius: 12, padding: '10px 0', fontFamily: 'inherit', cursor: 'pointer',
+                      background: selected ? 'var(--brand-soft)' : 'var(--surface)',
+                      border: selected ? '1.5px solid var(--brand)' : '1.5px solid var(--line)',
+                      color: selected ? 'var(--brand-deep)' : 'var(--ink)',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>{opt.label}{opt.sub && <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.7, marginLeft: 4 }}>({opt.sub})</span>}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <label style={{ fontSize: 13, color: 'var(--ink-3)', fontWeight: 600 }}>방장의 한마디 <span style={{ color: 'var(--ink-4)', fontWeight: 500 }}>(선택)</span></label>
+              <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{form.note.length} / {noteMax}</span>
+            </div>
             <textarea
               value={form.note}
               onChange={(e) => update('note', e.target.value)}
@@ -733,14 +796,13 @@ export function CreateRoomScreen() {
                 fontFamily: 'inherit',
               }}
             />
-            <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4, textAlign: 'right' }}>{form.note.length} / {noteMax}</div>
           </div>
         </div>
 
         <div style={{ height: 24 }} />
       </div>
 
-      <div style={{ padding: '14px 16px 30px', borderTop: '1px solid var(--line)', background: 'var(--surface)' }}>
+      <div style={{ padding: '14px 16px'  , background: 'transparent' }}>
         <button onClick={() => navigate('/rooms/create/2')} className="btn full" style={{ height: 52 }}>다음</button>
       </div>
     </div>);
@@ -1262,6 +1324,18 @@ export function NotificationSettingsScreen() {
 // ─── Account & verification settings ────────────────────────
 export function AccountSettingsScreen() {
   const navigate = useNavigate();
+  const [isLoggingOut, setIsLoggingOut] = React.useState(false);
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+
+    setIsLoggingOut(true);
+    try {
+      await logoutUser();
+    } finally {
+      navigate('/', { replace: true });
+    }
+  };
 
   const InfoRow = ({ label, value, sub, action }) => (
     <div style={{
@@ -1388,8 +1462,8 @@ export function AccountSettingsScreen() {
 
         <div className="h-section"><h2>계정 관리</h2></div>
         <div style={{ margin: '0 16px 24px', background: 'var(--surface)', borderRadius: 18, overflow: 'hidden' }}>
-          <div onClick={() => navigate('/', { replace: true })} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--line)', cursor: 'pointer' }}>
-            <span style={{ flex: 1, fontSize: 15, color: 'var(--ink)' }}>로그아웃</span>
+          <div onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--line)', cursor: isLoggingOut ? 'default' : 'pointer', opacity: isLoggingOut ? 0.6 : 1 }}>
+            <span style={{ flex: 1, fontSize: 15, color: 'var(--ink)' }}>{isLoggingOut ? '로그아웃 중...' : '로그아웃'}</span>
             <Icon.chevron size={14} />
           </div>
           <div onClick={() => navigate('/settings/account/delete')} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer' }}>
@@ -2328,7 +2402,6 @@ export function DormInfoScreen() {
         </Section>
 
         <div style={{ background: 'var(--brand-soft)', borderRadius: 14, padding: '12px 14px', marginBottom: 24, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-          <Icon.bell size={16} style={{ flexShrink: 0, marginTop: 1 }} />
           <div style={{ fontSize: 13, color: 'var(--brand-deep)', lineHeight: 1.6 }}>
             설날·추석 등 연휴, 야간근무자 공석 시에는 유동적으로 변동될 수 있어요.
           </div>
@@ -2381,9 +2454,8 @@ export function RollCallRulesScreen() {
         </div>
 
         <div style={{ background: 'var(--brand-soft)', borderRadius: 14, padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-          <Icon.bell size={16} style={{ flexShrink: 0, marginTop: 1 }} />
           <div style={{ fontSize: 13, color: 'var(--brand-deep)', lineHeight: 1.6 }}>
-            음주·흡연·외부인 출입 등이 의심되는 경우 호실 방문. 청소 상태에 따라 상/벌점 부여.
+            음주·흡연·외부인 출입 등이 의심되는 경우 호실 방문.<br/> 청소 상태에 따라 상/벌점 부여.
           </div>
         </div>
 

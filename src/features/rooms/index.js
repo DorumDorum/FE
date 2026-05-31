@@ -10,10 +10,10 @@ export {
   ROOM_CHECKLIST_4,
   CHECKLIST,
   MY_ROOM_RECRUITING_KEY,
+  residencePeriodLabel,
 } from './pages/Rooms.jsx';
 export {
   RecommendedRoomsScreen,
   RecommendedRoomCard,
-  RECOMMENDED_ROOMS,
 } from './pages/Recommended.jsx';
 

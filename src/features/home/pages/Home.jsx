@@ -1,7 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon, LogoMark, TabBar, StatusBar, Avatar, MarqueeText } from '../../../shared/components';
-import { MY_ROOM_RECRUITING_KEY } from '../../rooms';
+import { getMe } from '../../../shared/api/auth';
+import { loadCalendarEvents, loadMyRoom, loadNotices, loadNotifications } from '../../../shared/api/home';
+import { residencePeriodLabel } from '../../rooms';
 
 // home.jsx — Home tab (calendar + notices + my room shortcut)
 
@@ -45,6 +47,69 @@ export const SCHEDULE = {
 
 const MONTH_LABELS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 const monthKey = (year, month) => `${year}-${String(month + 1).padStart(2, '0')}`;
+const FALLBACK_NOTICES = [
+  { tag: '필독', tagBrand: true, title: '6월 입사식 일정 안내 — 5월 28일 18:00 다목적실(B동 1F) 집합', date: '05.21' },
+  { tag: '안전', title: '소화기 점검으로 인한 알람 테스트 안내', date: '05.20' },
+  { tag: '시설', title: 'B동 세탁실 4번 기기 교체 완료', date: '05.18' },
+  { tag: '행사', title: '룸메이트 매칭 데이 — 5월 25일 오후 7시', date: '05.17' },
+];
+
+const formatDateParam = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatShortDate = (dateText) => {
+  if (!dateText) return '';
+  const date = new Date(dateText);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
+};
+
+const monthRange = (year, month) => ({
+  startDate: formatDateParam(new Date(year, month, 1)),
+  endDate: formatDateParam(new Date(year, month + 1, 0)),
+});
+
+const normalizeCalendarEvents = (events) => events.reduce((acc, event) => {
+  const date = new Date(event.date);
+  if (Number.isNaN(date.getTime())) return acc;
+  const day = date.getDate();
+  if (!acc[day]) acc[day] = [];
+  acc[day].push({
+    label: event.title,
+    desc: event.content || '',
+    time: event.time ? event.time.slice(0, 5) : '',
+    type: event.type || '',
+  });
+  return acc;
+}, {});
+
+const normalizeNotices = (notices) => notices.slice(0, 4).map((notice) => ({
+  id: notice.noticeNo,
+  tag: '공지',
+  title: notice.title,
+  date: formatShortDate(notice.writtenDate),
+  originalLink: notice.originalLink,
+}));
+
+const roomTypeLabel = (roomType) => {
+  if (roomType === 'TYPE_1') return '1생활관';
+  if (roomType === 'TYPE_2') return '2생활관';
+  if (roomType === 'TYPE_3') return '3생활관';
+  if (roomType === 'TYPE_MEDICAL') return '메디컬';
+  return '방 정보';
+};
+
+
+const roomStatusLabel = (roomStatus) => {
+  if (roomStatus === 'COMPLETED') return '모집 완료';
+  if (roomStatus === 'CONFIRM_PENDING') return '확정 대기';
+  return '모집중';
+};
+
 const formatRemainingTime = (minutes) => {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
@@ -54,19 +119,47 @@ const formatRemainingTime = (minutes) => {
 };
 
 export function MiniCalendar() {
-  const [view, setView] = React.useState({ year: 2026, month: 4 });
-  const [selectedDay, setSelectedDay] = React.useState(21);
-  const isCurrentMonth = view.year === 2026 && view.month === 4;
-  const cells = buildMonth(view.year, view.month, isCurrentMonth ? 21 : null);
+  const today = React.useMemo(() => new Date(), []);
+  const [view, setView] = React.useState({ year: today.getFullYear(), month: today.getMonth() });
+  const [selectedDay, setSelectedDay] = React.useState(today.getDate());
+  const [calendarEvents, setCalendarEvents] = React.useState({});
+  const isCurrentMonth = view.year === today.getFullYear() && view.month === today.getMonth();
+  const cells = buildMonth(view.year, view.month, isCurrentMonth ? today.getDate() : null);
   const weekdays = ['일','월','화','수','목','금','토'];
-  const scheduleForMonth = SCHEDULE[monthKey(view.year, view.month)] || {};
+  const fallbackScheduleForMonth = SCHEDULE[monthKey(view.year, view.month)] || {};
+  const scheduleForMonth = calendarEvents[monthKey(view.year, view.month)] || fallbackScheduleForMonth;
   const selectedItems = scheduleForMonth[selectedDay] || [];
+
+  React.useEffect(() => {
+    let mounted = true;
+    const key = monthKey(view.year, view.month);
+    const { startDate, endDate } = monthRange(view.year, view.month);
+
+    loadCalendarEvents(startDate, endDate)
+      .then((events) => {
+        if (!mounted) return;
+        setCalendarEvents((prev) => ({ ...prev, [key]: normalizeCalendarEvents(Array.isArray(events) ? events : []) }));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setCalendarEvents((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [view.year, view.month]);
+
   const changeMonth = (direction) => {
     setView((prev) => {
       const nextDate = new Date(prev.year, prev.month + direction, 1);
       const nextYear = nextDate.getFullYear();
       const nextMonth = nextDate.getMonth();
-      const nextSchedule = SCHEDULE[monthKey(nextYear, nextMonth)] || {};
+      const nextSchedule = calendarEvents[monthKey(nextYear, nextMonth)] || SCHEDULE[monthKey(nextYear, nextMonth)] || {};
       const scheduledDays = Object.keys(nextSchedule).map(Number).sort((a, b) => a - b);
       setSelectedDay(scheduledDays[0] || 1);
       return { year: nextYear, month: nextMonth };
@@ -82,7 +175,7 @@ export function MiniCalendar() {
 	        </div>
 	        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
 	          <button onClick={() => changeMonth(-1)} style={{ width: 28, height: 28, borderRadius: 8, border: 0, background: 'var(--surface-2)', color: 'var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Icon.back size={14} weight={2.4}/></button>
-            <button onClick={() => { setView({ year: 2026, month: 4 }); setSelectedDay(21); }} style={{ height: 28, padding: '0 10px', borderRadius: 8, border: 0, background: 'var(--surface-2)', color: 'var(--ink-2)', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }}>오늘</button>
+            <button onClick={() => { setView({ year: today.getFullYear(), month: today.getMonth() }); setSelectedDay(today.getDate()); }} style={{ height: 28, padding: '0 10px', borderRadius: 8, border: 0, background: 'var(--surface-2)', color: 'var(--ink-2)', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }}>오늘</button>
 	          <button onClick={() => changeMonth(1)} style={{ width: 28, height: 28, borderRadius: 8, border: 0, background: 'var(--surface-2)', color: 'var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Icon.chevron size={14} weight={2.4}/></button>
 	        </div>
       </div>
@@ -131,14 +224,14 @@ export function MiniCalendar() {
         {selectedItems.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {selectedItems.map((item, index) => (
-              <button key={`${item.label}-${index}`} type="button" style={{ border: 0, borderRadius: 12, background: 'var(--surface-2)', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}>
+              <div key={`${item.label}-${index}`} style={{ borderRadius: 12, background: 'var(--surface-2)', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--brand)', flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{item.label}</div>
                   <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2 }}>{item.desc}</div>
                 </div>
-                <span style={{ fontSize: 12, color: 'var(--brand-deep)', fontWeight: 700 }}>{item.time}</span>
-              </button>
+                {item.time && <span style={{ fontSize: 12, color: 'var(--brand-deep)', fontWeight: 700 }}>{item.time}</span>}
+              </div>
             ))}
           </div>
         ) : (
@@ -175,12 +268,56 @@ export function getTodaySummary(now = new Date()) {
 
 export function HomeScreen({ activeTab='home' }) {
   const navigate = useNavigate();
-  const [isRecruiting] = React.useState(() => {
-    if (typeof window === 'undefined') return true;
-    return window.sessionStorage.getItem(MY_ROOM_RECRUITING_KEY) !== 'false';
-  });
-  const roomStatus = isRecruiting ? '모집중' : '모집 완료';
-  const todaySummary = React.useMemo(() => getTodaySummary(), []);
+  const [profile, setProfile] = React.useState(null);
+  const [myRoom, setMyRoom] = React.useState(null);
+  const [notices, setNotices] = React.useState(FALLBACK_NOTICES);
+  const [hasUnreadNotification, setHasUnreadNotification] = React.useState(false);
+  const [todayEventCount, setTodayEventCount] = React.useState(null);
+  const todaySummary = todayEventCount === null
+    ? getTodaySummary()
+    : todayEventCount > 0
+      ? `오늘은 ${todayEventCount}개의 일정이 있어요`
+      : '오늘 모든 일정이 끝났어요';
+  const displayName = profile?.nickname || profile?.name || '민지';
+  const roomStatus = roomStatusLabel(myRoom?.roomStatus);
+  const isRecruiting = myRoom ? myRoom.roomStatus !== 'COMPLETED' : false;
+  const currentMateCount = myRoom?.currentMateCount ?? 0;
+  const roomCapacity = myRoom?.capacity ?? 0;
+
+  React.useEffect(() => {
+    let mounted = true;
+
+    const today = new Date();
+    const todayParam = formatDateParam(today);
+
+    Promise.allSettled([
+      getMe(),
+      loadMyRoom(),
+      loadNotices(),
+      loadNotifications(),
+      loadCalendarEvents(todayParam, todayParam),
+    ]).then(([profileResult, roomResult, noticeResult, notificationResult, calendarResult]) => {
+      if (!mounted) return;
+
+      if (profileResult.status === 'fulfilled') setProfile(profileResult.value);
+      if (roomResult.status === 'fulfilled') setMyRoom(roomResult.value);
+      if (noticeResult.status === 'fulfilled' && Array.isArray(noticeResult.value)) {
+        setNotices(normalizeNotices(noticeResult.value));
+      }
+      if (notificationResult.status === 'fulfilled') {
+        const items = notificationResult.value?.items || [];
+        setHasUnreadNotification(items.some((item) => !item.isRead));
+      }
+      if (calendarResult.status === 'fulfilled' && Array.isArray(calendarResult.value)) {
+        const events = normalizeCalendarEvents(calendarResult.value);
+        setTodayEventCount((events[today.getDate()] || []).length);
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
 	  return (
 	    <div className="screen">
@@ -195,77 +332,57 @@ export function HomeScreen({ activeTab='home' }) {
 		          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
 		            <button onClick={() => navigate('/notifications')} aria-label="알림" style={{ position: 'relative', background: 'transparent', border: 0, color: 'var(--ink)', padding: 6, display: 'flex', cursor: 'pointer' }}>
 		              <Icon.bell size={22}/>
-		              <span style={{ position: 'absolute', top: 5, right: 5, width: 9, height: 9, borderRadius: '50%', background: 'var(--brand)', border: '2px solid var(--bg)', pointerEvents: 'none' }}/>
+		              {hasUnreadNotification && <span style={{ position: 'absolute', top: 5, right: 5, width: 9, height: 9, borderRadius: '50%', background: 'var(--brand)', border: '2px solid var(--bg)', pointerEvents: 'none' }}/>}
 		            </button>
 		          </div>
 	        </div>
 	        {/* Greeting */}
         <div style={{ padding: '4px 20px 16px' }}>
           <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.3 }}>
-            안녕하세요, <span style={{ color: 'var(--brand)' }}>민지</span>님
+            안녕하세요, <span style={{ color: 'var(--brand)' }}>{displayName}</span>님
           </div>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4 }}>{todaySummary}</div>
         </div>
 
         {/* My recruitment room shortcut */}
         <div style={{ margin: '0 16px 8px' }}>
-          <div onClick={() => navigate('/rooms/me')} style={{
-            background: 'var(--ink)',
-            color: 'white', borderRadius: 18, padding: 18, position: 'relative', overflow: 'hidden',
-            cursor: 'pointer',
-          }}>
-	            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: isRecruiting ? 'var(--brand)' : 'rgba(255,255,255,0.62)', fontWeight: 700, letterSpacing: '0.4px', marginBottom: 6 }}>
-	              <span style={{ width: 6, height: 6, borderRadius: '50%', background: isRecruiting ? 'var(--brand)' : 'rgba(255,255,255,0.38)' }}/>
-	              {roomStatus}
-	            </div>
-            <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.4px', marginBottom: 4 }}>아침형 룸메 구해요</div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>2생활관 · 4인실</div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ display: 'flex' }}>
-                  <Avatar name="민지" size={28} style={{ border: '2px solid var(--ink)' }}/>
-                  <Avatar name="수민" size={28} style={{ marginLeft: -8, border: '2px solid var(--ink)' }}/>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', border: '2px solid var(--ink)', marginLeft: -8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>+2</div>
-                </div>
-                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)' }}><b>2</b>/4명</span>
+          {myRoom ? (
+            <div onClick={() => navigate('/rooms/me')} style={{ background: 'var(--ink)', color: 'white', borderRadius: 18, padding: 18, position: 'relative', overflow: 'hidden', cursor: 'pointer' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: isRecruiting ? 'var(--brand)' : 'rgba(255,255,255,0.62)', fontWeight: 700, letterSpacing: '0.4px', marginBottom: 6 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: isRecruiting ? 'var(--brand)' : 'rgba(255,255,255,0.38)' }}/>
+                {roomStatus}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: 'var(--brand)' }}>
-                관리하기 <Icon.chevron size={14}/>
+              <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.4px', marginBottom: 4 }}>{myRoom.title}</div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{roomTypeLabel(myRoom.roomType)} · {myRoom.capacity}인실 · {residencePeriodLabel(myRoom.residencePeriod)}</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex' }}>
+                    <Avatar name={myRoom.hostNickname} size={28} style={{ border: '2px solid var(--ink)' }}/>
+                    {currentMateCount > 1 && <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', border: '2px solid var(--ink)', marginLeft: -8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>+{currentMateCount - 1}</div>}
+                  </div>
+                  <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)' }}><b>{currentMateCount}</b>/{roomCapacity}명</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: 'var(--brand)' }}>
+                  관리하기 <Icon.chevron size={14}/>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div onClick={() => navigate('/rooms/find')} style={{ background: 'var(--ink)', color: 'white', borderRadius: 18, padding: 18, cursor: 'pointer' }}>
+              <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.4px', marginBottom: 6 }}>아직 방이 없어요</div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>마음에 드는 방을 찾아보세요</div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: 'var(--brand)' }}>
+                  방 찾기 <Icon.chevron size={14}/>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Calendar */}
         <div style={{ marginTop: 8 }}>
           <MiniCalendar />
-        </div>
-
-	        {/* Upcoming today */}
-	        <div className="h-section">
-	          <h2>오늘 일정</h2>
-	        </div>
-        <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 14 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--brand-soft)', color: 'var(--brand-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Icon.moon size={22}/>
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>점호 시간</div>
-              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2 }}>22:30 · 사감실 라운드</div>
-            </div>
-            <span className="chip line">5시간 후</span>
-          </div>
-          <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 14 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--ink)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Icon.moon size={22} solid/>
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>통금</div>
-              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2 }}>01:00~05:00 · 출입 제한</div>
-            </div>
-            <span className="chip line">7시간 후</span>
-          </div>
         </div>
 
 	        {/* Notices */}
@@ -274,28 +391,23 @@ export function HomeScreen({ activeTab='home' }) {
 	          <span className="more" onClick={() => navigate('/notices')} style={{ cursor: 'pointer' }}>더보기</span>
 	        </div>
         <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 18, overflow: 'hidden' }}>
-          {[
-            { tag: '필독', tagBrand: true, title: '6월 입사식 일정 안내 — 5월 28일 18:00 다목적실(B동 1F) 집합', date: '05.21' },
-            { tag: '안전', title: '소화기 점검으로 인한 알람 테스트 안내', date: '05.20' },
-            { tag: '시설', title: 'B동 세탁실 4번 기기 교체 완료', date: '05.18' },
-            { tag: '행사', title: '룸메이트 매칭 데이 — 5월 25일 오후 7시', date: '05.17' },
-          ].map((n, i, arr) => (
-            <div key={i} onClick={() => navigate('/notice/1')} style={{
+          {notices.map((n, i, arr) => (
+            <div key={n.id || i} onClick={() => n.originalLink ? window.open(n.originalLink, '_blank', 'noopener,noreferrer') : navigate('/notices')} style={{
               padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12,
               borderBottom: i === arr.length - 1 ? 'none' : '1px solid var(--line)',
               cursor: 'pointer',
             }}>
-              <span className={"chip" + (n.tagBrand ? ' brand' : '')} style={{ fontSize: 11, padding: '3px 8px' }}>{n.tag}</span>
-              <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: 'var(--ink)' }}>
-              <MarqueeText>{n.title}</MarqueeText>
-            </div>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: 'var(--ink)', paddingLeft: 4 }}>
+                <MarqueeText>{n.title}</MarqueeText>
+              </div>
               <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{n.date}</span>
             </div>
           ))}
         </div>
 
         {/* Dorm info shortcuts */}
-        <div style={{ margin: '16px 16px 0', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+        <div className="h-section"><h2>기숙사 안내사항</h2></div>
+        <div style={{ margin: '0 16px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
           {[
             { label: '사감실\n운영 안내', sub: '운영 시간·외출', to: '/dorm-info', icon: 'bell' },
             { label: '점호 및\n청소 점검', sub: '점검 일정·항목', to: '/dorm-rules/rollcall', icon: 'moon' },
