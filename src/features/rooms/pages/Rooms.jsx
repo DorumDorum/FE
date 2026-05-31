@@ -3,11 +3,13 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Icon, TabBar, StatusBar, Avatar, MarqueeText, ClipText, goBack } from '../../../shared/components';
 import { MemberCard, MEMBER_CHECKLISTS } from '../../members';
 import { CREATE_ROOM_DORMS, ROOM_SIZE_OPTIONS } from '../../checklist';
+import { findRooms, likeRoom, unlikeRoom, loadLikedRooms, loadMyChecklist, loadRoomRule, loadRecommendedRooms } from '../../../shared/api/home';
 
 // rooms.jsx — 방 찾기 (list), 방 상세 (detail w/ checklist), 내 방 (my room)
 
 export const MY_ROOM_RECRUITING_KEY = 'dorumdorum:my-room-recruiting';
 const ROOM_BOOKMARKS_KEY = 'dorumdorum:room-bookmarks';
+const ROOM_DETAIL_CACHE_KEY = 'dorumdorum:room-detail';
 
 function readRoomBookmarks() {
   if (typeof window === 'undefined') return [];
@@ -16,6 +18,16 @@ function readRoomBookmarks() {
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+}
+
+function readCachedRoom(roomNo) {
+  if (typeof window === 'undefined') return null;
+  try {
+    const room = JSON.parse(window.sessionStorage.getItem(ROOM_DETAIL_CACHE_KEY) || 'null');
+    return String(room?.roomNo || room?.id) === String(roomNo) ? room : null;
+  } catch {
+    return null;
   }
 }
 
@@ -141,40 +153,173 @@ export const ROOM_CHECKLIST_4 = [
   ]},
 ];
 
+const RESIDENCE_PERIOD_OPTIONS = [
+  { key: '전체', label: '전체' },
+  { key: 'SEMESTER', label: '학기(16주)' },
+  { key: 'HALF_YEAR', label: '반기(24주)' },
+  { key: 'SEASONAL', label: '계절학기' },
+];
+
+export const residencePeriodLabel = (period) => {
+  const found = RESIDENCE_PERIOD_OPTIONS.find(o => o.key === period);
+  return found ? found.label : period || '';
+};
+
+const roomTypeLabel = (roomType) => {
+  const found = ROOM_TYPE_OPTIONS.find(o => o.key === roomType);
+  return found ? found.label : roomType || '';
+};
+
 export const ROOMS = [
   {
     id: 1, title: '아침형 룸메 구해요', dorm: '2생활관', size: '4인실',
     members: 2, capacity: 4, recruiting: true, host: { name: '민지' },
-    matchLabel: '잘 맞아요', recommended: true,
+    matchLabel: '잘 맞아요', recommended: true, residencePeriod: 'SEMESTER',
     checklist: ROOM_CHECKLIST_1,
   },
   {
     id: 2, title: '조용히 공부할 사람만! 시험기간 새벽까지 집중하시는 분', dorm: '3생활관', size: '2인실',
     members: 1, capacity: 2, recruiting: true, host: { name: '수민' },
-    matchLabel: '잘 맞아요',
+    matchLabel: '잘 맞아요', residencePeriod: 'HALF_YEAR',
     checklist: ROOM_CHECKLIST_2,
   },
   {
     id: 3, title: '같이 운동하실 분', dorm: '1생활관', size: '2인실',
     members: 1, capacity: 2, recruiting: true, host: { name: '진우' },
-    matchLabel: '괜찮아요',
+    matchLabel: '괜찮아요', residencePeriod: 'SEMESTER',
     checklist: ROOM_CHECKLIST_3,
   },
   {
     id: 4, title: '느긋한 생활 좋아요', dorm: '메디컬', size: '3인실',
     members: 3, capacity: 3, recruiting: false, host: { name: '예린' },
-    matchLabel: '괜찮아요',
+    matchLabel: '괜찮아요', residencePeriod: 'SEASONAL',
     checklist: ROOM_CHECKLIST_4,
   },
 ];
 
+const CHECKLIST_VALUE_LABELS = {
+  FLEXIBLE: '유동적',
+  FIXED: '고정적',
+  REGULAR: '주기적',
+  IRREGULAR: '비주기적',
+  ALLOWED: '가능',
+  NOT_ALLOWED: '불가능',
+  ALLOWED_WITH_VENTILATION: '가능 · 환기 필수',
+  BRIGHT: '밝음',
+  DARK: '어두움',
+  SEVERE: '심함',
+  MODERATE: '중간',
+  MILD: '약함',
+  MILD_OR_NONE: '약함 · 없음',
+  MORNING: '아침',
+  EVENING: '저녁',
+  AFTER_TIME: '시간 지정',
+  WHEN_ONE_SLEEPS: '한 명이 잘 때',
+  WEEKLY: '매주',
+  BIWEEKLY: '2주',
+  MONTHLY_OR_MORE: '한 달 이상',
+  RARELY: '거의 안 감',
+  CIGARETTE: '흡연',
+  E_CIGARETTE: '전자담배',
+  NON_SMOKER: '비흡연',
+  RENT_PURCHASE_OWN: '대여 · 구매 · 보유',
+  DECIDE_AFTER_DISCUSSION: '협의 후 결정',
+  NOT_NEEDED: '필요 없음',
+  VIBRATION: '진동',
+  SOUND: '소리',
+  ALWAYS: '항상',
+  VERY_SENSITIVE: '많이 탐',
+  LESS_SENSITIVE: '적게 탐',
+  OUTSIDE_DORM: '기숙사 밖',
+  INSIDE_DORM: '기숙사 안',
+  INDIVIDUAL: '개별',
+  SHARED: '공유',
+};
+
+const checklistValueLabel = (value) => CHECKLIST_VALUE_LABELS[value] || value || '-';
+
+const CHECKLIST_SECTIONS = [
+  { cat: '생활 패턴', items: [
+    { key: 'bedtime', q: '취침' },
+    { key: 'wakeUp', q: '기상' },
+    { key: 'returnHome', q: '귀가' },
+    { key: 'returnHomeTime', q: '귀가 시간' },
+    { key: 'cleaning', q: '청소' },
+    { key: 'phoneCall', q: '방에서 전화' },
+    { key: 'sleepLight', q: '잠귀' },
+    { key: 'sleepHabit', q: '잠버릇' },
+    { key: 'snoring', q: '코골이' },
+    { key: 'showerTime', q: '샤워 시간' },
+    { key: 'eating', q: '방에서 취식' },
+    { key: 'lightsOut', q: '소등' },
+    { key: 'lightsOutTime', q: '소등 시간' },
+    { key: 'homeVisit', q: '본가 주기' },
+    { key: 'smoking', q: '흡연' },
+    { key: 'refrigerator', q: '냉장고' },
+  ]},
+  { cat: '추가 규칙', items: [
+    { key: 'hairDryer', q: '드라이기 제한' },
+    { key: 'alarm', q: '알람' },
+    { key: 'earphone', q: '이어폰' },
+    { key: 'keyskin', q: '키스킨' },
+    { key: 'heat', q: '더위' },
+    { key: 'cold', q: '추위' },
+    { key: 'study', q: '공부' },
+    { key: 'trashCan', q: '쓰레기통' },
+  ]},
+];
+
+const roomRuleToChecklist = (rule) => CHECKLIST_SECTIONS.map((section) => ({
+  cat: section.cat,
+  items: section.items.map((item) => ({ q: item.q, a: checklistValueLabel(rule[item.key]) })),
+}));
+
+const compareChecklists = (roomRule, myChecklist) => CHECKLIST_SECTIONS.map((section) => ({
+  cat: section.cat,
+  items: section.items.map((item) => ({
+    q: item.q,
+    room: checklistValueLabel(roomRule[item.key]),
+    mine: checklistValueLabel(myChecklist[item.key]),
+    match: roomRule[item.key] === myChecklist[item.key],
+  })),
+}));
+
 export function RoomCard({ room, bookmarked = false, onToggleBookmark }) {
   const [open, setOpen] = React.useState(false);
+  const [checklist, setChecklist] = React.useState(room.checklist || []);
+  const [checklistLoading, setChecklistLoading] = React.useState(false);
+  const [checklistError, setChecklistError] = React.useState(false);
   const navigate = useNavigate();
+  const roomMeta = [room.dorm, room.size, residencePeriodLabel(room.residencePeriod)].filter(Boolean).join(' · ');
+
+  const toggleChecklist = () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+
+    setOpen(true);
+    if (checklist.length > 0 || checklistLoading) return;
+
+    setChecklistLoading(true);
+    setChecklistError(false);
+    loadRoomRule(room.roomNo || room.id)
+      .then((rule) => setChecklist(roomRuleToChecklist(rule)))
+      .catch(() => setChecklistError(true))
+      .finally(() => setChecklistLoading(false));
+  };
+
+  const openRoomDetail = () => {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(ROOM_DETAIL_CACHE_KEY, JSON.stringify(room));
+    }
+    navigate(`/rooms/${room.roomNo || room.id}`, { state: { closed: room.recruiting === false, room } });
+  };
+
   return (
     <div
       className="card"
-      onClick={() => navigate(`/rooms/${room.id}`, { state: { closed: room.recruiting === false } })}
+      onClick={openRoomDetail}
       style={{ padding: 16, marginBottom: 10, transition: 'box-shadow .2s', cursor: 'pointer' }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
@@ -183,7 +328,7 @@ export function RoomCard({ room, bookmarked = false, onToggleBookmark }) {
             <MarqueeText>{room.title}</MarqueeText>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>{room.dorm} · {room.size}</span>
+            <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>{roomMeta}</span>
             <span style={{ fontSize: 11, fontWeight: 800, color: room.recruiting === false ? 'var(--ink-3)' : 'var(--brand-deep)', background: room.recruiting === false ? 'var(--surface-2)' : 'var(--brand-soft)', borderRadius: 999, padding: '3px 7px' }}>
               {room.recruiting === false ? '마감됨' : '모집중'}
             </span>
@@ -247,7 +392,13 @@ export function RoomCard({ room, bookmarked = false, onToggleBookmark }) {
             borderRadius: 12,
             overflow: 'hidden',
           }}>
-            {room.checklist && room.checklist.map((cat, ci) => (
+            {checklistLoading && (
+              <div style={{ padding: '14px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>체크리스트를 불러오는 중...</div>
+            )}
+            {checklistError && (
+              <div style={{ padding: '14px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>체크리스트를 불러오지 못했어요.</div>
+            )}
+            {!checklistLoading && !checklistError && checklist.map((cat, ci) => (
               <React.Fragment key={ci}>
                 {/* Category header bar */}
                 <div style={{
@@ -280,7 +431,7 @@ export function RoomCard({ room, bookmarked = false, onToggleBookmark }) {
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          setOpen(!open);
+          toggleChecklist();
         }}
         style={{
           width: '100%', marginTop: 10,
@@ -313,13 +464,13 @@ function FilterDropdown({ label, value, setValue, options, display }) {
     <div ref={ref} style={{ position: 'relative', flex: 1 }}>
       <button type="button" onClick={() => setOpen(o => !o)} style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-        width: '100%', padding: '10px 12px', borderRadius: 10,
+        width: '100%', height: 40, padding: '0 12px', borderRadius: 10,
         border: isAll ? '1px solid var(--line-2)' : '1.5px solid var(--brand)',
         background: isAll ? 'var(--surface)' : 'var(--brand-soft)',
         color: isAll ? 'var(--ink-2)' : 'var(--brand-deep)',
         fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
       }}>
-        <span>{label}: {display(value)}</span>
+        <span>{isAll ? label : display(value)}</span>
         <svg width={12} height={12} viewBox="0 0 24 24" fill="none" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
           <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
@@ -327,7 +478,7 @@ function FilterDropdown({ label, value, setValue, options, display }) {
       {open && (
         <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, background: 'var(--surface)', borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.12)', border: '1px solid var(--line)', zIndex: 100, minWidth: '100%', overflow: 'hidden' }}>
           {options.map(opt => {
-            const val = typeof opt === 'string' ? opt : opt.key;
+          const val = typeof opt === 'object' && opt !== null ? opt.key : opt;
             const lbl = display(val);
             const active = value === val;
             return (
@@ -344,129 +495,260 @@ function FilterDropdown({ label, value, setValue, options, display }) {
   );
 }
 
+const ROOM_TYPE_OPTIONS = [
+  { key: '전체', label: '생활관' },
+  { key: 'TYPE_1', label: '1생활관' },
+  { key: 'TYPE_2', label: '2생활관' },
+  { key: 'TYPE_3', label: '3생활관' },
+  { key: 'TYPE_MEDICAL', label: '메디컬' },
+];
+
+const ROOM_TYPE_CAPACITIES = {
+  TYPE_1: [1, 2, 3],
+  TYPE_2: [1, 2, 4],
+  TYPE_3: [2, 4],
+  TYPE_MEDICAL: [1, 2, 3, 4],
+};
+
+const ALL_CAPACITIES = [1, 2, 3, 4];
+
+const toSortType = (sortBy) => sortBy === 'openSeats' ? 'REMAINING' : 'LATEST';
+
+const appendUniqueRooms = (currentRooms, nextRooms) => {
+  const roomsByNo = new Map(currentRooms.map((room) => [room.roomNo, room]));
+  nextRooms.forEach((room) => roomsByNo.set(room.roomNo, room));
+  return Array.from(roomsByNo.values());
+};
+
+const normalizeRoom = (r) => ({
+  id: r.roomNo,
+  roomNo: r.roomNo,
+  title: r.title,
+  dorm: roomTypeLabel(r.roomType),
+  size: `${r.capacity}인실`,
+  members: r.currentMateCount,
+  capacity: r.capacity,
+  remaining: r.remaining,
+  recruiting: r.roomStatus !== 'COMPLETED',
+  host: { name: r.hostNickname, major: r.hostMajor, studentYear: r.hostStudentYear },
+  residencePeriod: r.residencePeriod,
+  notes: r.notes ?? null,
+  checklist: [],
+});
+
 export function FindRoomScreen({ activeTab='find' }) {
   const navigate = useNavigate();
   const [sortBy, setSortBy] = React.useState('latest');
-  const [dormFilter, setDormFilter] = React.useState('전체');
-  const [sizeFilter, setSizeFilter] = React.useState('전체');
-  const [bookmarkedIds, setBookmarkedIds] = React.useState(readRoomBookmarks);
+  const [roomTypeFilter, setRoomTypeFilter] = React.useState('전체');
+  const [capacityFilter, setCapacityFilter] = React.useState('전체');
+  const [periodFilter, setPeriodFilter] = React.useState('전체');
+  const [rooms, setRooms] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [nextCursor, setNextCursor] = React.useState(null);
+  const [hasNext, setHasNext] = React.useState(false);
+  const [totalCount, setTotalCount] = React.useState(null);
+  const [bookmarkedIds, setBookmarkedIds] = React.useState(new Set());
+  const [recommendedCount, setRecommendedCount] = React.useState(null);
+  const loadMoreRef = React.useRef(null);
+  const searchVersionRef = React.useRef(0);
+
   const sortOptions = [
     { key: 'latest', label: '최신순' },
     { key: 'openSeats', label: '남은 자리순' },
   ];
-  const dormOptions = React.useMemo(() => ['전체', ...CREATE_ROOM_DORMS.map((dorm) => dorm.name)], []);
-  const sizeOptions = React.useMemo(() => {
-    const selectedDorm = CREATE_ROOM_DORMS.find((dorm) => dorm.name === dormFilter);
-    return ['전체', ...(selectedDorm ? selectedDorm.sizes : ROOM_SIZE_OPTIONS)];
-  }, [dormFilter]);
-  const formatCapacityOption = (option) => option === '전체' ? option : option.replace('인실', '명');
+
+  const capacityOptions = ['전체', ...(ROOM_TYPE_CAPACITIES[roomTypeFilter] || ALL_CAPACITIES)];
 
   React.useEffect(() => {
-    if (!sizeOptions.includes(sizeFilter)) {
-      setSizeFilter('전체');
+    if (!capacityOptions.includes(capacityFilter)) {
+      setCapacityFilter('전체');
     }
-  }, [sizeFilter, sizeOptions]);
+  }, [capacityFilter, roomTypeFilter]);
 
   React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(ROOM_BOOKMARKS_KEY, JSON.stringify(bookmarkedIds));
-    }
-  }, [bookmarkedIds]);
-
-  const toggleRoomBookmark = (roomId) => {
-    setBookmarkedIds((ids) => ids.includes(roomId) ? ids.filter((id) => id !== roomId) : [...ids, roomId]);
-  };
-  const sortedRooms = React.useMemo(() => {
-    return ROOMS
-      .filter((room) => room.recruiting !== false)
-      .filter((room) => dormFilter === '전체' || room.dorm === dormFilter)
-      .filter((room) => sizeFilter === '전체' || room.size === sizeFilter)
-      .sort((a, b) => {
-        if (sortBy === 'openSeats') {
-          return (b.capacity - b.members) - (a.capacity - a.members) || b.id - a.id;
+    loadLikedRooms()
+      .then((response) => {
+        const list = Array.isArray(response) ? response : response?.items;
+        if (Array.isArray(list)) {
+          setBookmarkedIds(new Set(list.map((r) => r.roomNo)));
         }
-        return b.id - a.id;
+      })
+      .catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    loadRecommendedRooms()
+      .then((items) => setRecommendedCount(Array.isArray(items) ? items.length : 0))
+      .catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    let mounted = true;
+    searchVersionRef.current += 1;
+    setLoading(true);
+    setLoadingMore(false);
+    setRooms([]);
+    setNextCursor(null);
+    setHasNext(false);
+    setTotalCount(null);
+    findRooms({
+      sortType: toSortType(sortBy),
+      roomType: roomTypeFilter === '전체' ? null : roomTypeFilter,
+      capacity: capacityFilter === '전체' ? null : capacityFilter,
+      residencePeriod: periodFilter === '전체' ? null : periodFilter,
+    })
+      .then((res) => {
+        if (!mounted) return;
+        if (!Array.isArray(res?.items)) {
+          throw new TypeError('Room search response must contain an items array');
+        }
+        setRooms(res.items.map(normalizeRoom));
+        setNextCursor(res.nextCursor || null);
+        setHasNext(Boolean(res.hasNext && res.nextCursor));
+        setTotalCount(Number.isInteger(res.totalCount) ? res.totalCount : null);
+      })
+      .catch((error) => {
+        console.error('Failed to load rooms', error);
+        if (mounted) setRooms([]);
+      })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, [capacityFilter, sortBy, roomTypeFilter, periodFilter]);
+
+  React.useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || loading || loadingMore || !hasNext || !nextCursor) return undefined;
+
+    let requested = false;
+    const searchVersion = searchVersionRef.current;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting || requested) return;
+      requested = true;
+      setLoadingMore(true);
+      findRooms({
+        sortType: toSortType(sortBy),
+        roomType: roomTypeFilter === '전체' ? null : roomTypeFilter,
+        capacity: capacityFilter === '전체' ? null : capacityFilter,
+        residencePeriod: periodFilter === '전체' ? null : periodFilter,
+        cursor: nextCursor,
+      })
+        .then((res) => {
+          if (searchVersionRef.current !== searchVersion) return;
+          if (!Array.isArray(res?.items)) {
+            throw new TypeError('Room search response must contain an items array');
+          }
+          setRooms((currentRooms) => appendUniqueRooms(currentRooms, res.items.map(normalizeRoom)));
+          setNextCursor(res.nextCursor || null);
+          setHasNext(Boolean(res.hasNext && res.nextCursor));
+        })
+        .catch((error) => {
+          console.error('Failed to load more rooms', error);
+        })
+        .finally(() => {
+          setLoadingMore(false);
+        });
+    }, { rootMargin: '160px 0px' });
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [capacityFilter, hasNext, loading, loadingMore, nextCursor, periodFilter, roomTypeFilter, sortBy]);
+
+  const toggleRoomBookmark = (roomNo) => {
+    const isBookmarked = bookmarkedIds.has(roomNo);
+    setBookmarkedIds((prev) => {
+      const next = new Set(prev);
+      isBookmarked ? next.delete(roomNo) : next.add(roomNo);
+      return next;
+    });
+    (isBookmarked ? unlikeRoom(roomNo) : likeRoom(roomNo)).catch(() => {
+      setBookmarkedIds((prev) => {
+        const next = new Set(prev);
+        isBookmarked ? next.add(roomNo) : next.delete(roomNo);
+        return next;
       });
-  }, [dormFilter, sizeFilter, sortBy]);
+    });
+  };
 
-	  return (
-	    <div className="screen">
-	      <div className="scroll">
-	        <StatusBar />
-	        <div className="topbar">
-	          <div className="brand">방 찾기</div>
-		          <button onClick={() => navigate('/notifications')} aria-label="알림" style={{ background: 'transparent', border: 0, color: 'var(--ink)', padding: 6, display: 'flex', cursor: 'pointer' }}>
-		            <Icon.bell size={22}/>
-		          </button>
-	        </div>
+  return (
+    <div className="screen">
+      <div className="scroll">
+        <StatusBar />
+        <div className="topbar">
+          <div className="brand">방 찾기</div>
+          <button onClick={() => navigate('/notifications')} aria-label="알림" style={{ background: 'transparent', border: 0, color: 'var(--ink)', padding: 6, display: 'flex', cursor: 'pointer' }}>
+            <Icon.bell size={22}/>
+          </button>
+        </div>
 
-	        {/* Search */}
-	        <div style={{ padding: '0 16px 12px' }}>
-	          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', borderRadius: 14, padding: '12px 14px' }}>
-	            <Icon.search size={20} weight={1.8}/>
-	            <input type="text" placeholder="생활관, 수용인원 검색" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 14, fontFamily: 'inherit', color: 'var(--ink)', minWidth: 0 }} />
-	            <button onClick={() => navigate('/rooms/find/filter')} style={{ background: 'transparent', border: 0, color: 'var(--ink-2)', padding: 0, display: 'flex', cursor: 'pointer' }}><Icon.filter/></button>
-	          </div>
-	        </div>
+        <div style={{ padding: '0 16px 12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', borderRadius: 14, padding: '12px 14px' }}>
+            <Icon.search size={20} weight={1.8}/>
+            <input type="text" placeholder="방 제목, 방장 닉네임으로 검색" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 14, fontFamily: 'inherit', color: 'var(--ink)', minWidth: 0 }} />
+            <button onClick={() => navigate('/rooms/find/filter')} aria-label="체크리스트로 찾기" style={{ background: 'transparent', border: 0, color: 'var(--ink-2)', padding: 0, display: 'flex', cursor: 'pointer' }}><Icon.filter/></button>
+          </div>
+        </div>
 
         <div style={{ padding: '0 16px 6px', display: 'flex', gap: 8 }}>
           {[
-            { label: '생활관', value: dormFilter, setValue: setDormFilter, options: dormOptions, display: v => v },
-            { label: '수용인원', value: sizeFilter, setValue: setSizeFilter, options: sizeOptions, display: formatCapacityOption },
+            { label: '생활관', value: roomTypeFilter, setValue: setRoomTypeFilter, options: ROOM_TYPE_OPTIONS.map(o => o.key), display: v => ROOM_TYPE_OPTIONS.find(o => o.key === v)?.label || v },
+            { label: '수용인원', value: capacityFilter, setValue: setCapacityFilter, options: capacityOptions, display: v => v === '전체' ? '수용인원' : `${v}명` },
+            { label: '거주기간', value: periodFilter, setValue: setPeriodFilter, options: RESIDENCE_PERIOD_OPTIONS.map(o => o.key), display: v => v === '전체' ? '거주기간' : residencePeriodLabel(v) },
           ].map(group => (
             <FilterDropdown key={group.label} {...group} />
           ))}
         </div>
 
-	        <div style={{ padding: '8px 16px 16px' }}>
-	        {/* Match summary banner */}
-	        <div onClick={() => navigate('/rooms/find/recommended')} style={{ background: 'var(--brand-soft)', borderRadius: 14, padding: '14px 16px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--brand)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon.check size={18} weight={2.6}/>
+        <div style={{ padding: '8px 16px 16px' }}>
+          {/* Match summary banner */}
+          <div onClick={() => navigate('/rooms/find/recommended')} style={{ background: 'var(--brand-soft)', borderRadius: 14, padding: '14px 16px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--brand)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon.check size={18} weight={2.6}/>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-deep)' }}>
+                {recommendedCount === null ? '나와 잘 맞는 방 확인하기' : `나와 잘 맞는 방 ${recommendedCount}곳`}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--brand-deep)', opacity: 0.75, marginTop: 2 }}>내 체크리스트 기반으로 추천했어요</div>
+            </div>
+            <Icon.chevron size={16}/>
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-deep)' }}>당신과 잘 맞는 방 12곳</div>
-            <div style={{ fontSize: 12, color: 'var(--brand-deep)', opacity: 0.75, marginTop: 2 }}>체크리스트 기반으로 추천했어요</div>
-          </div>
-          <Icon.chevron size={16}/>
-        </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '4px 4px 10px' }}>
-          <span style={{ fontSize: 13, color: 'var(--ink-3)', flexShrink: 0 }}>모집중 {sortedRooms.length}개</span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {sortOptions.map(option => {
-              const active = sortBy === option.key;
-              return (
-                <button
-                  key={option.key}
-                  onClick={() => setSortBy(option.key)}
-                  style={{
-                    border: 0,
-                    borderRadius: 999,
-                    padding: '7px 10px',
-                    background: active ? 'var(--ink)' : 'var(--surface)',
-                    color: active ? 'white' : 'var(--ink-2)',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    whiteSpace: 'nowrap',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '4px 4px 10px' }}>
+            <span style={{ fontSize: 13, color: 'var(--ink-3)', flexShrink: 0 }}>
+              {loading
+                ? '불러오는 중...'
+                : `모집중 ${totalCount ?? rooms.length}개${totalCount == null && hasNext ? ' 이상' : ''}`}
+            </span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {sortOptions.map(option => {
+                const active = sortBy === option.key;
+                return (
+                  <button
+                    key={option.key}
+                    onClick={() => setSortBy(option.key)}
+                    style={{ border: 0, borderRadius: 999, padding: '7px 10px', background: active ? 'var(--ink)' : 'var(--surface)', color: active ? 'white' : 'var(--ink-2)', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
 
-	        {sortedRooms.length > 0 ? sortedRooms.map(r => <RoomCard key={r.id} room={r} bookmarked={bookmarkedIds.includes(r.id)} onToggleBookmark={toggleRoomBookmark} />) : (
-          <div className="card" style={{ padding: 22, textAlign: 'center', color: 'var(--ink-3)', fontSize: 14, fontWeight: 600 }}>
-            선택한 조건에 맞는 모집중 방이 없어요.
+          {rooms.length > 0 ? rooms.map(r => (
+            <RoomCard key={r.roomNo} room={r} bookmarked={bookmarkedIds.has(r.roomNo)} onToggleBookmark={toggleRoomBookmark} />
+          )) : (!loading && (
+            <div className="card" style={{ padding: 22, textAlign: 'center', color: 'var(--ink-3)', fontSize: 14, fontWeight: 600 }}>
+              선택한 조건에 맞는 모집중 방이 없어요.
+            </div>
+          ))}
+          <div ref={loadMoreRef} style={{ minHeight: 24, padding: loadingMore ? '8px 0' : 0, textAlign: 'center', color: 'var(--ink-3)', fontSize: 12, fontWeight: 600 }}>
+            {loadingMore ? '더 불러오는 중...' : ''}
           </div>
-        )}
-	        <div style={{ height: 12 }}/>
-	        </div>
-	      </div>
+          <div style={{ height: 12 }}/>
+        </div>
+      </div>
 
       {/* FAB */}
       <button onClick={() => navigate('/rooms/create/1')} style={{
@@ -521,12 +803,50 @@ export function RoomDetailScreen() {
   const navigate = useNavigate();
   const { id = '1' } = useParams();
   const { state } = useLocation();
-  const room = ROOMS.find((item) => String(item.id) === String(id));
+  const room = state?.room || readCachedRoom(id) || ROOMS.find((item) => String(item.id) === String(id));
   const isClosed = state?.closed ?? room?.recruiting === false;
   const isApplied = state?.appliedStatus === 'waiting';
   const isAccepted = state?.appliedStatus === 'accepted';
 
   const [bookmarked, setBookmarked] = React.useState(false);
+  const [checklist, setChecklist] = React.useState([]);
+  const [checklistLoading, setChecklistLoading] = React.useState(true);
+  const [checklistError, setChecklistError] = React.useState(false);
+
+  React.useEffect(() => {
+    let mounted = true;
+    setChecklistLoading(true);
+    setChecklistError(false);
+    Promise.all([loadRoomRule(id), loadMyChecklist()])
+      .then(([roomRule, myChecklist]) => {
+        if (mounted) setChecklist(compareChecklists(roomRule, myChecklist));
+      })
+      .catch(() => {
+        if (mounted) setChecklistError(true);
+      })
+      .finally(() => {
+        if (mounted) setChecklistLoading(false);
+      });
+    return () => { mounted = false; };
+  }, [id]);
+
+  const hostName = room?.host?.name || '방장';
+  const hostMajor = room?.host?.major?.replace(/학과$/, '');
+  const hostProfile = [hostMajor, room?.host?.studentYear].filter(Boolean).join(' ');
+  const roomMeta = room
+    ? [room.dorm, room.size, residencePeriodLabel(room.residencePeriod)].filter(Boolean).join(' · ')
+    : '';
+  const currentMateCount = room?.members || 0;
+  const roomCapacity = room?.capacity || 0;
+  const members = Array.from({ length: roomCapacity }, (_, index) => {
+    if (index === 0 && currentMateCount > 0) {
+      return { name: hostName, label: '방장' };
+    }
+    if (index < currentMateCount) {
+      return { name: '멤버', label: '멤버' };
+    }
+    return { name: '?', label: '모집중', empty: true };
+  });
 
   return (
     <div className="screen">
@@ -544,47 +864,78 @@ export function RoomDetailScreen() {
       <div className="scroll">
         {/* Header */}
         <div style={{ padding: '8px 20px 16px' }}>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.3, fontFamily: 'var(--font-sans)' }}>아침형 룸메 구해요</h1>
-          <div style={{ fontSize: 14, color: 'var(--ink-3)', marginTop: 6 }}>2생활관 · 4인실 · 2026년 2학기</div>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.3, fontFamily: 'var(--font-sans)' }}>{room?.title || '모집방 상세'}</h1>
+          {roomMeta && <div style={{ fontSize: 14, color: 'var(--ink-3)', marginTop: 6 }}>{roomMeta}</div>}
         </div>
 
-        {/* Match summary — no number, just a clear label */}
-        <div style={{ margin: '0 16px 16px' }}>
-          <div className="card" style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 14, background: 'var(--brand-soft)' }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--brand)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Icon.check size={22} weight={2.6}/>
+        {/* Match summary — derived from checklist comparison */}
+        {(() => {
+          if (checklistLoading || checklistError || checklist.length === 0) return null;
+          const allItems = checklist.flatMap(cat => cat.items);
+          const filledItems = allItems.filter(it => it.mine !== '-');
+
+          if (filledItems.length === 0) {
+            return (
+              <div style={{ margin: '0 16px 16px' }}>
+                <div className="card" onClick={() => navigate('/checklist')} style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 14, background: 'var(--surface-2)', cursor: 'pointer' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--line-2)', color: 'var(--ink-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icon.clipboard size={20}/>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-2)' }}>내 체크리스트를 작성해보세요</div>
+                    <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>작성하면 이 방과 얼마나 맞는지 알 수 있어요</div>
+                  </div>
+                  <Icon.chevron size={14}/>
+                </div>
+              </div>
+            );
+          }
+
+          const matchedCount = filledItems.filter(it => it.match).length;
+          const totalCount = filledItems.length;
+          const matchScore = matchedCount / totalCount;
+          const matchLabel = matchScore >= 0.85 ? '잘 맞아요' : matchScore >= 0.65 ? '괜찮아요' : null;
+          if (!matchLabel) return null;
+          const isStrong = matchLabel === '잘 맞아요';
+          const accent = isStrong ? 'var(--brand)' : '#F59E0B';
+          const accentSoft = isStrong ? 'var(--brand-soft)' : '#FEF3C7';
+          const accentDeep = isStrong ? 'var(--brand-deep)' : '#92400E';
+          const highlights = filledItems.filter(it => it.match).slice(0, 3).map(it => `${it.q} ${it.room}`).join(' · ');
+          return (
+            <div style={{ margin: '0 16px 16px' }}>
+              <div className="card" style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 14, background: accentSoft }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: accent, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Icon.check size={22} weight={2.6}/>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: accentDeep }}>나와 {matchLabel} 방이에요</div>
+                  <div style={{ fontSize: 12, color: accentDeep, opacity: 0.75, marginTop: 3 }}>{highlights}</div>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: accentDeep }}>{matchedCount}<span style={{ fontSize: 11, fontWeight: 500 }}>/{totalCount}</span></div>
+              </div>
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--brand-deep)' }}>나와 잘 맞는 방이에요</div>
-              <div style={{ fontSize: 12, color: 'var(--brand-deep)', opacity: 0.75, marginTop: 3 }}>생활 패턴 · 청결도 · 예민도 일치</div>
-            </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Host card */}
         <div style={{ margin: '0 16px' }}>
           <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 16 }}>
-            <Avatar name="민지" size={52} style={{ fontSize: 20 }}/>
+            <Avatar name={hostName} size={52} style={{ fontSize: 20 }}/>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 15, fontWeight: 700 }}>민지</span>
+                <span style={{ fontSize: 15, fontWeight: 700 }}>{hostName}</span>
                 <span className="chip line" style={{ fontSize: 10, padding: '2px 6px' }}>방장</span>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>경영 22 · 인증완료</div>
+              {hostProfile && <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>{hostProfile}</div>}
             </div>
           </div>
         </div>
 
         {/* Members */}
-        <div className="h-section"><h2>현재 멤버 2/4</h2></div>
+        <div className="h-section"><h2>현재 멤버 {currentMateCount}/{roomCapacity}</h2></div>
         <div style={{ padding: '0 16px', display: 'flex', gap: 8 }}>
-          {[
-            { name: '민지', label: '방장' },
-            { name: '수민', label: '멤버' },
-            { name: '?', label: '모집중', empty: true },
-            { name: '?', label: '모집중', empty: true },
-          ].map((m, i) => (
-            <div key={i} onClick={() => !m.empty && navigate('/rooms/members')} className="card" style={{ flex: 1, padding: 12, textAlign: 'center', border: m.empty ? '1px dashed var(--line-2)' : 'none', background: m.empty ? 'transparent' : 'var(--surface)', cursor: m.empty ? 'default' : 'pointer' }}>
+          {members.map((m, i) => (
+            <div key={i} className="card" style={{ flex: 1, padding: 12, textAlign: 'center', border: m.empty ? '1px dashed var(--line-2)' : 'none', background: m.empty ? 'transparent' : 'var(--surface)' }}>
               {m.empty ? (
                 <div style={{ width: 40, height: 40, borderRadius: '50%', border: '1.5px dashed var(--line-2)', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-4)' }}><Icon.plus size={18}/></div>
               ) : (
@@ -607,7 +958,13 @@ export function RoomDetailScreen() {
             <span style={{ textAlign: 'center' }}>내 체크리스트</span>
             <span/>
           </div>
-          {CHECKLIST.map((cat, ci) => (
+          {checklistLoading && (
+            <div style={{ padding: 18, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>체크리스트를 비교하는 중...</div>
+          )}
+          {checklistError && (
+            <div style={{ padding: 18, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>체크리스트를 불러오지 못했어요.</div>
+          )}
+          {!checklistLoading && !checklistError && checklist.map((cat) => (
             <div key={cat.cat}>
               <div style={{ padding: '8px 14px 6px', fontSize: 11, fontWeight: 700, color: 'var(--ink-2)', letterSpacing: '0.2px', background: 'var(--surface-2)' }}>{cat.cat}</div>
               {cat.items.map((it, ii) => (
@@ -629,12 +986,16 @@ export function RoomDetailScreen() {
         </div>
 
         {/* About */}
-        <div className="h-section"><h2>방장의 한마디</h2></div>
-        <div style={{ margin: '0 16px 24px' }}>
-          <div className="card" style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--ink-2)' }}>
-            아침 7시쯤 일어나는 사람이면 정말 좋아요. 청소는 일주일에 두 번 같이 하면 좋겠고, 평일 저녁엔 각자 시간 갖는 편이에요. 잡담 환영! 너무 늦은 외출이나 시끄러운 통화만 자제해주시면 됩니다.
-          </div>
-        </div>
+        {room?.notes && (
+          <>
+            <div className="h-section"><h2>방장의 한마디</h2></div>
+            <div style={{ margin: '0 16px 24px' }}>
+              <div className="card" style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--ink-2)' }}>
+                {room.notes}
+              </div>
+            </div>
+          </>
+        )}
 
         <div style={{ height: isAccepted ? 24 : 110 }}/>
       </div>

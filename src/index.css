@@ -83,6 +83,7 @@
 	    height: min(100dvh, var(--phone-height));
 	    background: var(--bg);
 	    overflow: hidden;
+	    overscroll-behavior: none;
 	  }
 
 	  @media (min-width: 768px) {
@@ -128,6 +129,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
   .scroll::-webkit-scrollbar { width: 0; height: 0; }
 

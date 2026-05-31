@@ -1,13 +1,36 @@
 import React from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Icon, LogoMark, StatusBar, goBack } from '../../../shared/components';
+import {
+  getMe,
+  login as loginUser,
+  resetPassword,
+  sendPasswordResetEmail,
+  signUp,
+  verifyEmail,
+  verifyPasswordResetCode,
+} from '../../../shared/api/auth';
 
 // onboarding.jsx — Splash + Login
 
-const PROFILE_STORAGE_KEY = 'dorumdorum:profile';
-
 export function SplashScreen() {
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    let mounted = true;
+
+    getMe()
+      .then(() => {
+        if (mounted) navigate('/home', { replace: true });
+      })
+      .catch(() => {
+        // Stay on the splash screen when no valid login session exists.
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [navigate]);
 
   return (
     <div className="screen" style={{ background: 'var(--brand)', color: 'white', alignItems: 'center', justifyContent: 'center' }}>
@@ -36,6 +59,37 @@ export function SplashScreen() {
 export function LoginScreen() {
   const navigate = useNavigate();
   const [autoLogin, setAutoLogin] = React.useState(true);
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [submitted, setSubmitted] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [errorMessage, setErrorMessage] = React.useState('');
+  const canSubmit = email.trim() && password;
+
+  const handleLogin = async () => {
+    setSubmitted(true);
+    setErrorMessage('');
+
+    if (!canSubmit || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      await loginUser(email.trim(), password);
+      navigate('/home', { replace: true });
+    } catch (error) {
+      setErrorMessage(error?.status ? error.message : '서버에 연결할 수 없어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleKeyDown = (event) => {
+    if (event.key === 'Enter') handleLogin();
+  };
+
+  const inputErrorStyle = (value) => submitted && !value
+    ? { boxShadow: '0 0 0 1.5px #FCA5A5', background: '#FEF2F2' }
+    : {};
 
   return (
     <div className="screen" style={{ background: 'var(--surface)' }}>
@@ -52,12 +106,26 @@ export function LoginScreen() {
       <div style={{ padding: '32px 24px 0', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div>
           <label style={{ display: 'block', fontSize: 13, color: 'var(--ink-3)', marginBottom: 6 }}>학교 이메일</label>
-          <input type="email" style={{ width: '100%', background: 'var(--surface-2)', borderRadius: 14, padding: '14px 16px', fontSize: 16, border: 0, outline: 0, fontFamily: 'inherit', color: 'var(--ink)', fontWeight: 500, boxSizing: 'border-box' }} />
+          <input
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            onKeyDown={handleKeyDown}
+            autoComplete="email"
+            style={{ width: '100%', background: 'var(--surface-2)', borderRadius: 14, padding: '14px 16px', fontSize: 16, border: 0, outline: 0, fontFamily: 'inherit', color: 'var(--ink)', fontWeight: 500, boxSizing: 'border-box', ...inputErrorStyle(email.trim()) }}
+          />
         </div>
 
         <div>
           <label style={{ display: 'block', fontSize: 13, color: 'var(--ink-3)', marginBottom: 6 }}>비밀번호</label>
-          <input type="password" style={{ width: '100%', background: 'var(--surface-2)', borderRadius: 14, padding: '14px 16px', fontSize: 16, border: 0, outline: 0, fontFamily: 'inherit', color: 'var(--ink)', boxSizing: 'border-box' }} />
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            onKeyDown={handleKeyDown}
+            autoComplete="current-password"
+            style={{ width: '100%', background: 'var(--surface-2)', borderRadius: 14, padding: '14px 16px', fontSize: 16, border: 0, outline: 0, fontFamily: 'inherit', color: 'var(--ink)', boxSizing: 'border-box', ...inputErrorStyle(password) }}
+          />
         </div>
 
         <div onClick={() => setAutoLogin(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, fontSize: 13, color: 'var(--ink-2)', cursor: 'pointer', userSelect: 'none' }}>
@@ -66,12 +134,31 @@ export function LoginScreen() {
           </div>
           자동 로그인
         </div>
+
+        {(submitted && !canSubmit) && (
+          <div style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 600 }}>
+            학교 이메일과 비밀번호를 입력해주세요.
+          </div>
+        )}
+
+        {errorMessage && (
+          <div style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 600 }}>
+            {errorMessage}
+          </div>
+        )}
       </div>
 
       <div style={{ flex: 1 }} />
 
       <div style={{ padding: '0 20px 30px' }}>
-        <button onClick={() => navigate('/home')} className="btn full">로그인</button>
+        <button
+          onClick={handleLogin}
+          disabled={isSubmitting}
+          className="btn full"
+          style={{ opacity: isSubmitting ? 0.6 : 1, cursor: isSubmitting ? 'default' : 'pointer' }}
+        >
+          {isSubmitting ? '로그인 중...' : '로그인'}
+        </button>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 18, fontSize: 13, color: 'var(--ink-3)', marginTop: 16 }}>
           <span onClick={() => navigate('/signup')} style={{ cursor: 'pointer' }}>회원가입</span>
           <span style={{ color: 'var(--line-2)' }}>|</span>
@@ -89,28 +176,82 @@ export function SignUpScreen() {
   const isValidEmail = email.toLowerCase().endsWith('@gachon.ac.kr') && email.length > '@gachon.ac.kr'.length;
   const [code, setCode] = React.useState(['','','','','','']);
   const codeRefs = React.useRef([]);
+  const [isSendingCode, setIsSendingCode] = React.useState(false);
+  const [isVerifyingCode, setIsVerifyingCode] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [formMessage, setFormMessage] = React.useState('');
+  const [formMessageTone, setFormMessageTone] = React.useState('error');
 
   const handleCodeChange = (i, val) => {
-    const digit = val.replace(/\D/g, '').slice(-1);
+    const digits = val.replace(/\D/g, '');
+    if (digits.length > 1) {
+      const next = [...code];
+      digits.slice(0, 6 - i).split('').forEach((digit, offset) => {
+        next[i + offset] = digit;
+      });
+      setCode(next);
+      codeRefs.current[Math.min(i + digits.length, 5)]?.focus();
+      return;
+    }
+
+    const digit = digits.slice(-1);
     const next = [...code];
     next[i] = digit;
     setCode(next);
     if (digit && i < 5) codeRefs.current[i + 1]?.focus();
   };
 
+  const handleCodePaste = (i, e) => {
+    const digits = e.clipboardData.getData('text').replace(/\D/g, '');
+    if (digits.length <= 1) return;
+
+    e.preventDefault();
+    handleCodeChange(i, digits);
+  };
+
   const handleCodeKeyDown = (i, e) => {
+    const allowedControlKeys = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+    if (
+      e.key.length === 1
+      && !/^\d$/.test(e.key)
+      && !e.metaKey
+      && !e.ctrlKey
+    ) {
+      e.preventDefault();
+      return;
+    }
+
     if (e.key === 'Backspace' && !code[i] && i > 0) {
       codeRefs.current[i - 1]?.focus();
+    }
+
+    if (!allowedControlKeys.includes(e.key) && e.key.length !== 1) {
+      e.preventDefault();
     }
   };
 
   const [codeStatus, setCodeStatus] = React.useState(null); // null | 'success' | 'error'
-  const CORRECT_CODE = '384000';
 
-  const handleCodeConfirm = () => {
+  const handleCodeConfirm = async () => {
     const entered = code.join('');
-    if (entered === CORRECT_CODE) setCodeStatus('success');
-    else { setCodeStatus('error'); setCode(['','','','','','']); setTimeout(() => codeRefs.current[0]?.focus(), 0); }
+    if (entered.length < 6 || isVerifyingCode) return;
+
+    setIsVerifyingCode(true);
+    setFormMessage('');
+    try {
+      await verifyEmail(email.trim(), entered);
+      setCodeStatus('success');
+      setFormMessageTone('success');
+      setFormMessage('인증번호가 확인됐어요.');
+    } catch (error) {
+      setCodeStatus('error');
+      setFormMessageTone('error');
+      setFormMessage(error?.status ? error.message : '인증번호 확인에 실패했어요. 잠시 후 다시 시도해주세요.');
+      setCode(['','','','','','']);
+      setTimeout(() => codeRefs.current[0]?.focus(), 0);
+    } finally {
+      setIsVerifyingCode(false);
+    }
   };
 
   const [name, setName] = React.useState('');
@@ -139,34 +280,78 @@ export function SignUpScreen() {
     ? { boxShadow: '0 0 0 1.5px #FCA5A5', background: '#FEF2F2' }
     : {};
 
-  const handleSubmit = () => {
+  const toGenderValue = (value) => value === '남성' ? 'MALE' : 'FEMALE';
+  const toBirthFromAge = (value) => {
+    const parsedAge = Number(value);
+    const birthYear = new Date().getFullYear() - parsedAge + 1;
+    return `${birthYear}-01-01`;
+  };
+  const toGradeFromStudentId = (value) => {
+    const admissionYear = value.trim().slice(0, 4);
+    return /^\d{4}$/.test(admissionYear) ? `${admissionYear.slice(2)}학번` : '1학년';
+  };
+
+  const handleSubmit = async () => {
     setSubmitted(true);
-    const ok = codeStatus === 'success' && name && studentId && age && gender && nickname && dept && password && pwConfirm && terms[1] && terms[2];
+    setFormMessage('');
+    const ok = codeStatus === 'success' && name && studentId && age && gender && nickname && dept && password && pwConfirm && password === pwConfirm && terms[1] && terms[2];
     if (!ok) return;
 
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify({
-        displayName: nickname.trim(),
-        accountName: name.trim(),
-        email: email.trim(),
-        department: dept.trim(),
-        studentId: studentId.trim(),
-        age: age.trim(),
-        gender,
-        photo: '',
-      }));
-    }
+    if (isSubmitting) return;
 
-    navigate('/checklist');
+    setIsSubmitting(true);
+    try {
+      await signUp({
+        name: name.trim(),
+        nickname: nickname.trim(),
+        email: email.trim(),
+        password,
+        passwordCheck: pwConfirm,
+        gender: toGenderValue(gender),
+        studentNo: studentId.trim(),
+        major: dept.trim(),
+        grade: toGradeFromStudentId(studentId),
+        birth: toBirthFromAge(age),
+      });
+
+      navigate('/login', { replace: true });
+    } catch (error) {
+      if (error?.code === 'USER002') {
+        alert('이메일 인증이 만료됐어요. 처음부터 다시 진행해주세요.');
+        window.location.reload();
+        return;
+      }
+      setFormMessageTone('error');
+      setFormMessage(error?.status ? error.message : '회원가입에 실패했어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   const [cooldown, setCooldown] = React.useState(null);
   const [requested, setRequested] = React.useState(false);
   const [codeTimer, setCodeTimer] = React.useState(null);
 
-  const startCooldown = () => {
-    setRequested(true);
-    setCooldown(10);
-    setCodeTimer(300);
+  const startCooldown = async () => {
+    if (!isValidEmail || cooldown || isSendingCode) return;
+
+    setIsSendingCode(true);
+    setFormMessage('');
+    try {
+      await sendVerificationEmail(email.trim());
+      setFormMessageTone('success');
+      setFormMessage('인증번호를 이메일로 보냈어요.');
+      setRequested(true);
+      setCooldown(10);
+      setCodeTimer(300);
+      setCodeStatus(null);
+      setCode(['','','','','','']);
+      setTimeout(() => codeRefs.current[0]?.focus(), 0);
+    } catch (error) {
+      setFormMessageTone('error');
+      setFormMessage(error?.status ? error.message : '인증 메일 전송에 실패했어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsSendingCode(false);
+    }
   };
 
   React.useEffect(() => {
@@ -210,16 +395,16 @@ export function SignUpScreen() {
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="학교 이메일" readOnly={requested} style={{ flex: 1, background: requested ? 'var(--surface-2)' : 'var(--surface-2)', borderRadius: 12, padding: '12px 14px', fontSize: 14, border: 0, outline: 0, fontFamily: 'inherit', color: requested ? 'var(--ink-3)' : 'var(--ink)', fontWeight: 500, minWidth: 0 }} />
               <button
                 onClick={startCooldown}
-                disabled={!isValidEmail || !!cooldown}
+                disabled={!isValidEmail || !!cooldown || isSendingCode}
                 style={{
                   padding: '0 14px',
-                  background: isValidEmail && !cooldown ? 'var(--ink)' : 'var(--surface-2)',
-                  color: isValidEmail && !cooldown ? 'white' : 'var(--ink-4)',
+                  background: isValidEmail && !cooldown && !isSendingCode ? 'var(--ink)' : 'var(--surface-2)',
+                  color: isValidEmail && !cooldown && !isSendingCode ? 'white' : 'var(--ink-4)',
                   border: 0, borderRadius: 12,
                   fontSize: 13, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap',
-                  cursor: isValidEmail && !cooldown ? 'pointer' : 'default', minWidth: 72, transition: 'background .2s',
+                  cursor: isValidEmail && !cooldown && !isSendingCode ? 'pointer' : 'default', minWidth: 72, transition: 'background .2s',
                 }}
-              >{cooldown ? `${cooldown}초` : requested ? '재전송' : '인증요청'}</button>
+              >{isSendingCode ? '전송중' : cooldown ? `${cooldown}초` : requested ? '재전송' : '인증요청'}</button>
             </div>
           </div>
 
@@ -238,9 +423,10 @@ export function SignUpScreen() {
                   inputMode="numeric"
                   maxLength={1}
                   value={digit}
-                  disabled={codeStatus === 'success'}
+                  disabled={codeStatus === 'success' || isVerifyingCode}
                   onChange={e => { setCodeStatus(null); handleCodeChange(i, e.target.value); }}
                   onKeyDown={e => handleCodeKeyDown(i, e)}
+                  onPaste={e => handleCodePaste(i, e)}
                   style={{
                     flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 700,
                     background: 'var(--surface)',
@@ -266,9 +452,9 @@ export function SignUpScreen() {
                 <button
                   type="button"
                   onClick={handleCodeConfirm}
-                  disabled={code.join('').length < 6}
-                  style={{ background: 'none', border: 0, padding: 0, fontSize: 11, color: code.join('').length < 6 ? 'var(--ink-4)' : 'var(--brand)', fontWeight: 700, fontFamily: 'inherit', cursor: code.join('').length < 6 ? 'default' : 'pointer', flexShrink: 0 }}
-                >확인</button>
+                  disabled={code.join('').length < 6 || isVerifyingCode}
+                  style={{ background: 'none', border: 0, padding: 0, fontSize: 11, color: code.join('').length < 6 || isVerifyingCode ? 'var(--ink-4)' : 'var(--brand)', fontWeight: 700, fontFamily: 'inherit', cursor: code.join('').length < 6 || isVerifyingCode ? 'default' : 'pointer', flexShrink: 0 }}
+                >{isVerifyingCode ? '확인중' : '확인'}</button>
               )}
             </div>
           </div>
@@ -328,9 +514,10 @@ export function SignUpScreen() {
           <div>
             <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>
               <span>비밀번호 확인 <span style={{ color: 'var(--brand)' }}>*</span></span>
-              {pwConfirm && <span style={{ color: 'var(--success)', fontWeight: 700 }}>✓ 일치해요</span>}
+              {pwConfirm && password === pwConfirm && <span style={{ color: 'var(--success)', fontWeight: 700 }}>✓ 일치해요</span>}
+              {pwConfirm && password !== pwConfirm && <span style={{ color: 'var(--danger)', fontWeight: 700 }}>일치하지 않아요</span>}
             </label>
-            <input type="password" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} style={{ width: '100%', background: 'var(--surface-2)', borderRadius: 12, padding: '12px 14px', fontSize: 14, outline: 0, fontFamily: 'inherit', boxSizing: 'border-box', ...err(pwConfirm) }} />
+            <input type="password" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} style={{ width: '100%', background: 'var(--surface-2)', borderRadius: 12, padding: '12px 14px', fontSize: 14, outline: 0, fontFamily: 'inherit', boxSizing: 'border-box', ...err(pwConfirm), ...(submitted && pwConfirm && password !== pwConfirm ? { boxShadow: '0 0 0 1.5px #FCA5A5', background: '#FEF2F2' } : {}) }} />
           </div>
 
           <div style={{ height: 1, background: 'var(--line)', margin: '2px 0' }} />
@@ -366,13 +553,25 @@ export function SignUpScreen() {
               </div>
             );})}
           </div>
+          {formMessage && (
+            <div style={{ fontSize: 12, color: formMessageTone === 'success' ? 'var(--success)' : 'var(--danger)', fontWeight: 700, lineHeight: 1.5 }}>
+              {formMessage}
+            </div>
+          )}
         </div>
 
         <div style={{ height: 100 }} />
       </div>
 
       <div style={{ padding: '14px 20px 30px', borderTop: '1px solid var(--line)', background: 'var(--surface)' }}>
-        <button onClick={handleSubmit} className="btn full" style={{ height: 52 }}>가입하고 시작하기</button>
+        <button
+          onClick={handleSubmit}
+          disabled={isSubmitting}
+          className="btn full"
+          style={{ height: 52, opacity: isSubmitting ? 0.6 : 1, cursor: isSubmitting ? 'default' : 'pointer' }}
+        >
+          {isSubmitting ? '가입 중...' : '가입하고 시작하기'}
+        </button>
       </div>
     </div>);
 
@@ -385,7 +584,6 @@ export function FindPasswordScreen() {
   const isChangeMode = location.state?.mode === 'change-password';
   const backTo = location.state?.backTo || '/login';
   const doneTo = location.state?.doneTo || '/login';
-  const [step, setStep] = React.useState('email'); // 'email' | 'reset'
 
   const [email, setEmail] = React.useState('');
   const isValidEmail = email.toLowerCase().endsWith('@gachon.ac.kr') && email.length > '@gachon.ac.kr'.length;
@@ -396,27 +594,75 @@ export function FindPasswordScreen() {
   const [code, setCode] = React.useState(['','','','','','']);
   const codeRefs = React.useRef([]);
   const [codeStatus, setCodeStatus] = React.useState(null);
-  const CORRECT_CODE = '384000';
+  const [codeLoading, setCodeLoading] = React.useState(false);
+  const [sendError, setSendError] = React.useState(null);
 
   const handleCodeChange = (i, val) => {
-    const digit = val.replace(/\D/g, '').slice(-1);
+    const digits = val.replace(/\D/g, '');
+    if (digits.length > 1) {
+      const next = [...code];
+      digits.slice(0, 6 - i).split('').forEach((digit, offset) => {
+        next[i + offset] = digit;
+      });
+      setCode(next);
+      codeRefs.current[Math.min(i + digits.length, 5)]?.focus();
+      return;
+    }
+
+    const digit = digits.slice(-1);
     const next = [...code];
     next[i] = digit;
     setCode(next);
     if (digit && i < 5) codeRefs.current[i + 1]?.focus();
   };
-  const handleCodeKeyDown = (i, e) => {
-    if (e.key === 'Backspace' && !code[i] && i > 0) codeRefs.current[i - 1]?.focus();
-  };
-  const handleCodeConfirm = () => {
-    if (code.join('') === CORRECT_CODE) { setCodeStatus('success'); setStep('reset'); }
-    else { setCodeStatus('error'); setCode(['','','','','','']); setTimeout(() => codeRefs.current[0]?.focus(), 0); }
+
+  const handleCodePaste = (i, e) => {
+    const digits = e.clipboardData.getData('text').replace(/\D/g, '');
+    if (digits.length <= 1) return;
+
+    e.preventDefault();
+    handleCodeChange(i, digits);
   };
 
-  const startCooldown = () => {
-    setRequested(true);
-    setCooldown(10);
-    setCodeTimer(300);
+  const handleCodeKeyDown = (i, e) => {
+    const allowedControlKeys = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+    if (e.key.length === 1 && !/^\d$/.test(e.key) && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      return;
+    }
+
+    if (e.key === 'Backspace' && !code[i] && i > 0) {
+      codeRefs.current[i - 1]?.focus();
+    }
+
+    if (!allowedControlKeys.includes(e.key) && e.key.length !== 1) {
+      e.preventDefault();
+    }
+  };
+  const handleCodeConfirm = async () => {
+    setCodeLoading(true);
+    try {
+      await verifyPasswordResetCode(email.trim(), code.join(''));
+      setCodeStatus('success');
+    } catch {
+      setCodeStatus('error');
+      setCode(['','','','','','']);
+      setTimeout(() => codeRefs.current[0]?.focus(), 0);
+    } finally {
+      setCodeLoading(false);
+    }
+  };
+
+  const startCooldown = async () => {
+    setSendError(null);
+    try {
+      await sendPasswordResetEmail(email.trim());
+      setRequested(true);
+      setCooldown(10);
+      setCodeTimer(300);
+    } catch (e) {
+      setSendError(e?.message || '인증번호 전송에 실패했어요.');
+    }
   };
   React.useEffect(() => {
     if (!cooldown) return;
@@ -433,11 +679,23 @@ export function FindPasswordScreen() {
   const [password, setPassword] = React.useState('');
   const [pwConfirm, setPwConfirm] = React.useState('');
   const [submitted, setSubmitted] = React.useState(false);
+  const [resetLoading, setResetLoading] = React.useState(false);
+  const [resetError, setResetError] = React.useState(null);
   const err = (v) => submitted && !v ? { boxShadow: '0 0 0 1.5px #FCA5A5', background: '#FEF2F2' } : {};
 
-  const handleReset = () => {
+  const handleReset = async () => {
     setSubmitted(true);
-    if (password && pwConfirm) navigate(doneTo);
+    if (!password || !pwConfirm) return;
+    setResetError(null);
+    setResetLoading(true);
+    try {
+      await resetPassword(email.trim(), password);
+      navigate(doneTo, { replace: true });
+    } catch (e) {
+      setResetError(e?.message || '비밀번호 변경에 실패했어요.');
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   const inputBase = { width: '100%', background: 'var(--surface-2)', borderRadius: 12, padding: '12px 14px', fontSize: 14, outline: 0, fontFamily: 'inherit', fontWeight: 500, boxSizing: 'border-box' };
@@ -452,72 +710,76 @@ export function FindPasswordScreen() {
       </div>
 
       <div className="scroll" style={{ padding: '16px 24px 0' }}>
-        {step === 'email' ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <p style={{ margin: '0 0 18px', fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.6 }}>
-                {isChangeMode ? '계정 확인을 위해 학교 이메일로' : '가입 시 사용한 학교 이메일로'}<br />인증번호를 보내드릴게요.
-              </p>
-              <label style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>학교 이메일 <span style={{ color: 'var(--brand)' }}>*</span></label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="학교 이메일" readOnly={requested} style={{ ...inputBase, flex: 1, minWidth: 0, color: requested ? 'var(--ink-3)' : 'var(--ink)' }} />
-                <button
-                  onClick={startCooldown}
-                  disabled={!isValidEmail || !!cooldown}
-                  style={{ padding: '0 14px', background: isValidEmail && !cooldown ? 'var(--ink)' : 'var(--surface-2)', color: isValidEmail && !cooldown ? 'white' : 'var(--ink-4)', border: 0, borderRadius: 12, fontSize: 13, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap', cursor: isValidEmail && !cooldown ? 'pointer' : 'default', minWidth: 72, transition: 'background .2s' }}
-                >{cooldown ? `${cooldown}초` : requested ? '재전송' : '인증요청'}</button>
-              </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <p style={{ margin: '0 0 18px', fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.6 }}>
+              {isChangeMode ? '계정 확인을 위해 학교 이메일로' : '가입 시 사용한 학교 이메일로'}<br />인증번호를 보내드릴게요.
+            </p>
+            <label style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>학교 이메일 <span style={{ color: 'var(--brand)' }}>*</span></label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="학교 이메일" readOnly={requested} style={{ ...inputBase, flex: 1, minWidth: 0, color: requested ? 'var(--ink-3)' : 'var(--ink)' }} />
+              <button
+                onClick={startCooldown}
+                disabled={!isValidEmail || !!cooldown || codeStatus === 'success'}
+                style={{ padding: '0 14px', background: isValidEmail && !cooldown && codeStatus !== 'success' ? 'var(--ink)' : 'var(--surface-2)', color: isValidEmail && !cooldown && codeStatus !== 'success' ? 'white' : 'var(--ink-4)', border: 0, borderRadius: 12, fontSize: 13, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap', cursor: isValidEmail && !cooldown && codeStatus !== 'success' ? 'pointer' : 'default', minWidth: 72, transition: 'background .2s' }}
+              >{cooldown ? `${cooldown}초` : requested ? '재전송' : '인증요청'}</button>
             </div>
+            {sendError && <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4, fontWeight: 600 }}>{sendError}</div>}
+          </div>
 
-            <div>
-              <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-3)', marginBottom: 8, fontWeight: 600 }}>
-                <span>인증번호 <span style={{ color: 'var(--brand)' }}>*</span></span>
-                <span style={{ color: codeTimer ? 'var(--brand)' : 'var(--ink-4)', fontWeight: 700 }}>{codeTimer ? fmtTimer(codeTimer) : '05 : 00'}</span>
-              </label>
-              <div style={{ display: 'flex', gap: 7 }}>
-                {code.map((digit, i) => (
-                  <input key={i} ref={el => codeRefs.current[i] = el} type="text" inputMode="numeric" maxLength={1} value={digit}
-                    disabled={codeStatus === 'success'}
-                    onChange={e => { setCodeStatus(null); handleCodeChange(i, e.target.value); }}
-                    onKeyDown={e => handleCodeKeyDown(i, e)}
-                    style={{ flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 700, background: 'var(--surface)', border: codeStatus === 'error' ? '1.5px solid var(--danger)' : digit ? '1.5px solid var(--brand)' : '1.5px solid var(--line-2)', borderRadius: 12, padding: '14px 0', outline: 0, fontFamily: 'inherit', color: 'var(--ink)', minWidth: 0 }}
-                  />
-                ))}
+          <div>
+            <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-3)', marginBottom: 8, fontWeight: 600 }}>
+              <span>인증번호 <span style={{ color: 'var(--brand)' }}>*</span></span>
+              <span style={{ color: codeTimer ? 'var(--brand)' : 'var(--ink-4)', fontWeight: 700 }}>{codeTimer ? fmtTimer(codeTimer) : '05 : 00'}</span>
+            </label>
+            <div style={{ display: 'flex', gap: 7 }}>
+              {code.map((digit, i) => (
+                <input key={i} ref={el => codeRefs.current[i] = el} type="text" inputMode="numeric" maxLength={1} value={digit}
+                  disabled={codeStatus === 'success'}
+                  onChange={e => { setCodeStatus(null); handleCodeChange(i, e.target.value); }}
+                  onKeyDown={e => handleCodeKeyDown(i, e)}
+                  onPaste={e => handleCodePaste(i, e)}
+                  style={{ flex: 1, textAlign: 'center', fontSize: 20, fontWeight: 700, background: 'var(--surface)', border: codeStatus === 'error' ? '1.5px solid var(--danger)' : codeStatus === 'success' ? '1.5px solid var(--success)' : digit ? '1.5px solid var(--brand)' : '1.5px solid var(--line-2)', borderRadius: 12, padding: '14px 0', outline: 0, fontFamily: 'inherit', color: 'var(--ink)', minWidth: 0 }}
+                />
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+              <div style={{ fontSize: 11, color: codeStatus === 'error' ? 'var(--danger)' : codeStatus === 'success' ? 'var(--success)' : 'var(--ink-3)', fontWeight: codeStatus ? 600 : 400 }}>
+                {codeStatus === 'error' ? '인증번호가 일치하지 않아요' : codeStatus === 'success' ? '인증이 완료됐어요' : '이메일로 받은 6자리 숫자를 입력해주세요'}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
-                <div style={{ fontSize: 11, color: codeStatus === 'error' ? 'var(--danger)' : 'var(--ink-3)', fontWeight: codeStatus ? 600 : 400 }}>
-                  {codeStatus === 'error' ? '인증번호가 일치하지 않아요' : '이메일로 받은 6자리 숫자를 입력해주세요'}
-                </div>
-                <button type="button" onClick={handleCodeConfirm} disabled={code.join('').length < 6}
-                  style={{ background: 'none', border: 0, padding: 0, fontSize: 11, color: code.join('').length < 6 ? 'var(--ink-4)' : 'var(--brand)', fontWeight: 700, fontFamily: 'inherit', cursor: code.join('').length < 6 ? 'default' : 'pointer', flexShrink: 0 }}
-                >확인</button>
-              </div>
+              {codeStatus !== 'success' && (
+                <button type="button" onClick={handleCodeConfirm} disabled={code.join('').length < 6 || codeLoading}
+                  style={{ background: 'none', border: 0, padding: 0, fontSize: 11, color: code.join('').length < 6 || codeLoading ? 'var(--ink-4)' : 'var(--brand)', fontWeight: 700, fontFamily: 'inherit', cursor: code.join('').length < 6 || codeLoading ? 'default' : 'pointer', flexShrink: 0 }}
+                >{codeLoading ? '확인 중...' : '확인'}</button>
+              )}
             </div>
           </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <p style={{ margin: '0 0 4px', fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.6 }}>새로운 비밀번호를 설정해주세요.</p>
-            <div>
-              <label style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>새 비밀번호 <span style={{ color: 'var(--brand)' }}>*</span></label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ ...inputBase, ...err(password) }} />
-              <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>영문 + 숫자 포함 8자 이상</div>
-            </div>
-            <div>
-              <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>
-                <span>새 비밀번호 확인 <span style={{ color: 'var(--brand)' }}>*</span></span>
-                {pwConfirm && <span style={{ color: 'var(--success)', fontWeight: 700 }}>✓ 일치해요</span>}
-              </label>
-              <input type="password" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} style={{ ...inputBase, ...err(pwConfirm) }} />
-            </div>
-          </div>
-        )}
+
+          {codeStatus === 'success' && (
+            <>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>새 비밀번호 <span style={{ color: 'var(--brand)' }}>*</span></label>
+                <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ ...inputBase, ...err(password) }} />
+                <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>영문 + 숫자 포함 8자 이상</div>
+              </div>
+              <div>
+                <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>
+                  <span>새 비밀번호 확인 <span style={{ color: 'var(--brand)' }}>*</span></span>
+                  {pwConfirm && password === pwConfirm && <span style={{ color: 'var(--success)', fontWeight: 700 }}>✓ 일치해요</span>}
+                </label>
+                <input type="password" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} style={{ ...inputBase, ...err(pwConfirm) }} />
+              </div>
+              {resetError && <div style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 600 }}>{resetError}</div>}
+            </>
+          )}
+        </div>
         <div style={{ height: 100 }} />
       </div>
 
       <div style={{ padding: '14px 20px 30px', borderTop: '1px solid var(--line)', background: 'var(--surface)' }}>
-        {step === 'email'
-          ? <button onClick={() => requested && setStep('reset')} className="btn full" style={{ height: 52, opacity: requested ? 1 : 0.4 }}>다음</button>
-          : <button onClick={handleReset} className="btn full" style={{ height: 52 }}>비밀번호 변경하기</button>
+        {codeStatus === 'success'
+          ? <button onClick={handleReset} disabled={resetLoading} className="btn full" style={{ height: 52 }}>{resetLoading ? '변경 중...' : '비밀번호 변경하기'}</button>
+          : <button disabled className="btn full" style={{ height: 52, opacity: 0.4 }}>다음</button>
         }
       </div>
     </div>
