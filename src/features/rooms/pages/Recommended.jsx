@@ -112,11 +112,15 @@ export function RecommendedRoomsScreen() {
   const navigate = useNavigate();
   const [filter, setFilter] = React.useState('all');
   const [rooms, setRooms] = React.useState([]);
+  const [hasChecklist, setHasChecklist] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
     loadRecommendedRooms()
-      .then(items => setRooms(items.map(normalizeRecommended)))
+      .then(res => {
+        setHasChecklist(res.hasChecklist);
+        setRooms(res.hasChecklist ? res.items.map(normalizeRecommended) : []);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -141,50 +145,79 @@ export function RecommendedRoomsScreen() {
         <div style={{ padding: '4px 4px 14px' }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--brand)', letterSpacing: '0.5px' }}>FOR YOU</div>
           <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.5px', marginTop: 4, lineHeight: 1.25 }}>
-            나와 잘 맞는 방<br/>
-            <span style={{ color: 'var(--brand)' }}>
-              {loading ? '...' : `${rooms.length}곳`}
-            </span>
+            나와 잘 맞는 방
+            {(loading || hasChecklist) && (
+              <><br/><span style={{ color: 'var(--brand)' }}>{loading ? '...' : `${rooms.length}곳`}</span></>
+            )}
           </div>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6 }}>
-            내 체크리스트 항목을 기준으로 추천했어요
+            {hasChecklist ? '내 체크리스트 항목을 기준으로 추천했어요' : '체크리스트를 작성하면 추천해드려요'}
           </div>
         </div>
 
-        {/* My checklist reference card */}
-        <div onClick={() => navigate('/checklist')} style={{ background: 'var(--ink)', color: 'white', borderRadius: 14, padding: '12px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-          <div style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(255,255,255,0.08)', color: 'var(--brand)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon.clipboard size={16}/>
+        {!loading && hasChecklist && (<>
+          {/* My checklist reference card */}
+          <div onClick={() => navigate('/checklist')} style={{ background: 'var(--ink)', color: 'white', borderRadius: 14, padding: '12px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <div style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(255,255,255,0.08)', color: 'var(--brand)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon.clipboard size={16}/>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>내 체크리스트 기준</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginTop: 2 }}>생활 패턴 · 추가 규칙</div>
+            </div>
+            <span style={{ fontSize: 12, color: 'var(--brand)', fontWeight: 700 }}>수정</span>
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>내 체크리스트 기준</div>
-            <div style={{ fontSize: 13, fontWeight: 700, marginTop: 2 }}>생활 패턴 · 추가 규칙</div>
-          </div>
-          <span style={{ fontSize: 12, color: 'var(--brand)', fontWeight: 700 }}>수정</span>
-        </div>
 
-        {/* Filter + sort row */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 4px 12px' }}>
-          <div style={{ display: 'flex', background: 'var(--surface-2)', borderRadius: 10, padding: 3, gap: 2 }}>
-            {[{ v: 'all', l: '전체' }, { v: 'strong', l: '잘 맞아요' }, { v: 'ok', l: '괜찮아요' }].map(({ v, l }) => (
-              <span key={v} onClick={() => setFilter(v)} style={{
-                fontSize: 12, fontWeight: 600, padding: '5px 11px', borderRadius: 8, cursor: 'pointer',
-                background: filter === v ? 'var(--surface)' : 'transparent',
-                color: filter === v ? 'var(--ink)' : 'var(--ink-3)',
-                boxShadow: filter === v ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
-                transition: 'all .15s',
-              }}>{l}</span>
-            ))}
+          {/* Filter + sort row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 4px 12px' }}>
+            <div style={{ display: 'flex', background: 'var(--surface-2)', borderRadius: 10, padding: 3, gap: 2 }}>
+              {[{ v: 'all', l: '전체' }, { v: 'strong', l: '잘 맞아요' }, { v: 'ok', l: '괜찮아요' }].map(({ v, l }) => (
+                <span key={v} onClick={() => setFilter(v)} style={{
+                  fontSize: 12, fontWeight: 600, padding: '5px 11px', borderRadius: 8, cursor: 'pointer',
+                  background: filter === v ? 'var(--surface)' : 'transparent',
+                  color: filter === v ? 'var(--ink)' : 'var(--ink-3)',
+                  boxShadow: filter === v ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                  transition: 'all .15s',
+                }}>{l}</span>
+              ))}
+            </div>
+            <span style={{ fontSize: 12, color: 'var(--ink-2)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 2 }}>
+              매칭순 <Icon.chevron size={12}/>
+            </span>
           </div>
-          <span style={{ fontSize: 12, color: 'var(--ink-2)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 2 }}>
-            매칭순 <Icon.chevron size={12}/>
-          </span>
-        </div>
+        </>)}
 
         {loading && (
           <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-3)', fontSize: 14 }}>불러오는 중...</div>
         )}
-        {!loading && filtered.length === 0 && (
+        {!loading && !hasChecklist && (
+          <div style={{ padding: '32px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 0 }}>
+            <div style={{ width: 72, height: 72, borderRadius: 22, background: 'var(--brand-soft)', color: 'var(--brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
+              <Icon.clipboard size={32}/>
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.4px', color: 'var(--ink)', marginBottom: 10 }}>
+              아직 체크리스트가 없어요
+            </div>
+            <div style={{ fontSize: 14, color: 'var(--ink-3)', lineHeight: 1.65, marginBottom: 28 }}>
+              생활 패턴을 입력하면<br/>나와 잘 맞는 룸메이트를 찾을 수 있어요
+            </div>
+            <button
+              onClick={() => navigate('/checklist')}
+              className="btn full"
+              style={{ width: '100%', height: 52 }}
+            >
+              체크리스트 작성하기
+            </button>
+            <button
+              onClick={() => navigate('/rooms/find/filter')}
+              className="btn ghost"
+              style={{ width: '100%', height: 52, marginTop: 8, background: 'white' }}
+            >
+              조건으로 직접 찾기
+            </button>
+          </div>
+        )}
+        {!loading && hasChecklist && filtered.length === 0 && (
           <div className="card" style={{ padding: 22, textAlign: 'center', color: 'var(--ink-3)', fontSize: 14, fontWeight: 600 }}>
             조건에 맞는 방이 없어요
           </div>

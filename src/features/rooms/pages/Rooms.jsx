@@ -512,6 +512,31 @@ const ROOM_TYPE_CAPACITIES = {
 
 const ALL_CAPACITIES = [1, 2, 3, 4];
 
+const CHECKLIST_FILTER_LABELS = {
+  returnHome: '귀가', cleaning: '청소', phoneCall: '방에서 전화',
+  sleepLight: '잠귀', sleepHabit: '잠버릇', snoring: '코골이',
+  showerTime: '샤워시간', eating: '방에서 취식', lightsOut: '소등',
+  homeVisit: '본가 주기', smoking: '흡연', refrigerator: '냉장고',
+  alarm: '알람', earphone: '이어폰', keyskin: '키스킨',
+  heat: '더위', cold: '추위', study: '공부', trashCan: '쓰레기통',
+  bedtime: '취침', wakeUp: '기상', hairDryer: '드라이기',
+};
+
+const ENUM_LABELS = {
+  FLEXIBLE: '유동적', FIXED: '고정적', REGULAR: '주기적', IRREGULAR: '비주기적',
+  ALLOWED: '가능', NOT_ALLOWED: '불가능', ALLOWED_WITH_VENTILATION: '환기필수',
+  BRIGHT: '밝음', DARK: '어두움', SEVERE: '심함', MODERATE: '중간',
+  MILD: '약함', MILD_OR_NONE: '약함~없음', MORNING: '아침', EVENING: '저녁',
+  AFTER_TIME: '시간 지정', WHEN_ONE_SLEEPS: '한명 잘 때',
+  WEEKLY: '매주', BIWEEKLY: '2주', MONTHLY_OR_MORE: '한달이상',
+  NON_SMOKER: '비흡연만', RENT_PURCHASE_OWN: '대여·구매·보유',
+  DECIDE_AFTER_DISCUSSION: '협의 후 결정', NOT_NEEDED: '필요 없음',
+  VIBRATION: '진동', SOUND: '소리', ALWAYS: '항상',
+  VERY_SENSITIVE: '많이 탐', LESS_SENSITIVE: '적게 탐',
+  OUTSIDE_DORM: '기숙사 밖', INSIDE_DORM: '기숙사 안',
+  INDIVIDUAL: '개별', SHARED: '공유',
+};
+
 const toSortType = (sortBy) => sortBy === 'openSeats' ? 'REMAINING' : 'LATEST';
 
 const appendUniqueRooms = (currentRooms, nextRooms) => {
@@ -538,6 +563,8 @@ const normalizeRoom = (r) => ({
 
 export function FindRoomScreen({ activeTab='find' }) {
   const navigate = useNavigate();
+  const { state } = useLocation();
+  const [checklistFilter] = React.useState(() => state?.checklistFilter || {});
   const [sortBy, setSortBy] = React.useState('latest');
   const [roomTypeFilter, setRoomTypeFilter] = React.useState('전체');
   const [capacityFilter, setCapacityFilter] = React.useState('전체');
@@ -579,7 +606,7 @@ export function FindRoomScreen({ activeTab='find' }) {
 
   React.useEffect(() => {
     loadRecommendedRooms()
-      .then((items) => setRecommendedCount(Array.isArray(items) ? items.length : 0))
+      .then((res) => setRecommendedCount(res.hasChecklist ? res.items.length : -1))
       .catch(() => {});
   }, []);
 
@@ -593,6 +620,7 @@ export function FindRoomScreen({ activeTab='find' }) {
     setHasNext(false);
     setTotalCount(null);
     findRooms({
+      ...checklistFilter,
       sortType: toSortType(sortBy),
       roomType: roomTypeFilter === '전체' ? null : roomTypeFilter,
       capacity: capacityFilter === '전체' ? null : capacityFilter,
@@ -627,6 +655,7 @@ export function FindRoomScreen({ activeTab='find' }) {
       requested = true;
       setLoadingMore(true);
       findRooms({
+        ...checklistFilter,
         sortType: toSortType(sortBy),
         roomType: roomTypeFilter === '전체' ? null : roomTypeFilter,
         capacity: capacityFilter === '전체' ? null : capacityFilter,
@@ -685,7 +714,7 @@ export function FindRoomScreen({ activeTab='find' }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', borderRadius: 14, padding: '12px 14px' }}>
             <Icon.search size={20} weight={1.8}/>
             <input type="text" placeholder="방 제목, 방장 닉네임으로 검색" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 14, fontFamily: 'inherit', color: 'var(--ink)', minWidth: 0 }} />
-            <button onClick={() => navigate('/rooms/find/filter')} aria-label="체크리스트로 찾기" style={{ background: 'transparent', border: 0, color: 'var(--ink-2)', padding: 0, display: 'flex', cursor: 'pointer' }}><Icon.filter/></button>
+            <button onClick={() => navigate('/rooms/find/filter', { state: { checklistFilter } })} aria-label="체크리스트로 찾기" style={{ background: 'transparent', border: 0, color: 'var(--ink-2)', padding: 0, display: 'flex', cursor: 'pointer' }}><Icon.filter/></button>
           </div>
         </div>
 
@@ -699,6 +728,20 @@ export function FindRoomScreen({ activeTab='find' }) {
           ))}
         </div>
 
+        {Object.keys(checklistFilter).length > 0 && (
+          <div style={{ padding: '0 16px 8px', display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <button onClick={() => navigate('/rooms/find/filter', { state: { checklistFilter } })} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 999, border: '1.5px solid var(--brand)', background: 'var(--brand-soft)', color: 'var(--brand-deep)', fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit' }}>
+              <Icon.filter size={12}/> 필터 수정
+            </button>
+            {Object.entries(checklistFilter).map(([key, value]) => (
+              <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '5px 10px', borderRadius: 999, background: 'var(--ink)', color: 'white', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                <span style={{ opacity: 0.6 }}>{CHECKLIST_FILTER_LABELS[key]}</span>
+                <span>{ENUM_LABELS[value] || value}</span>
+              </span>
+            ))}
+          </div>
+        )}
+
         <div style={{ padding: '8px 16px 16px' }}>
           {/* Match summary banner */}
           <div onClick={() => navigate('/rooms/find/recommended')} style={{ background: 'var(--brand-soft)', borderRadius: 14, padding: '14px 16px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
@@ -707,7 +750,7 @@ export function FindRoomScreen({ activeTab='find' }) {
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-deep)' }}>
-                {recommendedCount === null ? '나와 잘 맞는 방 확인하기' : `나와 잘 맞는 방 ${recommendedCount}곳`}
+                {recommendedCount === null ? '나와 잘 맞는 방 확인하기' : recommendedCount === -1 ? '체크리스트를 작성하면 추천해드려요' : `나와 잘 맞는 방 ${recommendedCount}곳`}
               </div>
               <div style={{ fontSize: 12, color: 'var(--brand-deep)', opacity: 0.75, marginTop: 2 }}>내 체크리스트 기반으로 추천했어요</div>
             </div>
@@ -877,15 +920,15 @@ export function RoomDetailScreen() {
           if (filledItems.length === 0) {
             return (
               <div style={{ margin: '0 16px 16px' }}>
-                <div className="card" onClick={() => navigate('/checklist')} style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 14, background: 'var(--surface-2)', cursor: 'pointer' }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--line-2)', color: 'var(--ink-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <div className="card" onClick={() => navigate('/checklist')} style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 14, background: 'var(--brand-soft)', cursor: 'pointer' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--brand)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Icon.clipboard size={20}/>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-2)' }}>내 체크리스트를 작성해보세요</div>
-                    <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>작성하면 이 방과 얼마나 맞는지 알 수 있어요</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--brand-deep)' }}>내 체크리스트를 작성해보세요</div>
+                    <div style={{ fontSize: 12, color: 'var(--brand-deep)', opacity: 0.75, marginTop: 3 }}>작성하면 이 방과 얼마나 맞는지 알 수 있어요</div>
                   </div>
-                  <Icon.chevron size={14}/>
+                  <Icon.chevron size={14} style={{ color: 'var(--brand-deep)' }}/>
                 </div>
               </div>
             );
