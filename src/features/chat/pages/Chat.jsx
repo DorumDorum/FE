@@ -68,7 +68,40 @@ export function ChatListScreen({ activeTab='chat' }) {
         {loading && <div style={{ padding: '24px 16px', color: 'var(--ink-3)', fontSize: 13 }}>불러오는 중…</div>}
         {error && <div style={{ padding: '24px 16px', color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
         {!loading && !error && visibleRooms.length === 0 && (
-          <div style={{ padding: '24px 16px', color: 'var(--ink-3)', fontSize: 13 }}>채팅방이 없어요.</div>
+          <div style={{ padding: '42px 24px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+            <div style={{ width: 72, height: 72, borderRadius: 22, background: 'var(--surface-2)', color: 'var(--ink-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18, position: 'relative' }}>
+              <Icon.chat size={32} weight={1.9} />
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.2px' }}>
+              룸메이트 모집을 통해 채팅방을 만들어보세요.
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.5, marginTop: 7 }}>
+              모집방을 만들거나 입주 신청을 하면 대화를 시작할 수 있어요.
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/rooms/create/1')}
+              style={{
+                marginTop: 20,
+                height: 48,
+                padding: '0 17px',
+                borderRadius: 24,
+                border: 0,
+                background: 'var(--ink)',
+                color: 'white',
+                fontFamily: 'inherit',
+                fontSize: 14,
+                fontWeight: 800,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: 'pointer',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
+              }}
+            >
+              <Icon.plus size={18} /> 모집방 만들기
+            </button>
+          </div>
         )}
 
         {!loading && !error && visibleRooms.length > 0 && (
