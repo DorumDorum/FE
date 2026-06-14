@@ -2,8 +2,8 @@ export {
   ChatListScreen,
   ChatDetailScreen,
   ChatBubble,
+  ChatMessageItem,
   ChatComposer,
-  ChatAttachmentCard,
   formatChatTime,
 } from './pages/Chat.jsx';
 

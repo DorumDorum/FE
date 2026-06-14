@@ -1,8 +1,11 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Icon, StatusBar, Avatar, goBack } from '../../../shared/components';
-import { logout as logoutUser } from '../../../shared/api/auth';
-import { ChatBubble, ChatComposer, ChatAttachmentCard } from '../../chat';
+import { logout as logoutUser, getCachedUserNo } from '../../../shared/api/auth';
+import { ChatMessageItem, ChatComposer } from '../../chat';
+import { getOrCreateDirectChatRoom, loadChatMessages, markChatRoomRead, leaveChatRoom } from '../../../shared/api/chat';
+import { subscribe, publish } from '../../../shared/api/chatSocket';
+import { applyReadReceipt, appendMessage } from '../../chat/unreadSync';
 
 // details.jsx — Detail screens for each tab
 
@@ -813,6 +816,12 @@ export function CreateRoomScreen() {
 export function ApplicantDetailScreen() {
   const navigate = useNavigate();
   const [confirmAction, setConfirmAction] = React.useState(null);
+  // roomNo / applicantUserNo는 이 화면이 서버 데이터를 보유하게 되면 채운다 (방/신청 도메인 연동 계획으로 이관).
+  const openDirectChat = (roomNo, applicantUserNo) => {
+    getOrCreateDirectChatRoom(roomNo, applicantUserNo)
+      .then((chatRoomNo) => navigate('/chat/dm/' + chatRoomNo))
+      .catch((e) => alert(e?.message || '채팅방을 열 수 없어요.'));
+  };
   const ITEMS = [
   { cat: '생활 패턴', rows: [
     { q: '취침', room: '23시 – 01시', other: '23시 – 01시', match: true },
@@ -915,7 +924,7 @@ export function ApplicantDetailScreen() {
 	      {/* Action bar */}
 	      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
 	        <button onClick={() => setConfirmAction('reject')} className="btn ghost" style={{ flex: 1, height: 52 }}>거절</button>
-	        <button onClick={() => navigate('/chat/dm')} className="btn ghost" style={{ width: 52, height: 52, padding: 0 }}><Icon.chat size={22} /></button>
+	        <button onClick={() => openDirectChat(null, null)} className="btn ghost" style={{ width: 52, height: 52, padding: 0 }}><Icon.chat size={22} /></button>
 	        <button onClick={() => setConfirmAction('accept')} className="btn full" style={{ flex: 1, height: 52 }}>수락</button>
 	      </div>
 	      {confirmAction && (
@@ -1705,11 +1714,65 @@ export function SupportScreen() {
 // ─── 1:1 DM chat ────────────────────────────────────────────
 export function ChatDMScreen() {
   const navigate = useNavigate();
+  const { chatRoomNo } = useParams();
+  const myUserNo = React.useMemo(() => getCachedUserNo(), []);
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const [sentMessages, setSentMessages] = React.useState([]);
-  const sendDMMessage = (message) => {
-    setSentMessages((items) => [...items, { ...message, unread: 1 }]);
+  const [messages, setMessages] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const scrollRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!chatRoomNo) return;
+    let alive = true;
+    setLoading(true);
+    loadChatMessages(chatRoomNo)
+      .then((page) => {
+        if (!alive) return;
+        setMessages((page?.items || []).slice().reverse());
+        setLoading(false);
+        markChatRoomRead(chatRoomNo).catch(() => {});
+      })
+      .catch(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [chatRoomNo]);
+
+  React.useEffect(() => {
+    if (!chatRoomNo) return;
+    let unsubMsg = () => {};
+    let unsubRead = () => {};
+    let alive = true;
+
+    subscribe(`/topic/chat-room/${chatRoomNo}`, (incoming) => {
+      if (!alive) return;
+      setMessages((prev) => appendMessage(prev, incoming));
+      if (incoming.senderNo !== myUserNo) markChatRoomRead(chatRoomNo).catch(() => {});
+    }).then((fn) => { if (alive) unsubMsg = fn; else fn(); });
+
+    subscribe(`/topic/chat-room/${chatRoomNo}/read`, (receipt) => {
+      if (!alive) return;
+      if (receipt.readerUserNo === myUserNo) return;
+      setMessages((prev) => applyReadReceipt(prev, receipt));
+    }).then((fn) => { if (alive) unsubRead = fn; else fn(); });
+
+    return () => { alive = false; unsubMsg(); unsubRead(); };
+  }, [chatRoomNo, myUserNo]);
+
+  React.useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
+  const sendDMMessage = (text) => {
+    publish(`/app/chat-room/${chatRoomNo}/send`, { content: text }).catch(() => {});
   };
+
+  const handleLeave = () => {
+    leaveChatRoom(chatRoomNo)
+      .then(() => { setMenuOpen(false); navigate('/chat'); })
+      .catch((e) => { alert(e?.message || '나갈 수 없어요.'); });
+  };
+
+  const partnerName = messages.find((m) => m.senderNo !== myUserNo)?.senderNickname || '상대방';
 
   return (
     <div className="screen" style={{ background: '#EDEEF1' }}>
@@ -1717,87 +1780,38 @@ export function ChatDMScreen() {
         <StatusBar />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px 12px' }}>
           <button onClick={() => goBack(navigate, '/chat')} style={{ background: 'transparent', border: 0, padding: 6, color: 'var(--ink)', cursor: 'pointer' }}><Icon.back /></button>
-		          <Avatar name="지원" size={36} style={{ fontSize: 14 }} />
-	          <div style={{ flex: 1, minWidth: 0 }}>
-	            <div style={{ fontSize: 15, fontWeight: 700 }}>지원</div>
-	          </div>
+          <Avatar name={partnerName.slice(0, 1)} size={36} style={{ fontSize: 14 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>{partnerName}</div>
+          </div>
           <button onClick={() => setMenuOpen(true)} aria-label="채팅방 메뉴" style={{ background: 'transparent', border: 0, padding: 6, color: 'var(--ink)', cursor: 'pointer' }}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
           </button>
         </div>
       </div>
 
-      {/* Context card — applicant info */}
-      <div style={{ padding: '10px 12px 0' }}>
-        <div onClick={() => navigate('/rooms/applicants/1')} className="card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, cursor: 'pointer' }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--brand-soft)', color: 'var(--brand-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon.door size={18} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>아침형 룸메 구해요</div>
-            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>지원님이 신청한 모집방</div>
-          </div>
-          <span className="chip line" style={{ fontSize: 11 }}>신청자 정보</span>
-        </div>
-      </div>
-
-      <div className="scroll" style={{ padding: '12px 12px 8px' }}>
-        <div style={{ textAlign: 'center', margin: '4px 0 14px' }}>
-          <span style={{ fontSize: 11, color: 'var(--ink-3)', background: 'rgba(0,0,0,0.05)', padding: '4px 12px', borderRadius: 99 }}>2026년 5월 21일 목요일</span>
-        </div>
-
-        <ChatBubble side="left" name="지원" time="오후 04:18">안녕하세요! 신청 드렸어요 :)</ChatBubble>
-        <ChatBubble side="left" name="지원" time="오후 04:18" showAvatar={false} showName={false}>
-          체크리스트 보니까 잘 맞을 것 같아서요.
-        </ChatBubble>
-
-        <div style={{ height: 8 }} />
-        <ChatBubble side="right" time="오후 04:25" unread={1}>반가워요! 체크리스트 확인했어요</ChatBubble>
-        <ChatBubble side="right" time="오후 04:26" withTail={false} unread={1}>
-          평일 저녁은 보통 몇 시쯤 들어오세요?
-        </ChatBubble>
-
-        <div style={{ height: 8 }} />
-        <ChatBubble side="left" name="지원" time="오후 04:30">
-          학기 중엔 보통 9시쯤 들어와요. 시험 기간엔 새벽까지 도서관에 있고요.
-        </ChatBubble>
-        <ChatBubble side="left" name="지원" time="오후 04:31" showAvatar={false} showName={false}>
-          저녁은 거의 밖에서 해결합니다!
-        </ChatBubble>
-        {sentMessages.map((message) => (
-          <ChatBubble key={message.id} side="right" time={message.time} unread={message.unread}>
-            {message.attachment && <ChatAttachmentCard attachment={message.attachment} mine />}
-            {message.text && <div style={{ marginTop: message.attachment ? 8 : 0 }}>{message.text}</div>}
-          </ChatBubble>
+      <div className="scroll" ref={scrollRef} style={{ padding: '12px 12px 8px' }}>
+        {loading && <div style={{ textAlign: 'center', color: 'var(--ink-3)', fontSize: 13, padding: 24 }}>불러오는 중…</div>}
+        {!loading && messages.length === 0 && (
+          <div style={{ textAlign: 'center', color: 'var(--ink-3)', fontSize: 13, padding: 24 }}>첫 메시지를 보내보세요.</div>
+        )}
+        {messages.map((m) => (
+          <ChatMessageItem key={m.messageNo} message={m} myUserNo={myUserNo} />
         ))}
       </div>
 
-      <ChatComposer onSend={sendDMMessage} />
+      <ChatComposer onSend={sendDMMessage} disabled={loading} />
       {menuOpen && (
         <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(23,24,28,0.28)', display: 'flex', alignItems: 'flex-end' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--surface)', borderRadius: '22px 22px 0 0', padding: '10px 16px 30px', boxShadow: '0 -16px 40px rgba(23,24,28,0.14)' }}>
             <div style={{ width: 38, height: 4, borderRadius: 99, background: 'var(--line-2)', margin: '0 auto 14px' }} />
             <div style={{ padding: '0 2px 14px' }}>
               <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>채팅방 메뉴</div>
-              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>지원님과의 대화</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>{partnerName}님과의 대화</div>
             </div>
             <button
               type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                navigate('/rooms/applicants/1');
-              }}
-              style={{ width: '100%', minHeight: 52, border: 0, borderRadius: 14, background: 'var(--surface-2)', color: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', fontFamily: 'inherit', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 8 }}
-            >
-              <span>신청자 정보 보기</span>
-              <Icon.chevron size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                navigate('/chat');
-              }}
+              onClick={handleLeave}
               style={{ width: '100%', minHeight: 52, border: 0, borderRadius: 14, background: 'rgba(226,69,60,0.08)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', fontFamily: 'inherit', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
             >
               <span>대화방 나가기</span>
@@ -1806,8 +1820,8 @@ export function ChatDMScreen() {
           </div>
         </div>
       )}
-    </div>);
-
+    </div>
+  );
 }
 
 // ─── Apply message ──────────────────────────────────────────
@@ -1928,6 +1942,12 @@ export function ApplyMessageScreen() {
 // ─── Apply success ──────────────────────────────────────────
 export function ApplySuccessScreen() {
   const navigate = useNavigate();
+  // roomNo는 이 화면이 서버 데이터를 보유하게 되면 채운다 (방/신청 도메인 연동 계획으로 이관).
+  const openDirectChat = (roomNo) => {
+    getOrCreateDirectChatRoom(roomNo, getCachedUserNo())
+      .then((chatRoomNo) => navigate('/chat/dm/' + chatRoomNo))
+      .catch((e) => alert(e?.message || '채팅방을 열 수 없어요.'));
+  };
 
   return (
     <div className="screen" style={{ background: 'var(--surface)' }}>
@@ -1968,7 +1988,7 @@ export function ApplySuccessScreen() {
       </div>
 
       <div style={{ padding: '0 16px 30px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <button onClick={() => navigate('/chat/dm')} className="btn full" style={{ height: 52 }}>방장과 채팅하기</button>
+        <button onClick={() => openDirectChat(null)} className="btn full" style={{ height: 52 }}>방장과 채팅하기</button>
         <button onClick={() => navigate('/rooms/find')} className="btn full ghost" style={{ height: 52 }}>다른 방 둘러보기</button>
       </div>
     </div>);

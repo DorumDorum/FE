@@ -47,8 +47,8 @@ export function AppRoutes() {
         <Route path="/dorm-rules/general" element={<DormRulesScreen />} />
         <Route path="/rooms/:id" element={<RoomDetailScreen />} />
         <Route path="/rooms/:id/apply" element={<ApplyMessageScreen />} />
-        <Route path="/chat/group" element={<ChatDetailScreen />} />
-        <Route path="/chat/dm" element={<ChatDMScreen />} />
+        <Route path="/chat/group/:chatRoomNo" element={<ChatDetailScreen />} />
+        <Route path="/chat/dm/:chatRoomNo" element={<ChatDMScreen />} />
 
         {/* Flow screens */}
         <Route path="/checklist" element={<ChecklistEditScreen mode="personal" />} />
