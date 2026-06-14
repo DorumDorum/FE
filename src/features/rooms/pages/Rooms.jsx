@@ -4,9 +4,9 @@ import { Icon, TabBar, StatusBar, Avatar, MarqueeText, ClipText, goBack } from '
 import { MemberCard } from '../../members';
 import { CREATE_ROOM_DORMS, ROOM_SIZE_OPTIONS } from '../../checklist';
 import { findRooms, likeRoom, unlikeRoom, loadLikedRooms, loadMyChecklist, loadRoomRule, loadRecommendedRooms, loadMyRoom } from '../../../shared/api/home';
-import { getOrCreateDirectChatRoom, loadMyChatRooms } from '../../../shared/api/chat';
+import { getOrCreateDirectChatRoom, loadMyChatRooms, leaveChatRoom } from '../../../shared/api/chat';
 import { getCachedUserNo } from '../../../shared/api/auth';
-import { loadApplications, loadMyRoommates } from '../../../shared/api/room';
+import { loadApplications, loadMyRoommates, deleteRoom } from '../../../shared/api/room';
 import { normalizeRoom as normalizeBackendRoom, roommateToMember } from '../roomData';
 
 // rooms.jsx — 방 찾기 (list), 방 상세 (detail w/ checklist), 내 방 (my room)
@@ -858,14 +858,17 @@ export function RoomDetailScreen() {
   const [checklist, setChecklist] = React.useState([]);
   const [checklistLoading, setChecklistLoading] = React.useState(true);
   const [checklistError, setChecklistError] = React.useState(false);
+  const [isMyRoom, setIsMyRoom] = React.useState(false);
 
   React.useEffect(() => {
     let mounted = true;
     setChecklistLoading(true);
     setChecklistError(false);
-    Promise.all([loadRoomRule(id), loadMyChecklist()])
-      .then(([roomRule, myChecklist]) => {
-        if (mounted) setChecklist(compareChecklists(roomRule, myChecklist));
+    Promise.all([loadRoomRule(id), loadMyChecklist(), loadMyRoom().catch(() => null)])
+      .then(([roomRule, myChecklist, myRoom]) => {
+        if (!mounted) return;
+        setChecklist(compareChecklists(roomRule, myChecklist));
+        setIsMyRoom(myRoom?.roomNo === id);
       })
       .catch(() => {
         if (mounted) setChecklistError(true);
@@ -1062,7 +1065,9 @@ export function RoomDetailScreen() {
         >
           <Icon.chat size={22}/>
         </button>
-        {isClosed ? (
+        {isMyRoom ? (
+          <button disabled className="btn full" style={{ flex: 1, height: 52, background: 'var(--surface-2)', color: 'var(--ink-4)', cursor: 'not-allowed' }}>내가 만든 방</button>
+        ) : isClosed ? (
           <button disabled className="btn full" style={{ flex: 1, height: 52, background: 'var(--surface-2)', color: 'var(--ink-4)', cursor: 'not-allowed' }}>마감됨</button>
         ) : isApplied ? (
           <button disabled className="btn full" style={{ flex: 1, height: 52, background: 'var(--surface-2)', color: 'var(--ink-4)', cursor: 'not-allowed' }}>대기 중</button>
@@ -1085,6 +1090,7 @@ export function MyRoomScreen({ activeTab='myroom' }) {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
   const [groupChatRoomNo, setGroupChatRoomNo] = React.useState(null);
+  const [leaving, setLeaving] = React.useState(false);
 
   React.useEffect(() => {
     let mounted = true;
@@ -1145,9 +1151,18 @@ export function MyRoomScreen({ activeTab='myroom' }) {
   const isRoomFull = currentMembers >= roomCapacity;
 
   const leaveRoom = () => {
-    if (!canLeaveRoom) return;
+    if (!canLeaveRoom || leaving) return;
+    setLeaving(true);
     setMenuOpen(false);
-    navigate('/rooms/find');
+    const call = isHost
+      ? deleteRoom(room.roomNo)
+      : leaveChatRoom(groupChatRoomNo);
+    call
+      .then(() => navigate('/rooms/find'))
+      .catch((e) => {
+        alert(e?.message || '방 나가기에 실패했어요.');
+        setLeaving(false);
+      });
   };
 
 	  return (

@@ -5,11 +5,16 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 let client = null;
 let connectPromise = null;
+let pendingResolvers = [];
 
-// 단일 STOMP 연결을 보장한다. 이미 연결되어 있으면 즉시 resolve.
 export function connectChatSocket() {
   if (client && client.connected) return Promise.resolve(client);
   if (connectPromise) return connectPromise;
+
+  // client 존재하지만 재연결 중 — 다음 onConnect를 기다린다
+  if (client) {
+    return new Promise((resolve) => pendingResolvers.push(resolve));
+  }
 
   connectPromise = new Promise((resolve, reject) => {
     const stomp = new Client({
@@ -17,9 +22,23 @@ export function connectChatSocket() {
       reconnectDelay: 3000,
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
-      onConnect: () => resolve(stomp),
-      onStompError: (frame) => reject(new Error(frame.headers?.message || 'STOMP error')),
-      onWebSocketError: (e) => reject(e),
+      onConnect: () => {
+        // 연결(재연결 포함) 성공 시 stale promise 초기화
+        connectPromise = null;
+        const pending = pendingResolvers.splice(0);
+        pending.forEach((r) => r(stomp));
+        resolve(stomp);
+      },
+      onStompError: (frame) => {
+        connectPromise = null;
+        client = null;
+        reject(new Error(frame.headers?.message || 'STOMP error'));
+      },
+      onWebSocketError: (e) => {
+        connectPromise = null;
+        client = null;
+        reject(e);
+      },
     });
     stomp.activate();
     client = stomp;
@@ -49,5 +68,6 @@ export function disconnectChatSocket() {
     client.deactivate();
     client = null;
     connectPromise = null;
+    pendingResolvers = [];
   }
 }

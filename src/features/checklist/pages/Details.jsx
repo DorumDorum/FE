@@ -1804,7 +1804,6 @@ export function ChatDMScreen() {
         if (!alive) return;
         setMessages((page?.items || []).slice().reverse());
         setLoading(false);
-        markChatRoomRead(chatRoomNo).catch(() => {});
       })
       .catch(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -1816,17 +1815,24 @@ export function ChatDMScreen() {
     let unsubRead = () => {};
     let alive = true;
 
-    subscribe(`/topic/chat-room/${chatRoomNo}`, (incoming) => {
+    const pMsg = subscribe(`/topic/chat-room/${chatRoomNo}`, (incoming) => {
       if (!alive) return;
       setMessages((prev) => appendMessage(prev, incoming));
       if (incoming.senderNo !== myUserNo) markChatRoomRead(chatRoomNo).catch(() => {});
-    }).then((fn) => { if (alive) unsubMsg = fn; else fn(); });
+    });
 
-    subscribe(`/topic/chat-room/${chatRoomNo}/read`, (receipt) => {
+    const pRead = subscribe(`/topic/chat-room/${chatRoomNo}/read`, (receipt) => {
       if (!alive) return;
-      if (receipt.readerUserNo === myUserNo) return;
       setMessages((prev) => applyReadReceipt(prev, receipt));
-    }).then((fn) => { if (alive) unsubRead = fn; else fn(); });
+    });
+
+    // 두 구독이 모두 준비된 뒤 읽음 처리 — 이 시점에 서버 broadcast를 수신할 수 있음
+    Promise.all([pMsg, pRead]).then(([fnMsg, fnRead]) => {
+      if (!alive) { fnMsg(); fnRead(); return; }
+      unsubMsg = fnMsg;
+      unsubRead = fnRead;
+      markChatRoomRead(chatRoomNo).catch(() => {});
+    });
 
     return () => { alive = false; unsubMsg(); unsubRead(); };
   }, [chatRoomNo, myUserNo]);
@@ -1909,9 +1915,10 @@ export function ApplyMessageScreen() {
 
   const handleSubmit = () => {
     if (submitting) return;
+    if (!message.trim()) { setSubmitError('신청 메시지를 입력해주세요.'); return; }
     setSubmitting(true);
     setSubmitError('');
-    submitRoomApplication(id, message)
+    submitRoomApplication(id, message.trim())
       .then(() => navigate('/apply/success', { state: { roomNo: id } }))
       .catch((e) => { setSubmitError(e?.message || '신청에 실패했어요.'); setSubmitting(false); });
   };

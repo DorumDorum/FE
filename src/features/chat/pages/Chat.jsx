@@ -222,7 +222,7 @@ export function ChatComposer({ onSend, disabled = false }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
               e.preventDefault();
               send();
             }
@@ -265,7 +265,6 @@ export function ChatDetailScreen() {
       const items = (page?.items || []).slice().reverse();
       setMessages(items);
       setLoading(false);
-      markChatRoomRead(chatRoomNo).catch(() => {});
     });
     return () => { alive = false; };
   }, [chatRoomNo]);
@@ -276,19 +275,26 @@ export function ChatDetailScreen() {
     let unsubRead = () => {};
     let alive = true;
 
-    subscribe(`/topic/chat-room/${chatRoomNo}`, (incoming) => {
+    const pMsg = subscribe(`/topic/chat-room/${chatRoomNo}`, (incoming) => {
       if (!alive) return;
       setMessages((prev) => appendMessage(prev, incoming));
       if (incoming.senderNo !== myUserNo) {
         markChatRoomRead(chatRoomNo).catch(() => {});
       }
-    }).then((fn) => { if (alive) unsubMsg = fn; else fn(); });
+    });
 
-    subscribe(`/topic/chat-room/${chatRoomNo}/read`, (receipt) => {
+    const pRead = subscribe(`/topic/chat-room/${chatRoomNo}/read`, (receipt) => {
       if (!alive) return;
-      if (receipt.readerUserNo === myUserNo) return;
       setMessages((prev) => applyReadReceipt(prev, receipt));
-    }).then((fn) => { if (alive) unsubRead = fn; else fn(); });
+    });
+
+    // 두 구독이 모두 준비된 뒤 읽음 처리 — 이 시점에 서버 broadcast를 수신할 수 있음
+    Promise.all([pMsg, pRead]).then(([fnMsg, fnRead]) => {
+      if (!alive) { fnMsg(); fnRead(); return; }
+      unsubMsg = fnMsg;
+      unsubRead = fnRead;
+      markChatRoomRead(chatRoomNo).catch(() => {});
+    });
 
     return () => { alive = false; unsubMsg(); unsubRead(); };
   }, [chatRoomNo, myUserNo]);

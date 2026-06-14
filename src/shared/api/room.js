@@ -3,7 +3,7 @@ import * as client from './client';
 export function submitRoomApplication(roomNo, message) {
   return client.apiRequestWithAuth(`/api/rooms/${roomNo}/request`, {
     method: 'POST',
-    body: { additionalMessage: message },
+    body: { introduction: message },
   });
 }
 
@@ -11,6 +11,12 @@ export function createRoom(request) {
   return client.apiRequestWithAuth('/api/rooms', {
     method: 'POST',
     body: request,
+  });
+}
+
+export function deleteRoom(roomNo) {
+  return client.apiRequestWithAuth(`/api/rooms/${roomNo}`, {
+    method: 'DELETE',
   });
 }
 

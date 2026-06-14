@@ -22,7 +22,7 @@ describe('room api', () => {
     await submitRoomApplication(42, '안녕하세요');
     expect(client.apiRequestWithAuth).toHaveBeenCalledWith('/api/rooms/42/request', {
       method: 'POST',
-      body: { additionalMessage: '안녕하세요' },
+      body: { introduction: '안녕하세요' },
     });
   });
 
@@ -30,7 +30,7 @@ describe('room api', () => {
     await submitRoomApplication(42, '');
     expect(client.apiRequestWithAuth).toHaveBeenCalledWith('/api/rooms/42/request', {
       method: 'POST',
-      body: { additionalMessage: '' },
+      body: { introduction: '' },
     });
   });
 
