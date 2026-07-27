@@ -2,7 +2,10 @@ import React from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Icon, StatusBar, Avatar, goBack } from '../../../shared/components';
 import { logout as logoutUser, getCachedUserNo } from '../../../shared/api/auth';
-import { loadMyRoom, loadNotifications, markNotificationRead } from '../../../shared/api/home';
+import {
+  loadMyRoom, loadNotifications, markNotificationRead,
+  loadMyChecklist, createUserChecklist, updateUserChecklist,
+} from '../../../shared/api/home';
 import { submitRoomApplication, approveApplication, rejectApplication, loadMyRoomRule, updateMyRoomRule, createRoom } from '../../../shared/api/room';
 import { ChatMessageItem, ChatComposer } from '../../chat';
 import { getOrCreateDirectChatRoom, loadChatMessages, markChatRoomRead, leaveChatRoom } from '../../../shared/api/chat';
@@ -11,6 +14,7 @@ import { applyReadReceipt, appendMessage } from '../../chat/unreadSync';
 import { openNotificationStream } from '../../../shared/api/notificationStream';
 import {
   checklistFormToRoomRuleRequest,
+  checklistFormToUserChecklistRequest,
   createRoomDraftToRequest,
   defaultRoomChecklistForm,
   roomRuleToChecklistForm,
@@ -299,6 +303,7 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
   const isRoomCreate = mode === 'room';
   const isRoomEdit = mode === 'roomEdit';
   const isRoom = isRoomCreate || isRoomEdit;
+  const isPersonal = !isRoom;
   const [v, setV] = React.useState(isRoomCreate ? {
     sleep: { start: 23, end: 1 },
     wake: { start: 7, end: 9 },
@@ -313,6 +318,9 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
   const [roomContext, setRoomContext] = React.useState(null);
   const [roomRuleLoading, setRoomRuleLoading] = React.useState(isRoomEdit);
   const [roomRuleSaving, setRoomRuleSaving] = React.useState(false);
+  const [personalChecklistExists, setPersonalChecklistExists] = React.useState(false);
+  const [personalLoading, setPersonalLoading] = React.useState(isPersonal);
+  const [personalSaving, setPersonalSaving] = React.useState(false);
   const scrollRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -330,6 +338,21 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
     return () => { mounted = false; };
   }, [isRoomEdit]);
 
+  React.useEffect(() => {
+    if (!isPersonal) return undefined;
+    let mounted = true;
+    setPersonalLoading(true);
+    loadMyChecklist()
+      .then((checklist) => {
+        if (!mounted) return;
+        setV(roomRuleToChecklistForm(checklist));
+        setPersonalChecklistExists(true);
+      })
+      .catch(() => { if (mounted) setPersonalChecklistExists(false); })
+      .finally(() => { if (mounted) setPersonalLoading(false); });
+    return () => { mounted = false; };
+  }, [isPersonal]);
+
   const saveRoomRule = () => {
     if (!roomContext || roomRuleSaving) return;
     setRoomRuleSaving(true);
@@ -337,6 +360,17 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
       .then(() => navigate('/rooms/checklist'))
       .catch((e) => alert(e?.message || '방 체크리스트를 저장하지 못했어요.'))
       .finally(() => setRoomRuleSaving(false));
+  };
+
+  const savePersonalChecklist = () => {
+    if (personalSaving) return;
+    setPersonalSaving(true);
+    const request = checklistFormToUserChecklistRequest(v);
+    const call = personalChecklistExists ? updateUserChecklist(request) : createUserChecklist(request);
+    call
+      .then(() => navigate('/me'))
+      .catch((e) => alert(e?.message || '체크리스트를 저장하지 못했어요.'))
+      .finally(() => setPersonalSaving(false));
   };
 
   const handleScroll = () => {
@@ -395,13 +429,16 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
       <TopNav
         title="내 체크리스트"
         backTo="/me"
-        right={<button onClick={() => navigate('/me')} style={{ background: 'transparent', border: 0, fontSize: 13, color: 'var(--brand)', fontWeight: 700, cursor: 'pointer' }}>저장</button>}
+        right={<button onClick={savePersonalChecklist} disabled={personalLoading || personalSaving} style={{ background: 'transparent', border: 0, fontSize: 13, color: 'var(--brand)', fontWeight: 700, cursor: personalLoading || personalSaving ? 'not-allowed' : 'pointer', opacity: personalLoading || personalSaving ? 0.45 : 1 }}>{personalSaving ? '저장 중' : '저장'}</button>}
       />
       }
 
       <div ref={scrollRef} onScroll={handleScroll} className="scroll" style={{ padding: isRoom ? '12px 20px 0' : '0 20px' }}>
         {isRoomEdit && roomRuleLoading && (
           <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>방 체크리스트를 불러오는 중...</div>
+        )}
+        {isPersonal && personalLoading && (
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>체크리스트를 불러오는 중...</div>
         )}
         {/* Section 1 */}
         <div style={{ padding: '10px 0 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -545,7 +582,7 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
       }
       {!isRoom &&
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'linear-gradient(180deg, transparent 0%, var(--bg) 30%)' }}>
-          <button onClick={() => navigate('/me')} className="btn full" style={{ height: 52 }}>저장</button>
+          <button onClick={savePersonalChecklist} disabled={personalLoading || personalSaving} className="btn full" style={{ height: 52, opacity: personalLoading || personalSaving ? 0.45 : 1 }}>{personalSaving ? '저장 중...' : '저장'}</button>
         </div>
       }
     </div>);

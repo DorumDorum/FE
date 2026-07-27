@@ -290,6 +290,15 @@ export function checklistFormToRoomRuleRequest(form, room) {
   };
 }
 
+export function checklistFormToUserChecklistRequest(form) {
+  const { roomType, capacity, residencePeriod, ...userChecklistRequest } = checklistFormToRoomRuleRequest(form, {
+    roomType: null,
+    capacity: null,
+    residencePeriod: null,
+  });
+  return userChecklistRequest;
+}
+
 export function createRoomDraftToRequest(draft, checklistForm = defaultRoomChecklistForm) {
   const roomType = ROOM_TYPE_BY_LABEL[draft.dorm] || draft.roomType || 'TYPE_2';
   const capacity = Number.parseInt(draft.roomSize || draft.capacity, 10) || 4;
