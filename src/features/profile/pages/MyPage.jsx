@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon, TabBar, StatusBar, Avatar, goBack } from '../../../shared/components';
+import { updateUserProfile } from '../../../shared/api/auth';
 
 // mypage.jsx — My Page (profile, checklist, settings)
 
@@ -31,10 +32,6 @@ function readProfile() {
   }
 }
 
-function saveProfile(profile) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
-}
 
 function ProfilePhoto({ profile, size = 64, style = {} }) {
   if (profile.photo) {
@@ -188,18 +185,18 @@ export function MyPageScreen({ activeTab='me' }) {
 export function ProfileEditScreen() {
   const navigate = useNavigate();
   const [profile, setProfile] = React.useState(readProfile);
+  const [saving, setSaving] = React.useState(false);
   const nickname = profile.displayName;
   const department = profile.department;
   const canSave = nickname.trim().length > 0 && department.trim().length > 0;
 
   const handleSave = () => {
-    if (!canSave) return;
-    saveProfile({
-      ...profile,
-      displayName: nickname.trim(),
-      department: department.trim(),
-    });
-    navigate('/me');
+    if (!canSave || saving) return;
+    setSaving(true);
+    updateUserProfile({ nickname: nickname.trim(), major: department.trim(), grade: profile.grade })
+      .then(() => navigate('/me'))
+      .catch((e) => alert(e?.message || '프로필을 저장하지 못했어요.'))
+      .finally(() => setSaving(false));
   };
 
   const inputBase = {
@@ -255,18 +252,18 @@ export function ProfileEditScreen() {
           <button
             type="button"
             onClick={handleSave}
-            disabled={!canSave}
+            disabled={!canSave || saving}
             style={{
               background: 'transparent',
               border: 0,
               fontSize: 14,
-              color: canSave ? 'var(--brand)' : 'var(--ink-4)',
+              color: canSave && !saving ? 'var(--brand)' : 'var(--ink-4)',
               fontWeight: 800,
               padding: 8,
-              cursor: canSave ? 'pointer' : 'default',
+              cursor: canSave && !saving ? 'pointer' : 'default',
               fontFamily: 'inherit',
             }}
-          >저장</button>
+          >{saving ? '저장 중' : '저장'}</button>
         </div>
       </div>
 
