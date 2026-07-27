@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Icon, Avatar, StatusBar, goBack } from '../../../shared/components';
 import { loadMyRoom } from '../../../shared/api/home';
 import { getOrCreateDirectChatRoom, loadMyChatRooms } from '../../../shared/api/chat';
-import { loadMyRoommates } from '../../../shared/api/room';
+import { loadMyRoommates, kickRoommate } from '../../../shared/api/room';
 import { normalizeRoom, roommateToMember } from '../../rooms/roomData';
 
 // members.jsx — 룸메이트 멤버 화면 (방장 시점)
@@ -78,7 +78,7 @@ export const MEMBER_CHECKLISTS = [
   },
 ];
 
-export function MemberCard({ m, defaultOpen = false, onOpenChat }) {
+export function MemberCard({ m, defaultOpen = false, onOpenChat, onKick }) {
   const [open, setOpen] = React.useState(defaultOpen);
   const navigate = useNavigate();
   const hasChecklist = (m.checklist || []).length > 0;
@@ -102,9 +102,16 @@ export function MemberCard({ m, defaultOpen = false, onOpenChat }) {
           <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2 }}>{m.dept}</div>
         </div>
         {!m.isMe && (
-          <button onClick={() => onOpenChat ? onOpenChat(m) : navigate('/chat')} title="채팅" style={{ width: 36, height: 36, borderRadius: 10, border: 0, background: 'var(--surface-2)', color: 'var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-            <Icon.chat size={18}/>
-          </button>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            <button onClick={() => onOpenChat ? onOpenChat(m) : navigate('/chat')} title="채팅" style={{ width: 36, height: 36, borderRadius: 10, border: 0, background: 'var(--surface-2)', color: 'var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <Icon.chat size={18}/>
+            </button>
+            {onKick && (
+              <button onClick={() => onKick(m)} title="내보내기" style={{ width: 36, height: 36, borderRadius: 10, border: 0, background: 'var(--surface-2)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -172,6 +179,8 @@ export function MembersScreen() {
   const [groupChatRoomNo, setGroupChatRoomNo] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
+  const [kickTarget, setKickTarget] = React.useState(null);
+  const [kicking, setKicking] = React.useState(false);
 
   React.useEffect(() => {
     let mounted = true;
@@ -201,6 +210,20 @@ export function MembersScreen() {
     getOrCreateDirectChatRoom(room.roomNo, member.userNo)
       .then((chatRoomNo) => navigate('/chat/dm/' + chatRoomNo))
       .catch((e) => alert(e?.message || '채팅방을 열 수 없어요.'));
+  };
+
+  const isHost = members.find((member) => member.isMe)?.role === '방장';
+
+  const handleKick = () => {
+    if (!room?.roomNo || !kickTarget || kicking) return;
+    setKicking(true);
+    kickRoommate(room.roomNo, kickTarget.userNo)
+      .then(() => {
+        setMembers((prev) => prev.filter((m) => m.userNo !== kickTarget.userNo));
+        setKickTarget(null);
+      })
+      .catch((e) => alert(e?.message || '내보내기에 실패했어요.'))
+      .finally(() => setKicking(false));
   };
 
   const currentMembers = room?.members ?? members.length;
@@ -250,7 +273,7 @@ export function MembersScreen() {
         {loading && <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>불러오는 중...</div>}
         {error && <div style={{ padding: 24, textAlign: 'center', color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
         {!loading && !error && members.map((m) => (
-          <MemberCard key={m.id} m={m} defaultOpen={false} onOpenChat={openDirectChat}/>
+          <MemberCard key={m.id} m={m} defaultOpen={false} onOpenChat={openDirectChat} onKick={isHost ? setKickTarget : undefined}/>
         ))}
 
         {/* Empty slots */}
@@ -285,6 +308,39 @@ export function MembersScreen() {
           <Icon.chevron size={14}/>
         </div>
       </div>
+
+      {kickTarget && (
+        <>
+          <div
+            onClick={() => setKickTarget(null)}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 40 }}
+          />
+          <div style={{
+            position: 'absolute', left: 0, right: 0, bottom: 0,
+            background: 'var(--surface)',
+            borderRadius: '20px 20px 0 0',
+            padding: '24px 20px 36px',
+            zIndex: 41,
+            display: 'flex', flexDirection: 'column', gap: 8,
+          }}>
+            <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 6 }}>{kickTarget.name}님을 내보낼까요?</div>
+            <div style={{ fontSize: 14, color: 'var(--ink-3)', lineHeight: 1.6, marginBottom: 12 }}>
+              내보내면 되돌릴 수 없어요.
+            </div>
+            <button
+              onClick={handleKick}
+              disabled={kicking}
+              className="btn full"
+              style={{ height: 52, background: 'var(--danger)', opacity: kicking ? 0.6 : 1 }}
+            >{kicking ? '내보내는 중...' : '내보내기'}</button>
+            <button
+              onClick={() => setKickTarget(null)}
+              className="btn full ghost"
+              style={{ height: 52 }}
+            >돌아가기</button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

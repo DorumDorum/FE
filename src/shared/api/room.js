@@ -61,6 +61,12 @@ export function checkMyRoom() {
   return client.apiRequestWithAuth('/api/rooms/me/exists');
 }
 
+export function kickRoommate(roomNo, kickedUserNo) {
+  return client.apiRequestWithAuth(`/api/rooms/${roomNo}/members/${kickedUserNo}`, {
+    method: 'DELETE',
+  });
+}
+
 export function updateRoomTitle(roomNo, request) {
   return client.apiRequestWithAuth(`/api/rooms/me/title?roomNo=${encodeURIComponent(roomNo)}`, {
     method: 'PUT',
