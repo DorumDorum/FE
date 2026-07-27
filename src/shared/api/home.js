@@ -18,6 +18,10 @@ export function loadNotifications(cursor) {
   return apiRequestWithAuth(`/api/notifications${query}`);
 }
 
+export function markNotificationRead(notificationNo) {
+  return apiRequestWithAuth(`/api/notifications/${notificationNo}/read`, { method: 'PATCH' });
+}
+
 export function findRooms(filter) {
   return apiRequestWithAuth('/api/rooms/search', {
     method: 'POST',
