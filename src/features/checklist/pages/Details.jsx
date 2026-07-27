@@ -14,6 +14,10 @@ import {
   defaultRoomChecklistForm,
   roomRuleToChecklistForm,
 } from '../../rooms/roomData';
+import { logout as logoutUser } from '../../../shared/api/auth';
+import { loadNotifications, markNotificationRead } from '../../../shared/api/home';
+import { openNotificationStream } from '../../../shared/api/notificationStream';
+import { ChatBubble, ChatComposer, ChatAttachmentCard } from '../../chat';
 
 // details.jsx — Detail screens for each tab
 
@@ -1169,15 +1173,142 @@ export function NoticeDetailScreen() {
 }
 
 // ─── Notifications page (bell icon target) ─────────────────
+const NOTIFICATION_ICON = {
+  ROOM_APPLICATION_RECEIVED: 'user',
+  ROOM_APPLICATION_APPROVED: 'door',
+  ROOM_APPLICATION_REJECTED: 'bell',
+  CHAT_MESSAGE_REQUEST: 'chat',
+  CHAT_REQUEST_APPROVED: 'chat',
+  CHAT_REQUEST_REJECTED: 'chat',
+  NEW_MESSAGE_RECEIVED: 'chat',
+};
+
+function notificationIcon(type) {
+  return NOTIFICATION_ICON[type] || 'bell';
+}
+
+function isSameDay(a, b) {
+  return a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate();
+}
+
+function formatNotificationTime(createdAt) {
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const now = new Date();
+  const diffMin = Math.floor((now - date) / 60000);
+  if (diffMin < 1) return '방금 전';
+  if (diffMin < 60) return `${diffMin}분 전`;
+  if (isSameDay(date, now)) return `${Math.floor(diffMin / 60)}시간 전`;
+
+  const diffDay = Math.floor(diffMin / 60 / 24);
+  if (diffDay === 1) return '어제';
+  if (diffDay < 7) return `${diffDay}일 전`;
+  return `${date.getMonth() + 1}.${String(date.getDate()).padStart(2, '0')}`;
+}
+
 export function NotificationsScreen() {
-  const [todayItems, setTodayItems] = React.useState([
-    { i: 'user', t: '지원님이 신청했어요', d: '아침형 룸메 구해요', time: '10분 전', unread: true },
-    { i: 'chat', t: '수민님이 메시지를 보냈어요', d: '"내일 7시에 같이 모닝커피 어때요?"', time: '38분 전', unread: true },
-    { i: 'bell', t: '6월 입사식 일정 안내', d: '5/28 18:00 다목적실', time: '2시간 전' },
-  ]);
-  const hasUnread = todayItems.some((item) => item.unread);
+  const navigate = useNavigate();
+  const [items, setItems] = React.useState([]);
+  const [cursor, setCursor] = React.useState(undefined);
+  const [hasNext, setHasNext] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState(false);
+
+  const applyPage = React.useCallback((page, { append }) => {
+    const pageItems = page?.items || [];
+    setItems((prev) => (append ? [...prev, ...pageItems] : pageItems));
+    setCursor(page?.nextCursor);
+    setHasNext(Boolean(page?.hasNext));
+  }, []);
+
+  React.useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    loadNotifications()
+      .then((page) => {
+        if (!mounted) return;
+        applyPage(page, { append: false });
+        setLoadError(false);
+      })
+      .catch(() => {
+        if (mounted) setLoadError(true);
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [applyPage]);
+
+  React.useEffect(() => {
+    const closeStream = openNotificationStream((notification) => {
+      setItems((prev) => [{ ...notification, isRead: false }, ...prev]);
+    });
+    return closeStream;
+  }, []);
+
+  const hasUnread = items.some((item) => !item.isRead);
+
+  const loadMore = () => {
+    if (!hasNext || loading) return;
+    setLoading(true);
+    loadNotifications(cursor)
+      .then((page) => applyPage(page, { append: true }))
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
+  };
+
+  const markOneRead = (notificationNo) => {
+    setItems((prev) => prev.map((item) => (
+      item.notificationNo === notificationNo ? { ...item, isRead: true } : item
+    )));
+    markNotificationRead(notificationNo).catch(() => {
+      setItems((prev) => prev.map((item) => (
+        item.notificationNo === notificationNo ? { ...item, isRead: false } : item
+      )));
+    });
+  };
+
   const markAllRead = () => {
-    setTodayItems((items) => items.map((item) => ({ ...item, unread: false })));
+    const unread = items.filter((item) => !item.isRead);
+    if (unread.length === 0) return;
+    setItems((prev) => prev.map((item) => ({ ...item, isRead: true })));
+    unread.forEach((item) => {
+      markNotificationRead(item.notificationNo).catch(() => {});
+    });
+  };
+
+  const openNotification = (n) => {
+    if (!n.isRead) markOneRead(n.notificationNo);
+    if (n.redirectPath) navigate(n.redirectPath);
+  };
+
+  const todayItems = items.filter((n) => isSameDay(new Date(n.createdAt), new Date()));
+  const earlierItems = items.filter((n) => !isSameDay(new Date(n.createdAt), new Date()));
+
+  const renderRow = (n, i, a) => {
+    const I = Icon[notificationIcon(n.type)];
+    return (
+      <div
+        key={n.notificationNo}
+        role="button"
+        tabIndex={0}
+        onClick={() => openNotification(n)}
+        onKeyDown={(e) => { if (e.key === 'Enter') openNotification(n); }}
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: i === a.length - 1 ? 'none' : '1px solid var(--line)', background: !n.isRead ? 'var(--brand-soft)' : 'transparent', cursor: 'pointer' }}
+      >
+        <div style={{ width: 38, height: 38, borderRadius: 10, background: !n.isRead ? 'var(--brand)' : 'var(--surface-2)', color: !n.isRead ? 'white' : 'var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><I size={18} /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: !n.isRead ? 600 : 500, color: !n.isRead ? 'var(--ink)' : 'var(--ink-2)' }}>{n.title}</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.body}</div>
+        </div>
+        <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{formatNotificationTime(n.createdAt)}</span>
+      </div>
+    );
   };
 
   return (
@@ -1208,47 +1339,44 @@ export function NotificationsScreen() {
       />
 
       <div className="scroll" style={{ padding: '0 16px 24px' }}>
-        <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 700, padding: '8px 4px 10px', letterSpacing: '0.3px' }}>오늘</div>
-        <div style={{ background: 'var(--surface)', borderRadius: 16, overflow: 'hidden' }}>
-          {todayItems.map((n, i, a) => {
-            const I = Icon[n.i];
-            return (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: i === a.length - 1 ? 'none' : '1px solid var(--line)', background: n.unread ? 'var(--brand-soft)' : 'transparent' }}>
-                <div style={{ width: 38, height: 38, borderRadius: 10, background: n.unread ? 'var(--brand)' : 'var(--surface-2)', color: n.unread ? 'white' : 'var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><I size={18} /></div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{n.t}</div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.d}</div>
-                </div>
-                <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{n.time}</span>
-              </div>);
+        {loadError && items.length === 0 && !loading && (
+          <div style={{ padding: '32px 4px', textAlign: 'center', fontSize: 13, color: 'var(--ink-3)' }}>알림을 불러오지 못했어요.</div>
+        )}
+        {!loadError && items.length === 0 && !loading && (
+          <div style={{ padding: '32px 4px', textAlign: 'center', fontSize: 13, color: 'var(--ink-3)' }}>아직 받은 알림이 없어요.</div>
+        )}
 
-          })}
-        </div>
+        {todayItems.length > 0 && (
+          <>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 700, padding: '8px 4px 10px', letterSpacing: '0.3px' }}>오늘</div>
+            <div style={{ background: 'var(--surface)', borderRadius: 16, overflow: 'hidden' }}>
+              {todayItems.map(renderRow)}
+            </div>
+          </>
+        )}
 
-        <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 700, padding: '22px 4px 10px', letterSpacing: '0.3px' }}>이번 주</div>
-        <div style={{ background: 'var(--surface)', borderRadius: 16, overflow: 'hidden' }}>
-          {[
-          { i: 'check', t: '서연님이 메시지를 보냈어요', d: '"체크리스트 확인하고 답장드릴게요"', time: '어제' },
-          { i: 'door', t: '지호님이 입주에 동의했어요', d: '아침형 룸메 구해요', time: '월요일' },
-          { i: 'bell', t: 'B동 세탁실 4번 기기 교체 완료', d: '시설팀 공지', time: '월요일' },
-          { i: 'user', t: '지훈님이 신청했어요', d: '신청 후 24시간 내 응답해주세요', time: '일요일' }].
-          map((n, i, a) => {
-            const I = Icon[n.i];
-            return (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: i === a.length - 1 ? 'none' : '1px solid var(--line)' }}>
-                <div style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--surface-2)', color: 'var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><I size={18} /></div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink-2)' }}>{n.t}</div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.d}</div>
-                </div>
-                <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{n.time}</span>
-              </div>);
+        {earlierItems.length > 0 && (
+          <>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 700, padding: '22px 4px 10px', letterSpacing: '0.3px' }}>이전 알림</div>
+            <div style={{ background: 'var(--surface)', borderRadius: 16, overflow: 'hidden' }}>
+              {earlierItems.map(renderRow)}
+            </div>
+          </>
+        )}
 
-          })}
-        </div>
+        {hasNext && (
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={loading}
+            style={{ width: '100%', marginTop: 16, padding: 12, borderRadius: 12, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink-2)', fontSize: 13, fontWeight: 600, cursor: loading ? 'default' : 'pointer' }}
+          >
+            {loading ? '불러오는 중…' : '더 보기'}
+          </button>
+        )}
       </div>
-    </div>);
-
+    </div>
+  );
 }
 
 // ─── Notification settings ──────────────────────────────────
