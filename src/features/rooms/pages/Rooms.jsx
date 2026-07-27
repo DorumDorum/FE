@@ -6,7 +6,7 @@ import { CREATE_ROOM_DORMS, ROOM_SIZE_OPTIONS } from '../../checklist';
 import { findRooms, likeRoom, unlikeRoom, loadLikedRooms, loadMyChecklist, loadRoomRule, loadRecommendedRooms, loadMyRoom } from '../../../shared/api/home';
 import { getOrCreateDirectChatRoom, loadMyChatRooms, leaveChatRoom } from '../../../shared/api/chat';
 import { getCachedUserNo } from '../../../shared/api/auth';
-import { loadApplications, loadMyRoommates, deleteRoom } from '../../../shared/api/room';
+import { loadApplications, loadMyRoommates, deleteRoom, checkMyRoom } from '../../../shared/api/room';
 import { normalizeRoom as normalizeBackendRoom, roommateToMember } from '../roomData';
 
 // rooms.jsx — 방 찾기 (list), 방 상세 (detail w/ checklist), 내 방 (my room)
@@ -580,6 +580,7 @@ export function FindRoomScreen({ activeTab='find' }) {
   const [totalCount, setTotalCount] = React.useState(null);
   const [bookmarkedIds, setBookmarkedIds] = React.useState(new Set());
   const [recommendedCount, setRecommendedCount] = React.useState(null);
+  const [hasRoom, setHasRoom] = React.useState(null);
   const loadMoreRef = React.useRef(null);
   const searchVersionRef = React.useRef(0);
 
@@ -611,6 +612,14 @@ export function FindRoomScreen({ activeTab='find' }) {
     loadRecommendedRooms()
       .then((res) => setRecommendedCount(res.hasChecklist ? res.items.length : -1))
       .catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    let mounted = true;
+    checkMyRoom()
+      .then((res) => { if (mounted) setHasRoom(res); })
+      .catch(() => { if (mounted) setHasRoom({ isExist: true }); });
+    return () => { mounted = false; };
   }, []);
 
   React.useEffect(() => {
@@ -797,16 +806,18 @@ export function FindRoomScreen({ activeTab='find' }) {
       </div>
 
       {/* FAB */}
-      <button onClick={() => navigate('/rooms/create/1')} style={{
-        position: 'absolute', bottom: 96, right: 18, zIndex: 5,
-        height: 52, padding: '0 18px', borderRadius: 26, border: 0,
-        background: 'var(--ink)', color: 'white', fontWeight: 600, fontSize: 14,
-        display: 'inline-flex', alignItems: 'center', gap: 6,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-        cursor: 'pointer',
-      }}>
-        <Icon.plus size={18}/> 모집방 만들기
-      </button>
+      {hasRoom && !hasRoom.isExist && (
+        <button onClick={() => navigate('/rooms/create/1')} style={{
+          position: 'absolute', bottom: 96, right: 18, zIndex: 5,
+          height: 52, padding: '0 18px', borderRadius: 26, border: 0,
+          background: 'var(--ink)', color: 'white', fontWeight: 600, fontSize: 14,
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+          cursor: 'pointer',
+        }}>
+          <Icon.plus size={18}/> 모집방 만들기
+        </button>
+      )}
 
       <TabBar active={activeTab} />
     </div>

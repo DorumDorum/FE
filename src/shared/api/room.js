@@ -57,6 +57,10 @@ export function cancelRoomApplication(roomNo) {
   });
 }
 
+export function checkMyRoom() {
+  return client.apiRequestWithAuth('/api/rooms/me/exists');
+}
+
 export function updateRoomTitle(roomNo, request) {
   return client.apiRequestWithAuth(`/api/rooms/me/title?roomNo=${encodeURIComponent(roomNo)}`, {
     method: 'PUT',
