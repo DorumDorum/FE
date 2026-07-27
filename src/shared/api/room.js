@@ -67,6 +67,12 @@ export function kickRoommate(roomNo, kickedUserNo) {
   });
 }
 
+export function confirmRoomAssignment(roomNo) {
+  return client.apiRequestWithAuth(`/api/rooms/me/confirm?roomNo=${encodeURIComponent(roomNo)}`, {
+    method: 'POST',
+  });
+}
+
 export function updateRoomTitle(roomNo, request) {
   return client.apiRequestWithAuth(`/api/rooms/me/title?roomNo=${encodeURIComponent(roomNo)}`, {
     method: 'PUT',
