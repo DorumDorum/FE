@@ -5,7 +5,7 @@ import { logout as logoutUser, getCachedUserNo } from '../../../shared/api/auth'
 import {
   loadMyRoom, loadNotifications, markNotificationRead,
   loadMyChecklist, createUserChecklist, updateUserChecklist,
-  loadMyAppliedRooms,
+  loadMyAppliedRooms, loadLikedRooms, unlikeRoom,
 } from '../../../shared/api/home';
 import { submitRoomApplication, approveApplication, rejectApplication, loadMyRoomRule, updateMyRoomRule, createRoom, cancelRoomApplication } from '../../../shared/api/room';
 import { ChatMessageItem, ChatComposer } from '../../chat';
@@ -2466,41 +2466,6 @@ export function MyApplicationsScreen() {
 }
 
 // ─── Bookmarks List ──────────────────────────────────────────
-const BOOKMARK_MOCK = [
-  {
-    id: 1,
-    room: '아침형 룸메 구해요',
-    dorm: '2생활관',
-    roomType: '4인실',
-    savedAt: '2026.05.19',
-    recruiting: true,
-  },
-  {
-    id: 2,
-    room: '청결 최우선! 조용한 룸메 모집',
-    dorm: '1생활관',
-    roomType: '2인실',
-    savedAt: '2026.05.12',
-    recruiting: true,
-  },
-  {
-    id: 3,
-    room: '밤형 인간 환영합니다',
-    dorm: '3생활관',
-    roomType: '4인실',
-    savedAt: '2026.04.28',
-    recruiting: false,
-  },
-  {
-    id: 4,
-    room: '여성 전용 · 취준생 룸메 구해요',
-    dorm: '2생활관',
-    roomType: '2인실',
-    savedAt: '2026.04.15',
-    recruiting: false,
-  },
-];
-
 const BOOKMARK_TABS = [
   { key: 'all', label: '전체' },
   { key: 'recruiting', label: '모집중' },
@@ -2510,13 +2475,32 @@ const BOOKMARK_TABS = [
 export function BookmarksScreen() {
   const navigate = useNavigate();
   const [tab, setTab] = React.useState('all');
-  const [bookmarks, setBookmarks] = React.useState(BOOKMARK_MOCK);
+  const [bookmarks, setBookmarks] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError('');
+    loadLikedRooms()
+      .then((rooms) => {
+        if (mounted) setBookmarks((Array.isArray(rooms) ? rooms : []).map(normalizeRoom));
+      })
+      .catch(() => { if (mounted) setError('북마크를 불러오지 못했어요.'); })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, []);
 
   const filtered = tab === 'all'
     ? bookmarks
     : bookmarks.filter(b => tab === 'recruiting' ? b.recruiting : !b.recruiting);
 
-  const handleRemove = (id) => setBookmarks(prev => prev.filter(b => b.id !== id));
+  const handleRemove = (roomNo) => {
+    unlikeRoom(roomNo)
+      .then(() => setBookmarks((prev) => prev.filter((b) => b.roomNo !== roomNo)))
+      .catch((e) => alert(e?.message || '북마크 해제에 실패했어요.'));
+  };
 
   return (
     <div className="screen">
@@ -2542,7 +2526,13 @@ export function BookmarksScreen() {
       </div>
 
       <div className="scroll" style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {filtered.length === 0 ? (
+        {loading && (
+          <div style={{ padding: '64px 0', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>불러오는 중...</div>
+        )}
+        {!loading && error && (
+          <div style={{ padding: '64px 0', textAlign: 'center', color: 'var(--danger)', fontSize: 13 }}>{error}</div>
+        )}
+        {!loading && !error && filtered.length === 0 && (
           <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
             padding: '64px 0', gap: 12, color: 'var(--ink-4)',
@@ -2552,8 +2542,9 @@ export function BookmarksScreen() {
             </svg>
             <span style={{ fontSize: 14, fontWeight: 500 }}>북마크한 방이 없어요</span>
           </div>
-        ) : filtered.map(b => (
-          <div key={b.id} className="card" style={{ padding: 16 }}>
+        )}
+        {!loading && !error && filtered.map(b => (
+          <div key={b.roomNo} className="card" style={{ padding: 16 }}>
             {/* Room info row */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
               <div style={{
@@ -2568,28 +2559,27 @@ export function BookmarksScreen() {
                 <div style={{
                   fontSize: 15, fontWeight: 700, color: b.recruiting ? 'var(--ink)' : 'var(--ink-3)',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>{b.room}</div>
-                <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>{b.dorm} · {b.roomType}</div>
+                }}>{b.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>{b.dorm} · {b.size}</div>
               </div>
               <span className={b.recruiting ? 'chip brand' : 'chip'} style={{ fontSize: 11, flexShrink: 0 }}>
                 {b.recruiting ? '모집중' : '마감됨'}
               </span>
             </div>
 
-            {/* Divider + meta */}
+            {/* Divider + actions */}
             <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
               paddingTop: 12, borderTop: '1px solid var(--line)',
             }}>
-              <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>저장일 {b.savedAt}</span>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button
-                  onClick={() => handleRemove(b.id)}
+                  onClick={() => handleRemove(b.roomNo)}
                   className="btn ghost"
                   style={{ fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 10, height: 'auto', color: 'var(--ink-3)' }}
                 >북마크 해제</button>
                 <button
-                  onClick={() => navigate('/rooms/1', { state: { closed: !b.recruiting } })}
+                  onClick={() => navigate(`/rooms/${b.roomNo}`)}
                   className="btn ghost"
                   style={{ fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 10, height: 'auto' }}
                 >방 보기</button>
