@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Icon, LogoMark, TabBar, StatusBar, Avatar, MarqueeText } from '../../../shared/components';
 import { getMe } from '../../../shared/api/auth';
 import { loadCalendarEvents, loadMyRoom, loadNotices, loadNotifications } from '../../../shared/api/home';
+import { openNotificationStream } from '../../../shared/api/notificationStream';
 import { residencePeriodLabel } from '../../rooms';
 
 // home.jsx — Home tab (calendar + notices + my room shortcut)
@@ -317,6 +318,13 @@ export function HomeScreen({ activeTab='home' }) {
     return () => {
       mounted = false;
     };
+  }, []);
+
+  React.useEffect(() => {
+    const closeStream = openNotificationStream(() => {
+      setHasUnreadNotification(true);
+    });
+    return closeStream;
   }, []);
 
 	  return (
