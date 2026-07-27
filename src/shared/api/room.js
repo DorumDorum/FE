@@ -51,6 +51,12 @@ export function loadMyRoommates() {
   return client.apiRequestWithAuth('/api/rooms/me/roommates');
 }
 
+export function cancelRoomApplication(roomNo) {
+  return client.apiRequestWithAuth(`/api/rooms/${roomNo}/request`, {
+    method: 'DELETE',
+  });
+}
+
 export function updateRoomTitle(roomNo, request) {
   return client.apiRequestWithAuth(`/api/rooms/me/title?roomNo=${encodeURIComponent(roomNo)}`, {
     method: 'PUT',

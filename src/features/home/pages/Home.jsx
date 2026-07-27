@@ -5,6 +5,7 @@ import { getMe } from '../../../shared/api/auth';
 import { loadCalendarEvents, loadMyRoom, loadNotices, loadNotifications } from '../../../shared/api/home';
 import { openNotificationStream } from '../../../shared/api/notificationStream';
 import { residencePeriodLabel } from '../../rooms';
+import { roomStatusLabel } from '../../rooms/roomData';
 
 // home.jsx — Home tab (calendar + notices + my room shortcut)
 
@@ -104,12 +105,6 @@ const roomTypeLabel = (roomType) => {
   return '방 정보';
 };
 
-
-const roomStatusLabel = (roomStatus) => {
-  if (roomStatus === 'COMPLETED') return '모집 완료';
-  if (roomStatus === 'CONFIRM_PENDING') return '확정 대기';
-  return '모집중';
-};
 
 const formatRemainingTime = (minutes) => {
   const h = Math.floor(minutes / 60);

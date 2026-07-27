@@ -5,8 +5,9 @@ import { logout as logoutUser, getCachedUserNo } from '../../../shared/api/auth'
 import {
   loadMyRoom, loadNotifications, markNotificationRead,
   loadMyChecklist, createUserChecklist, updateUserChecklist,
+  loadMyAppliedRooms,
 } from '../../../shared/api/home';
-import { submitRoomApplication, approveApplication, rejectApplication, loadMyRoomRule, updateMyRoomRule, createRoom } from '../../../shared/api/room';
+import { submitRoomApplication, approveApplication, rejectApplication, loadMyRoomRule, updateMyRoomRule, createRoom, cancelRoomApplication } from '../../../shared/api/room';
 import { ChatMessageItem, ChatComposer } from '../../chat';
 import { getOrCreateDirectChatRoom, loadChatMessages, markChatRoomRead, leaveChatRoom } from '../../../shared/api/chat';
 import { subscribe, publish } from '../../../shared/api/chatSocket';
@@ -17,7 +18,10 @@ import {
   checklistFormToUserChecklistRequest,
   createRoomDraftToRequest,
   defaultRoomChecklistForm,
+  normalizeRoom,
+  residencePeriodLabel,
   roomRuleToChecklistForm,
+  roomStatusLabel,
 } from '../../rooms/roomData';
 
 // details.jsx — Detail screens for each tab
@@ -2315,60 +2319,37 @@ export function CreateRoomSuccessScreen() {
 }
 
 // ─── My Applications List ────────────────────────────────────
-const APPLY_MOCK = [
-  {
-    id: 1,
-    room: '아침형 룸메 구해요',
-    dorm: '2생활관',
-    roomType: '4인실',
-    appliedAt: '2026.05.20',
-    status: 'waiting',
-    closed: false,
-  },
-  {
-    id: 2,
-    room: '조용하고 청결한 룸메 구합니다',
-    dorm: '3생활관',
-    roomType: '2인실',
-    appliedAt: '2026.05.14',
-    status: 'accepted',
-    closed: false,
-  },
-  {
-    id: 3,
-    room: '밤형 인간 환영',
-    dorm: '1생활관',
-    roomType: '2인실',
-    appliedAt: '2026.04.30',
-    status: 'rejected',
-    closed: true,
-  },
-];
-
-const STATUS_TABS = [
-  { key: 'all', label: '전체' },
-  { key: 'waiting', label: '대기중' },
-  { key: 'accepted', label: '수락됨' },
-  { key: 'rejected', label: '거절됨' },
-];
-
-const STATUS_META = {
-  waiting: { label: '대기중', chipClass: 'chip brand' },
-  accepted: { label: '수락됨', chipClass: 'chip success' },
-  rejected: { label: '거절됨', chipClass: 'chip' },
-};
-
 export function MyApplicationsScreen() {
   const navigate = useNavigate();
-  const [tab, setTab] = React.useState('all');
-  const [applications, setApplications] = React.useState(APPLY_MOCK);
+  const [applications, setApplications] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState('');
   const [cancelTarget, setCancelTarget] = React.useState(null);
+  const [cancelling, setCancelling] = React.useState(false);
 
-  const filtered = tab === 'all' ? applications : applications.filter(a => a.status === tab);
+  React.useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError('');
+    loadMyAppliedRooms()
+      .then((rooms) => {
+        if (mounted) setApplications((Array.isArray(rooms) ? rooms : []).map(normalizeRoom));
+      })
+      .catch(() => { if (mounted) setError('신청 내역을 불러오지 못했어요.'); })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, []);
 
   const handleCancel = () => {
-    setApplications(prev => prev.filter(a => a.id !== cancelTarget));
-    setCancelTarget(null);
+    if (!cancelTarget || cancelling) return;
+    setCancelling(true);
+    cancelRoomApplication(cancelTarget)
+      .then(() => {
+        setApplications((prev) => prev.filter((a) => a.roomNo !== cancelTarget));
+        setCancelTarget(null);
+      })
+      .catch((e) => alert(e?.message || '신청 취소에 실패했어요.'))
+      .finally(() => setCancelling(false));
   };
 
   return (
@@ -2376,33 +2357,14 @@ export function MyApplicationsScreen() {
       <StatusBar />
       <TopNav title="신청 내역" backTo="/me" />
 
-      {/* Status filter tabs */}
-      <div style={{
-        display: 'flex', gap: 6, padding: '4px 16px 12px',
-        overflowX: 'auto', flexShrink: 0,
-      }}>
-        {STATUS_TABS.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            style={{
-              padding: '7px 14px',
-              borderRadius: 999,
-              border: tab === t.key ? 'none' : '1px solid var(--line-2)',
-              background: tab === t.key ? 'var(--ink)' : 'transparent',
-              color: tab === t.key ? 'white' : 'var(--ink-2)',
-              fontSize: 13, fontWeight: tab === t.key ? 700 : 500,
-              fontFamily: 'inherit',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >{t.label}</button>
-        ))}
-      </div>
-
       <div className="scroll" style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {filtered.length === 0 ? (
+        {loading && (
+          <div style={{ padding: '64px 0', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>불러오는 중...</div>
+        )}
+        {!loading && error && (
+          <div style={{ padding: '64px 0', textAlign: 'center', color: 'var(--danger)', fontSize: 13 }}>{error}</div>
+        )}
+        {!loading && !error && applications.length === 0 && (
           <div style={{
             flex: 1, display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',
@@ -2411,57 +2373,55 @@ export function MyApplicationsScreen() {
             <Icon.clipboard size={36} />
             <span style={{ fontSize: 14, fontWeight: 500 }}>신청 내역이 없어요</span>
           </div>
-        ) : filtered.map(app => {
-          const sm = STATUS_META[app.status];
-          return (
-            <div key={app.id} className="card" style={{ padding: 16 }}>
-              {/* Room info row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-                <div style={{
-                  width: 44, height: 44, borderRadius: 12,
-                  background: app.status === 'accepted' ? 'var(--brand-soft)' : 'var(--surface-2)',
-                  color: app.status === 'accepted' ? 'var(--brand)' : 'var(--ink-3)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
-                }}>
-                  <Icon.door size={22} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: 15, fontWeight: 700, color: 'var(--ink)',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>{app.room}</div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>
-                    {app.dorm} · {app.roomType}
-                  </div>
-                </div>
-                <span className={sm.chipClass} style={{ fontSize: 11, flexShrink: 0 }}>{sm.label}</span>
-              </div>
-
-              {/* Divider + meta */}
+        )}
+        {!loading && !error && applications.map((app) => (
+          <div key={app.roomNo} className="card" style={{ padding: 16 }}>
+            {/* Room info row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
               <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                paddingTop: 12, borderTop: '1px solid var(--line)',
+                width: 44, height: 44, borderRadius: 12,
+                background: 'var(--surface-2)',
+                color: 'var(--ink-3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
               }}>
-                <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>신청일 {app.appliedAt}</span>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {app.status === 'waiting' && (
-                    <button
-                      onClick={() => setCancelTarget(app.id)}
-                      className="btn ghost"
-                      style={{ fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 10, height: 'auto', color: 'var(--danger)' }}
-                    >취소하기</button>
-                  )}
-                  <button
-                    onClick={() => navigate('/rooms/1', { state: { appliedStatus: app.status, closed: app.closed } })}
-                    className="btn ghost"
-                    style={{ fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 10, height: 'auto' }}
-                  >방 보기</button>
+                <Icon.door size={22} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: 15, fontWeight: 700, color: 'var(--ink)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>{app.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>
+                  {app.dorm} · {app.size}
                 </div>
+              </div>
+              <span className="chip" style={{ fontSize: 11, flexShrink: 0 }}>{roomStatusLabel(app.roomStatus)}</span>
+            </div>
+
+            {/* Divider + meta */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              paddingTop: 12, borderTop: '1px solid var(--line)',
+            }}>
+              <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>{residencePeriodLabel(app.residencePeriod)}</span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {app.roomStatus !== 'COMPLETED' && (
+                  <button
+                    onClick={() => setCancelTarget(app.roomNo)}
+                    className="btn ghost"
+                    style={{ fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 10, height: 'auto', color: 'var(--danger)' }}
+                  >취소하기</button>
+                )}
+                <button
+                  onClick={() => navigate(`/rooms/${app.roomNo}`)}
+                  className="btn ghost"
+                  style={{ fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 10, height: 'auto' }}
+                >방 보기</button>
               </div>
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
 
       {/* Cancel confirm bottom sheet */}
@@ -2489,9 +2449,10 @@ export function MyApplicationsScreen() {
             </div>
             <button
               onClick={handleCancel}
+              disabled={cancelling}
               className="btn full"
-              style={{ height: 52, background: 'var(--danger)' }}
-            >신청 취소하기</button>
+              style={{ height: 52, background: 'var(--danger)', opacity: cancelling ? 0.6 : 1 }}
+            >{cancelling ? '취소하는 중...' : '신청 취소하기'}</button>
             <button
               onClick={() => setCancelTarget(null)}
               className="btn full ghost"

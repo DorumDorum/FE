@@ -60,3 +60,7 @@ export function unlikeRoom(roomNo) {
 export function loadRecommendedRooms() {
   return apiRequestWithAuth('/api/rooms/recommended');
 }
+
+export function loadMyAppliedRooms() {
+  return apiRequestWithAuth('/api/rooms/me/applied');
+}
