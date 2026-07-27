@@ -2,22 +2,19 @@ import React from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Icon, StatusBar, Avatar, goBack } from '../../../shared/components';
 import { logout as logoutUser, getCachedUserNo } from '../../../shared/api/auth';
-import { loadMyRoom } from '../../../shared/api/home';
+import { loadMyRoom, loadNotifications, markNotificationRead } from '../../../shared/api/home';
 import { submitRoomApplication, approveApplication, rejectApplication, loadMyRoomRule, updateMyRoomRule, createRoom } from '../../../shared/api/room';
 import { ChatMessageItem, ChatComposer } from '../../chat';
 import { getOrCreateDirectChatRoom, loadChatMessages, markChatRoomRead, leaveChatRoom } from '../../../shared/api/chat';
 import { subscribe, publish } from '../../../shared/api/chatSocket';
 import { applyReadReceipt, appendMessage } from '../../chat/unreadSync';
+import { openNotificationStream } from '../../../shared/api/notificationStream';
 import {
   checklistFormToRoomRuleRequest,
   createRoomDraftToRequest,
   defaultRoomChecklistForm,
   roomRuleToChecklistForm,
 } from '../../rooms/roomData';
-import { logout as logoutUser } from '../../../shared/api/auth';
-import { loadNotifications, markNotificationRead } from '../../../shared/api/home';
-import { openNotificationStream } from '../../../shared/api/notificationStream';
-import { ChatBubble, ChatComposer, ChatAttachmentCard } from '../../chat';
 
 // details.jsx — Detail screens for each tab
 
