@@ -1,13 +1,16 @@
 import React from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Icon, TabBar, StatusBar, Avatar, MarqueeText, ClipText, goBack } from '../../../shared/components';
-import { MemberCard, MEMBER_CHECKLISTS } from '../../members';
+import { MemberCard } from '../../members';
 import { CREATE_ROOM_DORMS, ROOM_SIZE_OPTIONS } from '../../checklist';
-import { findRooms, likeRoom, unlikeRoom, loadLikedRooms, loadMyChecklist, loadRoomRule, loadRecommendedRooms } from '../../../shared/api/home';
+import { findRooms, likeRoom, unlikeRoom, loadLikedRooms, loadMyChecklist, loadRoomRule, loadRecommendedRooms, loadMyRoom } from '../../../shared/api/home';
+import { getOrCreateDirectChatRoom, loadMyChatRooms, leaveChatRoom } from '../../../shared/api/chat';
+import { getCachedUserNo } from '../../../shared/api/auth';
+import { loadApplications, loadMyRoommates, deleteRoom } from '../../../shared/api/room';
+import { normalizeRoom as normalizeBackendRoom, roommateToMember } from '../roomData';
 
 // rooms.jsx — 방 찾기 (list), 방 상세 (detail w/ checklist), 내 방 (my room)
 
-export const MY_ROOM_RECRUITING_KEY = 'dorumdorum:my-room-recruiting';
 const ROOM_BOOKMARKS_KEY = 'dorumdorum:room-bookmarks';
 const ROOM_DETAIL_CACHE_KEY = 'dorumdorum:room-detail';
 
@@ -855,14 +858,17 @@ export function RoomDetailScreen() {
   const [checklist, setChecklist] = React.useState([]);
   const [checklistLoading, setChecklistLoading] = React.useState(true);
   const [checklistError, setChecklistError] = React.useState(false);
+  const [isMyRoom, setIsMyRoom] = React.useState(false);
 
   React.useEffect(() => {
     let mounted = true;
     setChecklistLoading(true);
     setChecklistError(false);
-    Promise.all([loadRoomRule(id), loadMyChecklist()])
-      .then(([roomRule, myChecklist]) => {
-        if (mounted) setChecklist(compareChecklists(roomRule, myChecklist));
+    Promise.all([loadRoomRule(id), loadMyChecklist(), loadMyRoom().catch(() => null)])
+      .then(([roomRule, myChecklist, myRoom]) => {
+        if (!mounted) return;
+        setChecklist(compareChecklists(roomRule, myChecklist));
+        setIsMyRoom(myRoom?.roomNo === id);
       })
       .catch(() => {
         if (mounted) setChecklistError(true);
@@ -1046,10 +1052,22 @@ export function RoomDetailScreen() {
       {/* Sticky CTA */}
       {!isAccepted && (
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'linear-gradient(180deg, transparent 0%, var(--bg) 30%)', display: 'flex', gap: 8 }}>
-        <button onClick={() => navigate('/chat/dm')} className="btn ghost" style={{ width: 52, height: 52, borderRadius: 14, padding: 0 }}>
+        <button
+          onClick={() => {
+            const myNo = getCachedUserNo();
+            if (!myNo) { navigate('/login'); return; }
+            getOrCreateDirectChatRoom(id, myNo)
+              .then((chatRoomNo) => navigate('/chat/dm/' + chatRoomNo))
+              .catch((e) => alert(e?.message || '채팅방을 열 수 없어요.'));
+          }}
+          className="btn ghost"
+          style={{ width: 52, height: 52, borderRadius: 14, padding: 0 }}
+        >
           <Icon.chat size={22}/>
         </button>
-        {isClosed ? (
+        {isMyRoom ? (
+          <button disabled className="btn full" style={{ flex: 1, height: 52, background: 'var(--surface-2)', color: 'var(--ink-4)', cursor: 'not-allowed' }}>내가 만든 방</button>
+        ) : isClosed ? (
           <button disabled className="btn full" style={{ flex: 1, height: 52, background: 'var(--surface-2)', color: 'var(--ink-4)', cursor: 'not-allowed' }}>마감됨</button>
         ) : isApplied ? (
           <button disabled className="btn full" style={{ flex: 1, height: 52, background: 'var(--surface-2)', color: 'var(--ink-4)', cursor: 'not-allowed' }}>대기 중</button>
@@ -1066,53 +1084,85 @@ export function RoomDetailScreen() {
 export function MyRoomScreen({ activeTab='myroom' }) {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const [isRecruiting, setIsRecruiting] = React.useState(() => {
-    if (typeof window === 'undefined') return true;
-    return window.sessionStorage.getItem(MY_ROOM_RECRUITING_KEY) !== 'false';
-  });
-  const [rules, setRules] = React.useState([
-    '소등은 23:00, 조명은 무드등만 사용',
-    '청소 당번 — 매주 일요일 저녁',
-    '외부인 방문 시 단톡방에 미리 공유',
-    '간식은 함께 나눠 먹기',
-  ]);
-  const [rulesEditing, setRulesEditing] = React.useState(false);
-  const [ruleDraft, setRuleDraft] = React.useState('');
-  const isHost = true;
-  const currentMembers = 2;
-  const roomCapacity = 4;
+  const [room, setRoom] = React.useState(null);
+  const [members, setMembers] = React.useState([]);
+  const [applicantCount, setApplicantCount] = React.useState(0);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState('');
+  const [groupChatRoomNo, setGroupChatRoomNo] = React.useState(null);
+  const [leaving, setLeaving] = React.useState(false);
+
+  React.useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError('');
+    Promise.all([
+      loadMyRoom(),
+      loadMyRoommates().catch(() => []),
+      loadMyChatRooms().catch(() => []),
+    ])
+      .then(([roomData, roommateList, chatRooms]) => {
+        if (!mounted) return;
+        if (!roomData?.roomNo) {
+          setRoom(null);
+          setMembers([]);
+          setApplicantCount(0);
+          setGroupChatRoomNo(null);
+          return;
+        }
+        const normalized = normalizeBackendRoom(roomData);
+        const mappedMembers = Array.isArray(roommateList) ? roommateList.map(roommateToMember) : [];
+        const myMember = mappedMembers.find((member) => member.isMe);
+        setRoom(normalized);
+        setMembers(mappedMembers);
+        const chatList = Array.isArray(chatRooms) ? chatRooms : chatRooms?.items || [];
+        const found = chatList.find(
+          (chatRoom) => chatRoom.chatRoomType === 'GROUP' && String(chatRoom.roomNo) === String(roomData.roomNo),
+        );
+        setGroupChatRoomNo(found?.chatRoomNo || null);
+        if (myMember?.role === '방장') {
+          return loadApplications(roomData.roomNo)
+            .then((applications) => { if (mounted) setApplicantCount(Array.isArray(applications) ? applications.length : 0); })
+            .catch(() => { if (mounted) setApplicantCount(0); });
+        }
+        setApplicantCount(0);
+      })
+      .catch((e) => {
+        if (!mounted) return;
+        if (e?.status === 404 || e?.code === 'ROOM003') {
+          setRoom(null);
+          setMembers([]);
+          setApplicantCount(0);
+          setGroupChatRoomNo(null);
+          return;
+        }
+        setError('내 방 정보를 불러오지 못했어요.');
+      })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, []);
+
+  const isHost = members.find((member) => member.isMe)?.role === '방장';
+  const currentMembers = room?.members ?? members.length;
+  const roomCapacity = room?.capacity ?? 0;
+  const isRecruiting = room?.recruiting ?? false;
   const canLeaveRoom = !isHost || currentMembers <= 1;
   const openSeats = Math.max(0, roomCapacity - currentMembers);
   const isRoomFull = currentMembers >= roomCapacity;
-  const canCloseRecruiting = !isRecruiting || isRoomFull;
-
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem(MY_ROOM_RECRUITING_KEY, String(isRecruiting));
-    }
-  }, [isRecruiting]);
 
   const leaveRoom = () => {
-    if (!canLeaveRoom) return;
+    if (!canLeaveRoom || leaving) return;
+    setLeaving(true);
     setMenuOpen(false);
-    navigate('/rooms/find');
-  };
-
-  const toggleRecruiting = () => {
-    if (isRecruiting && !isRoomFull) return;
-    setIsRecruiting((v) => !v);
-    setMenuOpen(false);
-  };
-
-  const addRule = () => {
-    const nextRule = ruleDraft.trim();
-    if (!nextRule) return;
-    setRules((items) => [...items, nextRule]);
-    setRuleDraft('');
-  };
-
-  const removeRule = (index) => {
-    setRules((items) => items.filter((_, itemIndex) => itemIndex !== index));
+    const call = isHost
+      ? deleteRoom(room.roomNo)
+      : leaveChatRoom(groupChatRoomNo);
+    call
+      .then(() => navigate('/rooms/find'))
+      .catch((e) => {
+        alert(e?.message || '방 나가기에 실패했어요.');
+        setLeaving(false);
+      });
   };
 
 	  return (
@@ -1121,10 +1171,51 @@ export function MyRoomScreen({ activeTab='myroom' }) {
 	        <StatusBar />
 	        <div className="topbar">
 	          <div className="brand">내 방</div>
-	          <button onClick={() => setMenuOpen(true)} aria-label="방 관리 메뉴" style={{ background: 'transparent', border: 0, color: 'var(--ink)', padding: 6, display: 'flex', cursor: 'pointer' }}>
+	          <button onClick={() => room && setMenuOpen(true)} aria-label="방 관리 메뉴" style={{ background: 'transparent', border: 0, color: room ? 'var(--ink)' : 'var(--ink-4)', padding: 6, display: 'flex', cursor: room ? 'pointer' : 'default' }}>
 	            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg>
 	          </button>
 	        </div>
+        {loading && (
+          <div style={{ padding: '24px 16px', color: 'var(--ink-3)', fontSize: 13 }}>내 방 정보를 불러오는 중...</div>
+        )}
+        {error && (
+          <div className="card" style={{ margin: '4px 16px 16px', padding: 18, color: 'var(--danger)', fontSize: 13 }}>{error}</div>
+        )}
+        {!loading && !error && !room && (
+          <div style={{ minHeight: 360, padding: '72px 24px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+            <div style={{ width: 58, height: 58, borderRadius: 18, background: 'var(--surface-2)', color: 'var(--ink-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <Icon.door size={28} weight={1.8} />
+            </div>
+            <div style={{ fontSize: 15, color: 'var(--ink-3)', fontWeight: 700 }}>아직 참여 중인 방이 없어요.</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.5, marginTop: 6 }}>
+              모집방을 만들거나 방 찾기에서 입주 신청을 해보세요.
+            </div>
+            <button
+              onClick={() => navigate('/rooms/create/1')}
+              style={{
+                marginTop: 20,
+                height: 52,
+                padding: '0 18px',
+                borderRadius: 26,
+                border: 0,
+                background: 'var(--ink)',
+                color: 'white',
+                fontWeight: 700,
+                fontSize: 14,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              <Icon.plus size={18} /> 모집방 만들기
+            </button>
+          </div>
+        )}
+        {!loading && !error && room && (
+        <>
 	        {/* Hero card */}
         <div style={{ padding: '4px 16px 16px' }}>
           <div style={{
@@ -1133,8 +1224,8 @@ export function MyRoomScreen({ activeTab='myroom' }) {
           }}>
             <div style={{ position: 'absolute', right: -40, top: -40, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,255,255,0.10)' }}/>
             <div style={{ position: 'absolute', right: -10, bottom: -30, width: 100, height: 100, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }}/>
-            <div style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-1px' }}>아침형 룸메 구해요</div>
-            <div style={{ fontSize: 14, opacity: 0.9, marginTop: 2 }}>2생활관 · 4인실</div>
+            <div style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-1px' }}>{room.title}</div>
+            <div style={{ fontSize: 14, opacity: 0.9, marginTop: 2 }}>{[room.dorm, room.size].filter(Boolean).join(' · ')}</div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0, marginTop: 22, position: 'relative' }}>
               <div>
@@ -1152,9 +1243,9 @@ export function MyRoomScreen({ activeTab='myroom' }) {
         {/* Quick actions — pill list */}
         <div style={{ padding: '0 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           {[
-            { i: 'chat', l: '방 채팅', sub: '4명 참여', hasNew: true, to: '/chat/group' },
-            { i: 'user', l: '신청자 관리', sub: '5명 대기 중', hasNew: true, to: '/rooms/applicants' },
-            { i: 'clipboard', l: '방 체크리스트', sub: '11/12 작성됨', to: '/rooms/checklist' },
+            { i: 'chat', l: '방 채팅', sub: `${currentMembers}명 참여`, hasNew: false, to: groupChatRoomNo ? '/chat/group/' + groupChatRoomNo : '/chat' },
+            { i: 'user', l: '신청자 관리', sub: `${applicantCount}명 대기 중`, hasNew: applicantCount > 0, to: '/rooms/applicants' },
+            { i: 'clipboard', l: '방 체크리스트', sub: '방 기준 보기', to: '/rooms/checklist' },
             { i: 'edit', l: '모집글 수정', sub: '제목·소개 변경', to: '/rooms/edit' },
           ].map((a, i) => {
             const I = Icon[a.i];
@@ -1198,62 +1289,27 @@ export function MyRoomScreen({ activeTab='myroom' }) {
 	          </span>
 	        </div>
         <div style={{ margin: '0 16px' }}>
-          {MEMBER_CHECKLISTS.map((m, i) => (
-            <MemberCard key={i} m={m} defaultOpen={false}/>
-          ))}
+          {members.length > 0 ? members.map((m) => (
+            <MemberCard key={m.id} m={m} defaultOpen={false}/>
+          )) : (
+            <div className="card" style={{ padding: 18, color: 'var(--ink-3)', fontSize: 13 }}>룸메이트 정보를 불러올 수 없어요.</div>
+          )}
         </div>
 
-        {/* Room rules */}
+        {/* Room notes */}
         <div className="h-section">
-          <h2>우리 방 약속</h2>
-          <button
-            type="button"
-            onClick={() => setRulesEditing((editing) => !editing)}
-            className="more"
-            style={{ border: 0, background: 'transparent', padding: 0, fontFamily: 'inherit', cursor: 'pointer' }}
-          >
-            {rulesEditing ? '완료' : '수정'}
-          </button>
+          <h2>방장의 한마디</h2>
+          <span className="more" onClick={() => navigate('/rooms/edit')} style={{ cursor: 'pointer' }}>수정</span>
         </div>
-        {!rulesEditing ? (
-          <div style={{ margin: '0 16px 24px' }} className="card">
-            {rules.map((rule, i, list) => (
-              <div key={`${rule}-${i}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 0', borderBottom: i === list.length - 1 ? 'none' : '1px solid var(--line)' }}>
-                <div style={{ width: 22, height: 22, borderRadius: 7, background: 'var(--brand-soft)', color: 'var(--brand-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>{i + 1}</div>
-                <div style={{ fontSize: 14, color: 'var(--ink)', lineHeight: 1.5 }}>{rule}</div>
-              </div>
-            ))}
+        <div style={{ margin: '0 16px 24px' }} className="card">
+          <div style={{ fontSize: 14, color: room.notes ? 'var(--ink)' : 'var(--ink-3)', lineHeight: 1.6 }}>
+            {room.notes || '아직 작성된 한마디가 없어요.'}
           </div>
-        ) : (
-	          <div style={{ margin: '0 16px 24px' }} className="card">
-            {rules.map((rule, i) => (
-              <div key={`${rule}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
-                <div style={{ width: 22, height: 22, borderRadius: 7, background: 'var(--brand-soft)', color: 'var(--brand-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>{i + 1}</div>
-                <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: 'var(--ink)', lineHeight: 1.5 }}>{rule}</div>
-                <button type="button" onClick={() => removeRule(i)} aria-label="약속 삭제" style={{ width: 20, height: 20, borderRadius: '50%', border: 0, background: 'var(--surface-2)', color: 'var(--ink-3)', fontSize: 12, lineHeight: 1, cursor: 'pointer', flexShrink: 0, padding: 0 }}>×</button>
-              </div>
-            ))}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                addRule();
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 12 }}
-            >
-              <input
-                value={ruleDraft}
-                onChange={(e) => setRuleDraft(e.target.value)}
-                placeholder="새 약속 입력"
-                style={{ flex: 1, minWidth: 0, height: 42, border: 0, outline: 'none', borderRadius: 13, background: 'var(--surface-2)', padding: '0 12px', fontFamily: 'inherit', fontSize: 14, color: 'var(--ink)' }}
-              />
-              <button type="submit" disabled={!ruleDraft.trim()} style={{ height: 42, border: 0, borderRadius: 13, background: 'var(--brand)', color: 'white', padding: '0 13px', display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'inherit', fontSize: 13, fontWeight: 700, opacity: ruleDraft.trim() ? 1 : 0.45, cursor: ruleDraft.trim() ? 'pointer' : 'not-allowed' }}>
-                <Icon.plus size={16} /> 추가
-              </button>
-            </form>
-          </div>
-        )}
+        </div>
 
         <div style={{ height: 24 }}/>
+        </>
+        )}
       </div>
 
       <TabBar active={activeTab}/>
@@ -1316,15 +1372,14 @@ export function MyRoomScreen({ activeTab='myroom' }) {
 
 		            <button
 		              type="button"
-		              onClick={toggleRecruiting}
-                  disabled={!canCloseRecruiting}
+		              disabled
 		              style={{
 		                width: '100%',
 		                minHeight: 52,
 		                border: 0,
 		                borderRadius: 14,
-		                background: !canCloseRecruiting ? 'var(--surface-2)' : isRecruiting ? 'rgba(245,166,35,0.12)' : 'var(--brand-soft)',
-		                color: !canCloseRecruiting ? 'var(--ink-4)' : isRecruiting ? '#9A6200' : 'var(--brand-deep)',
+		                background: 'var(--surface-2)',
+		                color: 'var(--ink-4)',
 		                display: 'flex',
 		                alignItems: 'center',
 		                justifyContent: 'space-between',
@@ -1332,19 +1387,13 @@ export function MyRoomScreen({ activeTab='myroom' }) {
 		                fontFamily: 'inherit',
 		                fontSize: 15,
 		                fontWeight: 700,
-		                cursor: canCloseRecruiting ? 'pointer' : 'not-allowed',
+		                cursor: 'not-allowed',
 		                marginBottom: 8,
 		              }}
 		            >
-		              <span>{isRecruiting ? '모집 마감하기' : '모집 다시 열기'}</span>
+		              <span>모집 상태</span>
 		              <span style={{ fontSize: 11, fontWeight: 700 }}>{isRecruiting ? (isRoomFull ? '정원 완료' : `${openSeats}자리 남음`) : '모집 완료'}</span>
 		            </button>
-
-                {isRecruiting && !isRoomFull && (
-                  <div style={{ margin: '-2px 0 8px', borderRadius: 12, background: 'var(--brand-soft)', color: 'var(--brand-deep)', padding: 12, fontSize: 12, lineHeight: 1.5, fontWeight: 600 }}>
-                    모든 인원이 다 찬 뒤에 모집을 마감할 수 있어요.
-                  </div>
-                )}
 
 	            <button
 	              type="button"

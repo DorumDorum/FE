@@ -1,6 +1,19 @@
 import React from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Icon, StatusBar, Avatar, goBack } from '../../../shared/components';
+import { logout as logoutUser, getCachedUserNo } from '../../../shared/api/auth';
+import { loadMyRoom } from '../../../shared/api/home';
+import { submitRoomApplication, approveApplication, rejectApplication, loadMyRoomRule, updateMyRoomRule, createRoom } from '../../../shared/api/room';
+import { ChatMessageItem, ChatComposer } from '../../chat';
+import { getOrCreateDirectChatRoom, loadChatMessages, markChatRoomRead, leaveChatRoom } from '../../../shared/api/chat';
+import { subscribe, publish } from '../../../shared/api/chatSocket';
+import { applyReadReceipt, appendMessage } from '../../chat/unreadSync';
+import {
+  checklistFormToRoomRuleRequest,
+  createRoomDraftToRequest,
+  defaultRoomChecklistForm,
+  roomRuleToChecklistForm,
+} from '../../rooms/roomData';
 import { logout as logoutUser } from '../../../shared/api/auth';
 import { loadNotifications, markNotificationRead } from '../../../shared/api/home';
 import { openNotificationStream } from '../../../shared/api/notificationStream';
@@ -9,12 +22,17 @@ import { ChatBubble, ChatComposer, ChatAttachmentCard } from '../../chat';
 // details.jsx — Detail screens for each tab
 
 // ─── Common: simple top nav with back arrow ─────────────────
-export function TopNav({ title, right, backTo }) {
+export function TopNav({ title, right, backTo, collapsible = true }) {
   const navigate = useNavigate();
   const navRef = React.useRef(null);
   const [collapsed, setCollapsed] = React.useState(false);
 
   React.useEffect(() => {
+    if (!collapsible) {
+      setCollapsed(false);
+      return undefined;
+    }
+
     const parent = navRef.current?.parentElement;
     const scroller = parent?.querySelector(':scope > .scroll') || parent?.querySelector('.scroll');
     if (!scroller) return undefined;
@@ -45,7 +63,7 @@ export function TopNav({ title, right, backTo }) {
 
     scroller.addEventListener('scroll', onScroll, { passive: true });
     return () => scroller.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [collapsible]);
 
   return (
     <div ref={navRef} style={{
@@ -292,20 +310,40 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
     sleepHabit: null, snore: null, shower: null, eating: null,
     lightsOut: null, lightsOutHour: 23, visitHome: null, smoke: null, fridge: null,
     alarm: null, earphone: null, skinCare: null, silentMouse: null, hot: null, cold: null, study: null, trash: null,
-  } : {
-    sleep: { start: 23, end: 1 },
-    wake: { start: 7, end: 9 },
-    dryer: null,
-    homing: '유동적', cleaning: '주기적', call: '가능', dim: '어두움',
-    sleepHabit: '약함', snore: '약함~없음', shower: '저녁', eating: '가능+환기필수',
-    lightsOut: '시간 지정', lightsOutHour: 23, visitHome: '2주', smoke: '비흡연', fridge: '협의 후 결정',
-    alarm: '진동', earphone: '항상', skinCare: '유동적', silentMouse: '사용', hot: '중간', cold: '중간', study: '유동적', trash: '개별',
-  });
+  } : defaultRoomChecklistForm);
   const upd = (k, val) => setV({ ...v, [k]: val });
   const [headerCollapsed, setHeaderCollapsed] = React.useState(false);
+  const [roomContext, setRoomContext] = React.useState(null);
+  const [roomRuleLoading, setRoomRuleLoading] = React.useState(isRoomEdit);
+  const [roomRuleSaving, setRoomRuleSaving] = React.useState(false);
   const scrollRef = React.useRef(null);
 
+  React.useEffect(() => {
+    if (!isRoomEdit) return undefined;
+    let mounted = true;
+    setRoomRuleLoading(true);
+    loadMyRoom()
+      .then((room) => {
+        setRoomContext(room);
+        return loadMyRoomRule(room.roomNo);
+      })
+      .then((rule) => { if (mounted) setV(roomRuleToChecklistForm(rule)); })
+      .catch(() => { if (mounted) alert('방 체크리스트를 불러오지 못했어요.'); })
+      .finally(() => { if (mounted) setRoomRuleLoading(false); });
+    return () => { mounted = false; };
+  }, [isRoomEdit]);
+
+  const saveRoomRule = () => {
+    if (!roomContext || roomRuleSaving) return;
+    setRoomRuleSaving(true);
+    updateMyRoomRule(roomContext.roomNo, checklistFormToRoomRuleRequest(v, roomContext))
+      .then(() => navigate('/rooms/checklist'))
+      .catch((e) => alert(e?.message || '방 체크리스트를 저장하지 못했어요.'))
+      .finally(() => setRoomRuleSaving(false));
+  };
+
   const handleScroll = () => {
+    if (isRoomCreate) return;
     if (scrollRef.current) {
       setHeaderCollapsed(scrollRef.current.scrollTop > 10);
     }
@@ -316,7 +354,7 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
       <StatusBar />
       {isRoomCreate ?
       <>
-          <TopNav title="모집방 만들기" backTo="/rooms/create/1" />
+          <TopNav title="모집방 만들기" backTo="/rooms/create/1" collapsible={false} />
           <div style={{ padding: '0 20px 10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>
               <span>2 / 3 단계</span>
@@ -328,10 +366,10 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
           </div>
           <div style={{
             overflow: 'hidden',
-            maxHeight: headerCollapsed ? 0 : 100,
-            opacity: headerCollapsed ? 0 : 1,
+            maxHeight: 100,
+            opacity: 1,
             transition: 'max-height 0.25s ease, opacity 0.2s ease',
-            padding: headerCollapsed ? '0 20px' : '6px 20px 0',
+            padding: '6px 20px 0',
           }}>
             <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.4px', lineHeight: 1.35 }}>
               어떤 룸메이트를 찾으시나요?
@@ -345,7 +383,7 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
           <TopNav
           title="방 체크리스트"
           backTo="/rooms/checklist"
-          right={<button onClick={() => navigate('/rooms/checklist')} style={{ background: 'transparent', border: 0, fontSize: 13, color: 'var(--brand)', fontWeight: 700, cursor: 'pointer' }}>저장</button>}
+          right={<button onClick={saveRoomRule} disabled={roomRuleLoading || roomRuleSaving || !roomContext} style={{ background: 'transparent', border: 0, fontSize: 13, color: 'var(--brand)', fontWeight: 700, cursor: roomRuleLoading || roomRuleSaving || !roomContext ? 'not-allowed' : 'pointer', opacity: roomRuleLoading || roomRuleSaving || !roomContext ? 0.45 : 1 }}>{roomRuleSaving ? '저장 중' : '저장'}</button>}
         />
           <div style={{ padding: '6px 20px 0' }}>
             <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.4px', lineHeight: 1.35 }}>
@@ -365,6 +403,9 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
       }
 
       <div ref={scrollRef} onScroll={handleScroll} className="scroll" style={{ padding: isRoom ? '12px 20px 0' : '0 20px' }}>
+        {isRoomEdit && roomRuleLoading && (
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>방 체크리스트를 불러오는 중...</div>
+        )}
         {/* Section 1 */}
         <div style={{ padding: '10px 0 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: '-0.4px' }}>생활 패턴</h2>
@@ -496,13 +537,13 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
       {isRoomCreate &&
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px'  , background: 'transparent', display: 'flex', gap: 8 }}>
           <button onClick={() => navigate('/rooms/create/1')} className="btn ghost" style={{ width: 80, height: 52 }}>이전</button>
-          <button onClick={() => navigate('/rooms/create/3')} className="btn full" style={{ flex: 1, height: 52 }}>다음</button>
+          <button onClick={() => { saveCreateRoomRuleDraft(v); navigate('/rooms/create/3'); }} className="btn full" style={{ flex: 1, height: 52 }}>다음</button>
         </div>
       }
       {isRoomEdit &&
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
           <button onClick={() => navigate('/rooms/checklist')} className="btn ghost" style={{ width: 80, height: 52 }}>취소</button>
-          <button onClick={() => navigate('/rooms/checklist')} className="btn full" style={{ flex: 1, height: 52 }}>저장</button>
+          <button onClick={saveRoomRule} disabled={roomRuleLoading || roomRuleSaving || !roomContext} className="btn full" style={{ flex: 1, height: 52, opacity: roomRuleLoading || roomRuleSaving || !roomContext ? 0.45 : 1 }}>{roomRuleSaving ? '저장 중...' : '저장'}</button>
         </div>
       }
       {!isRoom &&
@@ -516,11 +557,17 @@ export function ChecklistEditScreen({ mode = 'personal' }) {
 
 // ─── Create-room Step 3: Preview & publish ──────────────────
 const CREATE_ROOM_DRAFT_KEY = 'dorumdorum:create-room-draft';
+const CREATE_ROOM_RULE_DRAFT_KEY = 'dorumdorum:create-room-rule-draft';
+const PROFILE_STORAGE_KEY = 'dorumdorum:profile';
 const DEFAULT_CREATE_ROOM_DRAFT = {
-  title: '아침형 룸메 구해요',
+  title: '',
   dorm: '2생활관',
   roomSize: '4인실',
   residencePeriod: 'SEMESTER',
+  notes: '',
+};
+const LEGACY_CREATE_ROOM_DRAFT = {
+  title: '아침형 룸메 구해요',
   notes: '아침 7시쯤 일어나는 사람이면 좋아요. 청소는 일주일에 두 번 같이 하면 좋겠어요.',
 };
 
@@ -537,25 +584,88 @@ export const CREATE_ROOM_DORMS = [
 ];
 export const ROOM_SIZE_OPTIONS = ['1인실', '2인실', '3인실', '4인실'];
 
+function withChecklistDefaults(value = {}) {
+  return Object.fromEntries(
+    Object.entries(defaultRoomChecklistForm).map(([key, fallback]) => [
+      key,
+      value[key] == null ? fallback : value[key],
+    ]),
+  );
+}
+
 function readCreateRoomDraft() {
   if (typeof window === 'undefined') return DEFAULT_CREATE_ROOM_DRAFT;
   try {
     const saved = window.sessionStorage.getItem(CREATE_ROOM_DRAFT_KEY);
-    return saved ? { ...DEFAULT_CREATE_ROOM_DRAFT, ...JSON.parse(saved) } : DEFAULT_CREATE_ROOM_DRAFT;
+    if (!saved) return DEFAULT_CREATE_ROOM_DRAFT;
+    const draft = { ...DEFAULT_CREATE_ROOM_DRAFT, ...JSON.parse(saved) };
+    return {
+      ...draft,
+      title: draft.title === LEGACY_CREATE_ROOM_DRAFT.title ? '' : draft.title,
+      notes: draft.notes === LEGACY_CREATE_ROOM_DRAFT.notes ? '' : draft.notes,
+    };
   } catch {
     return DEFAULT_CREATE_ROOM_DRAFT;
+  }
+}
+
+function readCreateRoomRuleDraft() {
+  if (typeof window === 'undefined') return defaultRoomChecklistForm;
+  try {
+    const saved = window.sessionStorage.getItem(CREATE_ROOM_RULE_DRAFT_KEY);
+    return saved ? withChecklistDefaults(JSON.parse(saved)) : defaultRoomChecklistForm;
+  } catch {
+    return defaultRoomChecklistForm;
+  }
+}
+
+function saveCreateRoomRuleDraft(value) {
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.setItem(CREATE_ROOM_RULE_DRAFT_KEY, JSON.stringify(withChecklistDefaults(value)));
+}
+
+function readCachedProfileName() {
+  if (typeof window === 'undefined') return '방장';
+  try {
+    const profile = JSON.parse(window.localStorage.getItem(PROFILE_STORAGE_KEY) || '{}');
+    return profile.displayName || profile.accountName || '방장';
+  } catch {
+    return '방장';
   }
 }
 
 export function CreateRoomStep3Screen() {
   const navigate = useNavigate();
   const draft = readCreateRoomDraft();
+  const ruleDraft = readCreateRoomRuleDraft();
   const capacity = Number.parseInt(draft.roomSize, 10) || 4;
+  const hostName = readCachedProfileName();
+  const previewTitle = draft.title?.trim();
+  const previewNotes = draft.notes?.trim();
+  const canPublish = previewTitle.length > 0;
+  const [submitting, setSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState('');
+
+  const publishRoom = () => {
+    if (submitting) return;
+    if (!canPublish) {
+      setSubmitError('모집글 제목을 입력해주세요.');
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError('');
+    createRoom(createRoomDraftToRequest(draft, ruleDraft))
+      .then(() => navigate('/rooms/create/success', { state: { draft } }))
+      .catch((error) => {
+        setSubmitError(error?.message || '모집방을 등록하지 못했어요.');
+        setSubmitting(false);
+      });
+  };
 
   return (
     <div className="screen">
       <StatusBar />
-      <TopNav title="모집방 만들기" backTo="/rooms/create/2" />
+      <TopNav title="모집방 만들기" backTo="/rooms/create/2" collapsible={false} />
 
       <div style={{ padding: '0 20px 10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>
@@ -580,14 +690,14 @@ export function CreateRoomStep3Screen() {
         {/* Preview card */}
         <div className="card" style={{ padding: 16, marginBottom: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-3)', letterSpacing: '0.4px', marginBottom: 8 }}>미리보기</div>
-          <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>{draft.title || DEFAULT_CREATE_ROOM_DRAFT.title}</div>
+          <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px', color: previewTitle ? 'var(--ink)' : 'var(--ink-3)' }}>{previewTitle || '모집글 제목을 입력해주세요.'}</div>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4 }}>{draft.dorm} · {draft.roomSize}</div>
           <div style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.55, marginTop: 12 }}>
-            {draft.notes || '방장의 한마디가 비어 있어요.'}
+            {previewNotes || '방장의 한마디가 비어 있어요.'}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
-            <Avatar name="강민지" size={28} />
-            <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>방장 · <b>강민지</b></span>
+            <Avatar name={hostName} size={28} />
+            <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>방장 · <b>{hostName}</b></span>
             <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--ink-3)', fontWeight: 600 }}>1/{capacity} 모집중</span>
           </div>
         </div>
@@ -595,8 +705,8 @@ export function CreateRoomStep3Screen() {
         {/* Summary */}
         <div style={{ background: 'var(--surface)', borderRadius: 16, padding: 4 }}>
           {[
-          { l: '기본 정보', v: `${draft.title || DEFAULT_CREATE_ROOM_DRAFT.title} · ${draft.dorm} ${draft.roomSize}`, i: 1 },
-          { l: '방 체크리스트', v: '생활 패턴 14개 · 추가 규칙 9개 작성됨', i: 2 }].
+          { l: '기본 정보', v: `${previewTitle || '제목 미입력'} · ${draft.dorm} ${draft.roomSize}`, i: 1 },
+          { l: '방 체크리스트', v: '작성한 체크리스트가 반영돼요', i: 2 }].
           map((r, i, a) =>
           <div key={i} style={{
             display: 'flex', alignItems: 'center', gap: 12, padding: '14px 14px',
@@ -622,9 +732,15 @@ export function CreateRoomStep3Screen() {
         <div style={{ height: 110 }} />
       </div>
 
+      {submitError &&
+      <div style={{ position: 'absolute', left: 16, right: 16, bottom: 78, color: 'var(--danger)', fontSize: 13, textAlign: 'center', lineHeight: 1.4 }}>
+          {submitError}
+        </div>
+      }
+
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px'  , background: 'transparent', display: 'flex', gap: 8 }}>
         <button onClick={() => navigate('/rooms/create/2')} className="btn ghost" style={{ width: 80, height: 52 }}>이전</button>
-        <button onClick={() => navigate('/rooms/create/success')} className="btn full" style={{ flex: 1, height: 52 }}>모집방 올리기</button>
+        <button onClick={publishRoom} disabled={submitting || !canPublish} className="btn full" style={{ flex: 1, height: 52, opacity: submitting || !canPublish ? 0.6 : 1 }}>{submitting ? '등록 중...' : '모집방 올리기'}</button>
       </div>
     </div>);
 
@@ -637,6 +753,7 @@ export function CreateRoomScreen() {
   const selectedDorm = CREATE_ROOM_DORMS.find((d) => d.name === form.dorm) || CREATE_ROOM_DORMS[1];
   const titleMax = 30;
   const noteMax = 180;
+  const canGoNext = form.title.trim().length > 0;
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -659,7 +776,7 @@ export function CreateRoomScreen() {
   return (
     <div className="screen">
       <StatusBar />
-      <TopNav title="모집방 만들기" backTo="/rooms/find" />
+      <TopNav title="모집방 만들기" backTo="/rooms/find" collapsible={false} />
 
       <div style={{ padding: '0 20px 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>
@@ -776,11 +893,11 @@ export function CreateRoomScreen() {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <label style={{ fontSize: 13, color: 'var(--ink-3)', fontWeight: 600 }}>방장의 한마디 <span style={{ color: 'var(--ink-4)', fontWeight: 500 }}>(선택)</span></label>
-              <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{form.note.length} / {noteMax}</span>
+              <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{(form.notes || '').length} / {noteMax}</span>
             </div>
             <textarea
-              value={form.note}
-              onChange={(e) => update('note', e.target.value)}
+              value={form.notes || ''}
+              onChange={(e) => update('notes', e.target.value)}
               maxLength={noteMax}
               placeholder="예: 생활 패턴이 잘 맞는 분이면 좋아요."
               style={{
@@ -805,7 +922,7 @@ export function CreateRoomScreen() {
       </div>
 
       <div style={{ padding: '14px 16px'  , background: 'transparent' }}>
-        <button onClick={() => navigate('/rooms/create/2')} className="btn full" style={{ height: 52 }}>다음</button>
+        <button onClick={() => { if (canGoNext) navigate('/rooms/create/2'); }} disabled={!canGoNext} className="btn full" style={{ height: 52, opacity: canGoNext ? 1 : 0.45 }}>다음</button>
       </div>
     </div>);
 
@@ -814,35 +931,40 @@ export function CreateRoomScreen() {
 // ─── Applicant detail (host viewing applicant's checklist) ──
 export function ApplicantDetailScreen() {
   const navigate = useNavigate();
+  const { state } = useLocation();
+  const applicant = state?.applicant;
+  const roomNo = state?.roomNo;
   const [confirmAction, setConfirmAction] = React.useState(null);
-  const ITEMS = [
-  { cat: '생활 패턴', rows: [
-    { q: '취침', room: '23시 – 01시', other: '23시 – 01시', match: true },
-    { q: '기상', room: '07시 – 09시', other: '07시 – 08시', match: true },
-    { q: '귀가', room: '고정적', other: '고정적', match: true },
-    { q: '청소', room: '주기적', other: '주기적', match: true },
-    { q: '방에서 전화', room: '가능', other: '가능', match: true },
-    { q: '잠귀', room: '어두움', other: '어두움', match: true },
-    { q: '잠버릇', room: '약함', other: '약함', match: true },
-    { q: '코골이', room: '약함~없음', other: '약함~없음', match: true },
-    { q: '샤워시간', room: '저녁', other: '아침', match: false },
-    { q: '방에서 취식', room: '가능+환기필수', other: '가능', match: false },
-    { q: '소등', room: '23시 이후', other: '23시 이후', match: true },
-    { q: '본가 주기', room: '2주', other: '매주', match: false },
-    { q: '흡연', room: '비흡연', other: '비흡연', match: true },
-    { q: '냉장고', room: '협의 후 결정', other: '협의 후 결정', match: true }]
-  },
-  { cat: '추가 규칙', rows: [
-    { q: '드라이기 제한', room: '12–19시 사용 제한', other: '00–06시 사용 제한', match: false },
-    { q: '알람', room: '진동', other: '진동', match: true },
-    { q: '이어폰', room: '항상', other: '항상', match: true },
-    { q: '키스킨', room: '유동적', other: '유동적', match: true },
-        { q: '무소음 마우스', room: '사용', other: '미사용', match: false },
-    { q: '더위', room: '중간', other: '중간', match: true },
-    { q: '추위', room: '중간', other: '중간', match: true },
-    { q: '공부', room: '유동적', other: '기숙사 안', match: false },
-    { q: '쓰레기통', room: '개별', other: '개별', match: true }]
-  }];
+
+  const openDirectChat = () => {
+    if (!roomNo || !applicant?.userNo) { alert('정보를 불러올 수 없어요.'); return; }
+    getOrCreateDirectChatRoom(roomNo, applicant.userNo)
+      .then((chatRoomNo) => navigate('/chat/dm/' + chatRoomNo))
+      .catch((e) => alert(e?.message || '채팅방을 열 수 없어요.'));
+  };
+
+  const completeDecision = () => {
+    if (!confirmAction || !applicant) return;
+    const call = confirmAction === 'accept'
+      ? approveApplication(roomNo, applicant.requestNo)
+      : rejectApplication(applicant.requestNo);
+    call
+      .then(() => navigate(confirmAction === 'accept' ? '/rooms/members' : '/rooms/applicants'))
+      .catch((e) => alert(e?.message || '처리 중 오류가 발생했어요.'));
+  };
+
+  if (!applicant) {
+    return (
+      <div className="screen">
+        <StatusBar />
+        <TopNav title="신청자 정보" backTo="/rooms/applicants" />
+        <div style={{ padding: 32, textAlign: 'center', color: 'var(--ink-3)', fontSize: 14 }}>신청자 정보를 불러올 수 없어요.</div>
+      </div>
+    );
+  }
+
+  const displayName = applicant.nickname || applicant.name;
+  const displayMeta = [applicant.major, applicant.grade ? applicant.grade + '학년' : null].filter(Boolean).join(' ');
 
   return (
     <div className="screen">
@@ -850,110 +972,73 @@ export function ApplicantDetailScreen() {
       <TopNav title="신청자 정보" backTo="/rooms/applicants" />
 
       <div className="scroll">
-        {/* Profile header */}
         <div style={{ padding: '0 20px 16px', display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Avatar name="지원" size={64} style={{ fontSize: 26 }} />
+          <Avatar name={displayName} size={64} style={{ fontSize: 26 }} />
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 19, fontWeight: 700 }}>지원</span>
+              <span style={{ fontSize: 19, fontWeight: 700 }}>{displayName}</span>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 2 }}>컴공 22</div>
-            <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>2026.05.21 10:42 신청</div>
-          </div>
-        </div>
-
-        {/* Match summary */}
-        <div style={{ margin: '0 16px 16px' }} className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 6 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 11, background: 'var(--brand)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Icon.check size={20} weight={2.6} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 700 }}>방과 잘 맞아요</div>
-              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>10개 항목 중 7개 일치</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Message */}
-        <div className="h-section"><h2>신청 메시지</h2></div>
-        <div className="card" style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--ink-2)', margin: '0 16px', padding: 16 }}>
-          안녕하세요! 컴공 22학번 안녕하세요! 조용히 지내고 체크리스트 매칭도 잘 맞을 것 같아서 신청 드립니다. 잘 부탁드려요!
-        </div>
-
-        {/* Checklist comparison */}
-        <div className="h-section">
-          <h2>체크리스트 비교</h2>
-        </div>
-        <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 18, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 84px 84px 24px', alignItems: 'center', padding: '12px 14px', fontSize: 11, fontWeight: 600, color: 'var(--ink-3)' }}>
-            <span />
-            <span style={{ textAlign: 'center' }}>방</span>
-            <span style={{ textAlign: 'center' }}>신청자</span>
-            <span />
-          </div>
-          {ITEMS.map((cat) =>
-          <div key={cat.cat}>
-              <div style={{ padding: '8px 14px 6px', fontSize: 11, fontWeight: 700, color: 'var(--ink-2)', background: 'var(--surface-2)' }}>{cat.cat}</div>
-              {cat.rows.map((it, i) =>
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 84px 84px 24px', alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid var(--line)', fontSize: 13 }}>
-                  <span style={{ color: 'var(--ink-2)' }}>{it.q}</span>
-                  <span style={{ textAlign: 'center', fontWeight: 600 }}>{it.room}</span>
-                  <span style={{ textAlign: 'center', fontWeight: 600, color: it.match ? 'var(--ink)' : 'var(--ink-3)' }}>{it.other}</span>
-                  <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    {it.match ?
-                <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--brand)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon.check size={12} weight={3} /></span> :
-                <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--surface-2)', color: 'var(--ink-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>−</span>}
-                  </span>
-                </div>
+            {displayMeta && <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 2 }}>{displayMeta}</div>}
+            {applicant.createdAt && (
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>
+                {new Date(applicant.createdAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 신청
+              </div>
             )}
-            </div>
-          )}
+          </div>
         </div>
+
+        {(applicant.introduction || applicant.additionalMessage) && (
+          <>
+            <div className="h-section"><h2>신청 메시지</h2></div>
+            <div className="card" style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--ink-2)', margin: '0 16px', padding: 16 }}>
+              {applicant.additionalMessage || applicant.introduction}
+            </div>
+          </>
+        )}
 
         <div style={{ height: 110 }} />
       </div>
 
-	      {/* Action bar */}
-	      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
-	        <button onClick={() => setConfirmAction('reject')} className="btn ghost" style={{ flex: 1, height: 52 }}>거절</button>
-	        <button onClick={() => navigate('/chat/dm')} className="btn ghost" style={{ width: 52, height: 52, padding: 0 }}><Icon.chat size={22} /></button>
-	        <button onClick={() => setConfirmAction('accept')} className="btn full" style={{ flex: 1, height: 52 }}>수락</button>
-	      </div>
-	      {confirmAction && (
-	        <div onClick={() => setConfirmAction(null)} style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(23,24,28,0.28)', display: 'flex', alignItems: 'flex-end' }}>
-	          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--surface)', borderRadius: '22px 22px 0 0', padding: '10px 16px 30px', boxShadow: '0 -16px 40px rgba(23,24,28,0.14)' }}>
-	            <div style={{ width: 38, height: 4, borderRadius: 99, background: 'var(--line-2)', margin: '0 auto 14px' }} />
-	            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 2px 18px' }}>
-	              <Avatar name="지원" size={44} />
-	              <div style={{ flex: 1, minWidth: 0 }}>
-	                <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>
-	                  {confirmAction === 'accept' ? '신청을 수락할까요?' : '신청을 거절할까요?'}
-	                </div>
-	                <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>지원 · 컴공 22</div>
-	              </div>
-	            </div>
-	            <div style={{ borderRadius: 14, background: 'var(--surface-2)', padding: 14, fontSize: 12, lineHeight: 1.5, color: 'var(--ink-2)', marginBottom: 12 }}>
-	              {confirmAction === 'accept'
-	                ? '수락하면 지원님이 방 멤버로 이동하고 신청은 완료 처리돼요.'
-	                : '거절하면 지원님의 신청이 목록에서 사라져요. 다시 되돌릴 수 없어요.'}
-	            </div>
-	            <div style={{ display: 'flex', gap: 8 }}>
-	              <button type="button" onClick={() => setConfirmAction(null)} className="btn ghost" style={{ width: 92, height: 52 }}>취소</button>
-	              <button
-	                type="button"
-	                onClick={() => navigate(confirmAction === 'accept' ? '/rooms/members' : '/rooms/applicants')}
-	                className="btn full"
-	                style={{ flex: 1, height: 52, background: confirmAction === 'accept' ? 'var(--brand)' : 'var(--danger)' }}
-	              >
-	                {confirmAction === 'accept' ? '수락하기' : '거절하기'}
-	              </button>
-	            </div>
-	          </div>
-	        </div>
-	      )}
-	    </div>);
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
+        <button onClick={() => setConfirmAction('reject')} className="btn ghost" style={{ flex: 1, height: 52 }}>거절</button>
+        <button onClick={openDirectChat} className="btn ghost" style={{ width: 52, height: 52, padding: 0 }}><Icon.chat size={22} /></button>
+        <button onClick={() => setConfirmAction('accept')} className="btn full" style={{ flex: 1, height: 52 }}>수락</button>
+      </div>
 
+      {confirmAction && (
+        <div onClick={() => setConfirmAction(null)} style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(23,24,28,0.28)', display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--surface)', borderRadius: '22px 22px 0 0', padding: '10px 16px 30px', boxShadow: '0 -16px 40px rgba(23,24,28,0.14)' }}>
+            <div style={{ width: 38, height: 4, borderRadius: 99, background: 'var(--line-2)', margin: '0 auto 14px' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 2px 18px' }}>
+              <Avatar name={displayName} size={44} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>
+                  {confirmAction === 'accept' ? '신청을 수락할까요?' : '신청을 거절할까요?'}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>{displayName}{displayMeta ? ' · ' + displayMeta : ''}</div>
+              </div>
+            </div>
+            <div style={{ borderRadius: 14, background: 'var(--surface-2)', padding: 14, fontSize: 12, lineHeight: 1.5, color: 'var(--ink-2)', marginBottom: 12 }}>
+              {confirmAction === 'accept'
+                ? `수락하면 ${displayName}님이 방 멤버로 이동하고 신청은 완료 처리돼요.`
+                : `거절하면 ${displayName}님의 신청이 목록에서 사라져요. 다시 되돌릴 수 없어요.`}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={() => setConfirmAction(null)} className="btn ghost" style={{ width: 92, height: 52 }}>취소</button>
+              <button
+                type="button"
+                onClick={completeDecision}
+                className="btn full"
+                style={{ flex: 1, height: 52, background: confirmAction === 'accept' ? 'var(--brand)' : 'var(--danger)' }}
+              >
+                {confirmAction === 'accept' ? '수락하기' : '거절하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Notice list/detail ─────────────────────────────────────
@@ -1831,11 +1916,71 @@ export function SupportScreen() {
 // ─── 1:1 DM chat ────────────────────────────────────────────
 export function ChatDMScreen() {
   const navigate = useNavigate();
+  const { chatRoomNo } = useParams();
+  const myUserNo = React.useMemo(() => getCachedUserNo(), []);
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const [sentMessages, setSentMessages] = React.useState([]);
-  const sendDMMessage = (message) => {
-    setSentMessages((items) => [...items, { ...message, unread: 1 }]);
+  const [messages, setMessages] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const scrollRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!chatRoomNo) return;
+    let alive = true;
+    setLoading(true);
+    loadChatMessages(chatRoomNo)
+      .then((page) => {
+        if (!alive) return;
+        setMessages((page?.items || []).slice().reverse());
+        setLoading(false);
+      })
+      .catch(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [chatRoomNo]);
+
+  React.useEffect(() => {
+    if (!chatRoomNo) return;
+    let unsubMsg = () => {};
+    let unsubRead = () => {};
+    let alive = true;
+
+    const pMsg = subscribe(`/topic/chat-room/${chatRoomNo}`, (incoming) => {
+      if (!alive) return;
+      setMessages((prev) => appendMessage(prev, incoming));
+      if (incoming.senderNo !== myUserNo) markChatRoomRead(chatRoomNo).catch(() => {});
+    });
+
+    const pRead = subscribe(`/topic/chat-room/${chatRoomNo}/read`, (receipt) => {
+      if (!alive) return;
+      setMessages((prev) => applyReadReceipt(prev, receipt));
+    });
+
+    // 두 구독이 모두 준비된 뒤 읽음 처리 — 이 시점에 서버 broadcast를 수신할 수 있음
+    Promise.all([pMsg, pRead]).then(([fnMsg, fnRead]) => {
+      if (!alive) { fnMsg(); fnRead(); return; }
+      unsubMsg = fnMsg;
+      unsubRead = fnRead;
+      markChatRoomRead(chatRoomNo).catch(() => {});
+    });
+
+    return () => { alive = false; unsubMsg(); unsubRead(); };
+  }, [chatRoomNo, myUserNo]);
+
+  React.useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
+  const sendDMMessage = (text) => {
+    publish(`/app/chat-room/${chatRoomNo}/send`, { content: text }).catch(() => {});
   };
+
+  const handleLeave = () => {
+    leaveChatRoom(chatRoomNo)
+      .then(() => { setMenuOpen(false); navigate('/chat'); })
+      .catch((e) => { alert(e?.message || '나갈 수 없어요.'); });
+  };
+
+  const partnerName = messages.find((m) => m.senderNo !== myUserNo)?.senderNickname || '상대방';
 
   return (
     <div className="screen" style={{ background: '#EDEEF1' }}>
@@ -1843,87 +1988,38 @@ export function ChatDMScreen() {
         <StatusBar />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px 12px' }}>
           <button onClick={() => goBack(navigate, '/chat')} style={{ background: 'transparent', border: 0, padding: 6, color: 'var(--ink)', cursor: 'pointer' }}><Icon.back /></button>
-		          <Avatar name="지원" size={36} style={{ fontSize: 14 }} />
-	          <div style={{ flex: 1, minWidth: 0 }}>
-	            <div style={{ fontSize: 15, fontWeight: 700 }}>지원</div>
-	          </div>
+          <Avatar name={partnerName.slice(0, 1)} size={36} style={{ fontSize: 14 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>{partnerName}</div>
+          </div>
           <button onClick={() => setMenuOpen(true)} aria-label="채팅방 메뉴" style={{ background: 'transparent', border: 0, padding: 6, color: 'var(--ink)', cursor: 'pointer' }}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
           </button>
         </div>
       </div>
 
-      {/* Context card — applicant info */}
-      <div style={{ padding: '10px 12px 0' }}>
-        <div onClick={() => navigate('/rooms/applicants/1')} className="card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, cursor: 'pointer' }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--brand-soft)', color: 'var(--brand-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon.door size={18} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>아침형 룸메 구해요</div>
-            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 1 }}>지원님이 신청한 모집방</div>
-          </div>
-          <span className="chip line" style={{ fontSize: 11 }}>신청자 정보</span>
-        </div>
-      </div>
-
-      <div className="scroll" style={{ padding: '12px 12px 8px' }}>
-        <div style={{ textAlign: 'center', margin: '4px 0 14px' }}>
-          <span style={{ fontSize: 11, color: 'var(--ink-3)', background: 'rgba(0,0,0,0.05)', padding: '4px 12px', borderRadius: 99 }}>2026년 5월 21일 목요일</span>
-        </div>
-
-        <ChatBubble side="left" name="지원" time="오후 04:18">안녕하세요! 신청 드렸어요 :)</ChatBubble>
-        <ChatBubble side="left" name="지원" time="오후 04:18" showAvatar={false} showName={false}>
-          체크리스트 보니까 잘 맞을 것 같아서요.
-        </ChatBubble>
-
-        <div style={{ height: 8 }} />
-        <ChatBubble side="right" time="오후 04:25" unread={1}>반가워요! 체크리스트 확인했어요</ChatBubble>
-        <ChatBubble side="right" time="오후 04:26" withTail={false} unread={1}>
-          평일 저녁은 보통 몇 시쯤 들어오세요?
-        </ChatBubble>
-
-        <div style={{ height: 8 }} />
-        <ChatBubble side="left" name="지원" time="오후 04:30">
-          학기 중엔 보통 9시쯤 들어와요. 시험 기간엔 새벽까지 도서관에 있고요.
-        </ChatBubble>
-        <ChatBubble side="left" name="지원" time="오후 04:31" showAvatar={false} showName={false}>
-          저녁은 거의 밖에서 해결합니다!
-        </ChatBubble>
-        {sentMessages.map((message) => (
-          <ChatBubble key={message.id} side="right" time={message.time} unread={message.unread}>
-            {message.attachment && <ChatAttachmentCard attachment={message.attachment} mine />}
-            {message.text && <div style={{ marginTop: message.attachment ? 8 : 0 }}>{message.text}</div>}
-          </ChatBubble>
+      <div className="scroll" ref={scrollRef} style={{ padding: '12px 12px 8px' }}>
+        {loading && <div style={{ textAlign: 'center', color: 'var(--ink-3)', fontSize: 13, padding: 24 }}>불러오는 중…</div>}
+        {!loading && messages.length === 0 && (
+          <div style={{ textAlign: 'center', color: 'var(--ink-3)', fontSize: 13, padding: 24 }}>첫 메시지를 보내보세요.</div>
+        )}
+        {messages.map((m) => (
+          <ChatMessageItem key={m.messageNo} message={m} myUserNo={myUserNo} />
         ))}
       </div>
 
-      <ChatComposer onSend={sendDMMessage} />
+      <ChatComposer onSend={sendDMMessage} disabled={loading} />
       {menuOpen && (
         <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(23,24,28,0.28)', display: 'flex', alignItems: 'flex-end' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--surface)', borderRadius: '22px 22px 0 0', padding: '10px 16px 30px', boxShadow: '0 -16px 40px rgba(23,24,28,0.14)' }}>
             <div style={{ width: 38, height: 4, borderRadius: 99, background: 'var(--line-2)', margin: '0 auto 14px' }} />
             <div style={{ padding: '0 2px 14px' }}>
               <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>채팅방 메뉴</div>
-              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>지원님과의 대화</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>{partnerName}님과의 대화</div>
             </div>
             <button
               type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                navigate('/rooms/applicants/1');
-              }}
-              style={{ width: '100%', minHeight: 52, border: 0, borderRadius: 14, background: 'var(--surface-2)', color: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', fontFamily: 'inherit', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 8 }}
-            >
-              <span>신청자 정보 보기</span>
-              <Icon.chevron size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                navigate('/chat');
-              }}
+              onClick={handleLeave}
               style={{ width: '100%', minHeight: 52, border: 0, borderRadius: 14, background: 'rgba(226,69,60,0.08)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', fontFamily: 'inherit', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
             >
               <span>대화방 나가기</span>
@@ -1932,8 +2028,8 @@ export function ChatDMScreen() {
           </div>
         </div>
       )}
-    </div>);
-
+    </div>
+  );
 }
 
 // ─── Apply message ──────────────────────────────────────────
@@ -1941,7 +2037,19 @@ export function ApplyMessageScreen() {
   const navigate = useNavigate();
   const { id = '1' } = useParams();
   const [message, setMessage] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState('');
   const maxLength = 300;
+
+  const handleSubmit = () => {
+    if (submitting) return;
+    if (!message.trim()) { setSubmitError('신청 메시지를 입력해주세요.'); return; }
+    setSubmitting(true);
+    setSubmitError('');
+    submitRoomApplication(id, message.trim())
+      .then(() => navigate('/apply/success', { state: { roomNo: id } }))
+      .catch((e) => { setSubmitError(e?.message || '신청에 실패했어요.'); setSubmitting(false); });
+  };
   const suggestions = [
     '안녕하세요! 체크리스트가 잘 맞는 것 같아서 신청드립니다.',
     '조용히 지내는 편이고 청소 규칙도 잘 맞출 수 있어요.',
@@ -2041,10 +2149,18 @@ export function ApplyMessageScreen() {
         </div>
       </div>
 
+      {submitError && (
+        <div style={{ padding: '8px 0', fontSize: 13, color: 'var(--danger)', textAlign: 'center' }}>{submitError}</div>
+      )}
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
         <button onClick={() => navigate(`/rooms/${id}`)} className="btn ghost" style={{ width: 84, height: 52 }}>취소</button>
-        <button onClick={() => navigate('/apply/success')} className="btn full" style={{ flex: 1, height: 52 }}>
-          신청 보내기
+        <button
+          onClick={handleSubmit}
+          disabled={submitting}
+          className="btn full"
+          style={{ flex: 1, height: 52, opacity: submitting ? 0.6 : 1 }}
+        >
+          {submitting ? '신청 중...' : '신청 보내기'}
         </button>
       </div>
     </div>
@@ -2054,6 +2170,14 @@ export function ApplyMessageScreen() {
 // ─── Apply success ──────────────────────────────────────────
 export function ApplySuccessScreen() {
   const navigate = useNavigate();
+  const { state } = useLocation();
+  const roomNo = state?.roomNo;
+  const openDirectChat = () => {
+    if (!roomNo) { alert('방 정보를 불러올 수 없어요.'); return; }
+    getOrCreateDirectChatRoom(roomNo, getCachedUserNo())
+      .then((chatRoomNo) => navigate('/chat/dm/' + chatRoomNo))
+      .catch((e) => alert(e?.message || '채팅방을 열 수 없어요.'));
+  };
 
   return (
     <div className="screen" style={{ background: 'var(--surface)' }}>
@@ -2094,7 +2218,7 @@ export function ApplySuccessScreen() {
       </div>
 
       <div style={{ padding: '0 16px 30px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <button onClick={() => navigate('/chat/dm')} className="btn full" style={{ height: 52 }}>방장과 채팅하기</button>
+        <button onClick={() => openDirectChat()} className="btn full" style={{ height: 52 }}>방장과 채팅하기</button>
         <button onClick={() => navigate('/rooms/find')} className="btn full ghost" style={{ height: 52 }}>다른 방 둘러보기</button>
       </div>
     </div>);
@@ -2104,10 +2228,9 @@ export function ApplySuccessScreen() {
 // ─── Create Room Success ─────────────────────────────────────
 export function CreateRoomSuccessScreen() {
   const navigate = useNavigate();
-  const draft = typeof window !== 'undefined'
-    ? JSON.parse(window.sessionStorage.getItem('createRoomDraft') || '{}')
-    : {};
-  const title = draft.title || '아침형 룸메 구해요';
+  const { state } = useLocation();
+  const draft = state?.draft || readCreateRoomDraft();
+  const title = draft.title || '모집방';
   const dorm = draft.dorm || '2생활관';
   const roomSize = draft.roomSize || '4인실';
 

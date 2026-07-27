@@ -1,6 +1,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon, Avatar, StatusBar, goBack } from '../../../shared/components';
+import { loadMyRoom } from '../../../shared/api/home';
+import { getOrCreateDirectChatRoom, loadMyChatRooms } from '../../../shared/api/chat';
+import { loadMyRoommates } from '../../../shared/api/room';
+import { normalizeRoom, roommateToMember } from '../../rooms/roomData';
 
 // members.jsx — 룸메이트 멤버 화면 (방장 시점)
 // 현재 방의 멤버 목록 + 각자의 개인 체크리스트를 펼쳐서 비교 가능
@@ -74,9 +78,10 @@ export const MEMBER_CHECKLISTS = [
   },
 ];
 
-export function MemberCard({ m, defaultOpen = false }) {
+export function MemberCard({ m, defaultOpen = false, onOpenChat }) {
   const [open, setOpen] = React.useState(defaultOpen);
   const navigate = useNavigate();
+  const hasChecklist = (m.checklist || []).length > 0;
 
   return (
     <div className="card" style={{ padding: 16, marginBottom: 10 }}>
@@ -97,12 +102,14 @@ export function MemberCard({ m, defaultOpen = false }) {
           <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2 }}>{m.dept}</div>
         </div>
         {!m.isMe && (
-          <button onClick={() => navigate('/chat/dm')} title="채팅" style={{ width: 36, height: 36, borderRadius: 10, border: 0, background: 'var(--surface-2)', color: 'var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <button onClick={() => onOpenChat ? onOpenChat(m) : navigate('/chat')} title="채팅" style={{ width: 36, height: 36, borderRadius: 10, border: 0, background: 'var(--surface-2)', color: 'var(--ink-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <Icon.chat size={18}/>
           </button>
         )}
       </div>
 
+      {hasChecklist && (
+      <>
       {/* Expandable checklist */}
       <div style={{
         display: 'grid',
@@ -112,7 +119,7 @@ export function MemberCard({ m, defaultOpen = false }) {
       }}>
         <div style={{ overflow: 'hidden' }}>
           <div style={{ background: 'var(--surface)', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--line)' }}>
-            {m.checklist.map((cat, ci) => (
+            {(m.checklist || []).map((cat, ci) => (
               <React.Fragment key={ci}>
                 <div style={{
                   background: 'var(--surface-2)',
@@ -152,12 +159,53 @@ export function MemberCard({ m, defaultOpen = false }) {
           <Icon.chevron size={14}/>
         </span>
       </button>
+      </>
+      )}
     </div>
   );
 }
 
 export function MembersScreen() {
   const navigate = useNavigate();
+  const [room, setRoom] = React.useState(null);
+  const [members, setMembers] = React.useState([]);
+  const [groupChatRoomNo, setGroupChatRoomNo] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError('');
+    Promise.all([
+      loadMyRoom(),
+      loadMyRoommates().catch(() => []),
+      loadMyChatRooms().catch(() => []),
+    ])
+      .then(([roomData, roommateList, chatRooms]) => {
+        if (!mounted) return;
+        const normalized = normalizeRoom(roomData);
+        setRoom(normalized);
+        setMembers(Array.isArray(roommateList) ? roommateList.map(roommateToMember) : []);
+        const chatList = Array.isArray(chatRooms) ? chatRooms : chatRooms?.items || [];
+        const found = chatList.find((chatRoom) => chatRoom.chatRoomType === 'GROUP' && String(chatRoom.roomNo) === String(roomData.roomNo));
+        setGroupChatRoomNo(found?.chatRoomNo || null);
+      })
+      .catch(() => { if (mounted) setError('룸메이트 정보를 불러오지 못했어요.'); })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, []);
+
+  const openDirectChat = (member) => {
+    if (!room?.roomNo || !member.userNo) return;
+    getOrCreateDirectChatRoom(room.roomNo, member.userNo)
+      .then((chatRoomNo) => navigate('/chat/dm/' + chatRoomNo))
+      .catch((e) => alert(e?.message || '채팅방을 열 수 없어요.'));
+  };
+
+  const currentMembers = room?.members ?? members.length;
+  const roomCapacity = room?.capacity ?? currentMembers;
+  const openSeats = Math.max(0, roomCapacity - currentMembers);
 
   return (
     <div className="screen">
@@ -171,7 +219,7 @@ export function MembersScreen() {
       <div className="scroll" style={{ padding: '0 16px 24px' }}>
         {/* Header */}
         <div style={{ padding: '4px 4px 14px' }}>
-          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.4px' }}>현재 룸메이트 2명</div>
+          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.4px' }}>현재 룸메이트 {currentMembers}명</div>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4 }}>같이 사는 멤버들의 체크리스트를 확인해보세요</div>
         </div>
 
@@ -188,8 +236,8 @@ export function MembersScreen() {
         {/* Stats strip */}
         <div className="card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', padding: 4, marginBottom: 16 }}>
           {[
-            { l: '인원', v: '2 / 4' },
-            { l: '모집 시작일', v: '2026.03.02' },
+            { l: '인원', v: `${currentMembers} / ${roomCapacity}` },
+            { l: '남은 자리', v: `${openSeats}자리` },
           ].map((s, i, a) => (
             <div key={i} style={{ textAlign: 'center', padding: '10px 0', borderRight: i === a.length - 1 ? 'none' : '1px solid var(--line)' }}>
               <div style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 600 }}>{s.l}</div>
@@ -199,15 +247,18 @@ export function MembersScreen() {
         </div>
 
         {/* Members */}
-        {MEMBER_CHECKLISTS.map((m, i) => (
-          <MemberCard key={i} m={m} defaultOpen={false}/>
+        {loading && <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>불러오는 중...</div>}
+        {error && <div style={{ padding: 24, textAlign: 'center', color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
+        {!loading && !error && members.map((m) => (
+          <MemberCard key={m.id} m={m} defaultOpen={false} onOpenChat={openDirectChat}/>
         ))}
 
         {/* Empty slots */}
-        <div style={{ marginTop: 4, marginBottom: 18 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-3)', padding: '0 4px 8px', letterSpacing: '0.3px' }}>모집중 (2자리)</div>
+        {openSeats > 0 && (
+          <div style={{ marginTop: 4, marginBottom: 18 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-3)', padding: '0 4px 8px', letterSpacing: '0.3px' }}>모집중 ({openSeats}자리)</div>
           <div style={{ display: 'flex', gap: 8 }}>
-            {[0,1].map(i => (
+            {Array.from({ length: openSeats }).map((_, i) => (
               <div key={i} className="card" style={{
                 flex: 1, padding: '20px 12px', textAlign: 'center',
                 background: 'transparent', border: '1.5px dashed var(--line-2)',
@@ -220,9 +271,10 @@ export function MembersScreen() {
             ))}
           </div>
         </div>
+        )}
 
         {/* Group chat link */}
-        <div onClick={() => navigate('/chat/group')} className="card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 14, cursor: 'pointer' }}>
+        <div onClick={() => navigate(groupChatRoomNo ? '/chat/group/' + groupChatRoomNo : '/chat')} className="card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 14, cursor: 'pointer' }}>
           <div style={{ width: 40, height: 40, borderRadius: 11, background: 'var(--ink)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icon.chat size={20} solid/>
           </div>

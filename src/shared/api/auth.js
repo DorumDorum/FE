@@ -28,6 +28,17 @@ export function clearProfileCache() {
   window.localStorage.removeItem(PROFILE_STORAGE_KEY);
 }
 
+export function getCachedUserNo() {
+  if (typeof window === 'undefined') return '';
+  try {
+    const raw = window.localStorage.getItem(PROFILE_STORAGE_KEY);
+    if (!raw) return '';
+    return JSON.parse(raw).userNo || '';
+  } catch {
+    return '';
+  }
+}
+
 export async function login(email, password) {
   await apiRequest('/api/users/login', {
     method: 'POST',
