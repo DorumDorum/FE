@@ -1,9 +1,9 @@
 import React from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Icon, StatusBar, Avatar, goBack } from '../../../shared/components';
-import { logout as logoutUser, getCachedUserNo } from '../../../shared/api/auth';
+import { logout as logoutUser, getCachedUserNo, getMe } from '../../../shared/api/auth';
 import {
-  loadMyRoom, loadNotifications, markNotificationRead,
+  loadMyRoom, loadNotices, loadNotifications, markAllNotificationsRead, markNotificationRead, registerNotificationDevice,
   loadMyChecklist, createUserChecklist, updateUserChecklist,
   loadMyAppliedRooms, loadLikedRooms, unlikeRoom,
 } from '../../../shared/api/home';
@@ -12,7 +12,7 @@ import { ChatMessageItem, ChatComposer } from '../../chat';
 import { getOrCreateDirectChatRoom, loadChatMessages, markChatRoomRead, leaveChatRoom } from '../../../shared/api/chat';
 import { subscribe, publish } from '../../../shared/api/chatSocket';
 import { applyReadReceipt, appendMessage } from '../../chat/unreadSync';
-import { openNotificationStream } from '../../../shared/api/notificationStream';
+import { getNotificationDeviceId, openNotificationStream } from '../../../shared/api/notificationStream';
 import {
   checklistFormToRoomRuleRequest,
   checklistFormToUserChecklistRequest,
@@ -1088,11 +1088,58 @@ export const NOTICES = [
   { id: 5, tag: '생활', title: '공용 냉장고 정리 일정', desc: '이름이 없는 음식은 정리될 수 있어요', date: '05.15', read: true },
 ];
 
+function formatNoticeDate(dateText, { long = false } = {}) {
+  if (!dateText) return '';
+  const date = new Date(dateText);
+  if (Number.isNaN(date.getTime())) return dateText;
+  if (long) {
+    return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
+  }
+  return `${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function normalizeNotice(notice) {
+  return {
+    id: notice.noticeNo || notice.id,
+    noticeNo: notice.noticeNo || notice.id,
+    tag: notice.tag || '공지',
+    tagBrand: true,
+    title: notice.title || '공지사항',
+    desc: notice.content || notice.desc || '',
+    content: notice.content || notice.desc || '',
+    date: formatNoticeDate(notice.writtenDate || notice.date),
+    writtenDate: notice.writtenDate,
+    originalLink: notice.originalLink,
+    read: true,
+  };
+}
+
 export function NoticeListScreen() {
   const navigate = useNavigate();
   const [filter, setFilter] = React.useState('전체');
-  const filters = ['전체', '필독', '안전', '시설', '행사'];
-  const visibleNotices = filter === '전체' ? NOTICES : NOTICES.filter((notice) => notice.tag === filter);
+  const [notices, setNotices] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(false);
+  const filters = ['전체', '공지'];
+  const visibleNotices = filter === '전체' ? notices : notices.filter((notice) => notice.tag === filter);
+
+  React.useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError(false);
+    loadNotices()
+      .then((list) => {
+        if (!mounted) return;
+        setNotices((Array.isArray(list) ? list : []).map(normalizeNotice));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setError(true);
+        setNotices(NOTICES.map(normalizeNotice));
+      })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, []);
 
   return (
     <div className="screen">
@@ -1127,7 +1174,7 @@ export function NoticeListScreen() {
             <button
               key={notice.id}
               type="button"
-              onClick={() => navigate(`/notice/${notice.id}`)}
+              onClick={() => navigate(`/notice/${notice.noticeNo || notice.id}`, { state: { notice } })}
               style={{
                 width: '100%',
                 border: 0,
@@ -1153,57 +1200,75 @@ export function NoticeListScreen() {
               <span style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 600, flexShrink: 0 }}>{notice.date}</span>
             </button>
           ))}
+          {!loading && visibleNotices.length === 0 && (
+            <div style={{ padding: 22, textAlign: 'center', fontSize: 13, color: 'var(--ink-3)' }}>
+              공지사항이 없어요.
+            </div>
+          )}
         </div>
+        {loading && <div style={{ padding: 18, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>불러오는 중...</div>}
+        {error && <div style={{ padding: 12, textAlign: 'center', color: 'var(--ink-3)', fontSize: 12 }}>공지 API 연결에 실패해 임시 데이터를 표시했어요.</div>}
       </div>
     </div>
   );
 }
 
 export function NoticeDetailScreen() {
+  const { id } = useParams();
+  const { state } = useLocation();
+  const [notice, setNotice] = React.useState(() => state?.notice ? normalizeNotice(state.notice) : null);
+  const [loading, setLoading] = React.useState(!state?.notice);
+
+  React.useEffect(() => {
+    if (notice || !id) return undefined;
+    let mounted = true;
+    loadNotices()
+      .then((list) => {
+        if (!mounted) return;
+        const found = (Array.isArray(list) ? list : []).map(normalizeNotice).find((item) => String(item.noticeNo) === String(id));
+        setNotice(found || null);
+      })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, [id, notice]);
+
   return (
 	    <div className="screen" style={{ background: 'var(--surface)' }}>
 	      <StatusBar />
-	      <TopNav title="공지사항" />
+	      <TopNav title="공지사항" backTo="/notices" />
 
       <div className="scroll" style={{ padding: '8px 20px 30px' }}>
+        {loading && <div style={{ padding: 32, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>불러오는 중...</div>}
+        {!loading && !notice && <div style={{ padding: 32, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>공지사항을 찾을 수 없어요.</div>}
+        {!loading && notice && (
+        <>
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-          <span className="chip brand" style={{ fontSize: 11, padding: '3px 9px' }}>필독</span>
+          <span className="chip brand" style={{ fontSize: 11, padding: '3px 9px' }}>{notice.tag}</span>
         </div>
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, lineHeight: 1.35, letterSpacing: '-0.4px' }}>
-          6월 입사식 일정 안내 (5/28 18:00)
+          {notice.title}
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 12, color: 'var(--ink-3)' }}>
           <Avatar name="사" size={22} style={{ fontSize: 11 }} />
           <span>사감팀</span>
           <span>·</span>
-          <span>2026.05.21 09:00</span>
-          <span style={{ marginLeft: 'auto' }}>조회 248</span>
+          <span>{formatNoticeDate(notice.writtenDate, { long: true }) || notice.date}</span>
         </div>
 
         <div style={{ height: 1, background: 'var(--line)', margin: '18px 0' }} />
 
         <div style={{ fontSize: 15, lineHeight: 1.7, color: 'var(--ink-2)' }}>
-          <p style={{ margin: '0 0 16px' }}>안녕하세요, 학생생활관 사감팀입니다.</p>
-          <p style={{ margin: '0 0 16px' }}>2026학년도 2학기 신규 입사 룸메이트 매칭 데이를 아래와 같이 안내드립니다. 모든 입주 예정자는 가급적 참석해주시기 바랍니다.</p>
-
-          <div style={{ background: 'var(--surface-2)', borderRadius: 14, padding: 16, margin: '16px 0' }}>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
-              <span style={{ minWidth: 60, fontSize: 13, color: 'var(--ink-3)', fontWeight: 600 }}>일시</span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>2026년 5월 28일 (목) 18:00</span>
-            </div>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
-              <span style={{ minWidth: 60, fontSize: 13, color: 'var(--ink-3)', fontWeight: 600 }}>장소</span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>2생활관 다목적실</span>
-            </div>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <span style={{ minWidth: 60, fontSize: 13, color: 'var(--ink-3)', fontWeight: 600 }}>대상</span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>2026-2학기 신규 입주자</span>
-            </div>
-          </div>
-
-          <p style={{ margin: '0 0 12px' }}>매칭 데이는 룸메이트를 직접 만나고 체크리스트 결과를 비교해보는 자리입니다. 가벼운 다과가 준비됩니다.</p>
-          <p style={{ margin: 0 }}>문의: 사감실 (내선 1234)</p>
+          {(notice.content || '본문이 없어요.').split('\n').map((line, index) => (
+            <p key={index} style={{ margin: index === 0 ? '0 0 16px' : '0 0 12px' }}>{line}</p>
+          ))}
+          {notice.originalLink && (
+            <a href={notice.originalLink} target="_blank" rel="noreferrer" style={{ color: 'var(--brand)', fontWeight: 700, fontSize: 14 }}>
+              원문 보기
+            </a>
+          )}
         </div>
+        </>
+        )}
 
       </div>
     </div>);
@@ -1283,6 +1348,8 @@ export function NotificationsScreen() {
   }, [applyPage]);
 
   React.useEffect(() => {
+    const deviceId = getNotificationDeviceId();
+    if (deviceId) registerNotificationDevice(deviceId).catch(() => {});
     const closeStream = openNotificationStream((notification) => {
       setItems((prev) => [{ ...notification, isRead: false }, ...prev]);
     });
@@ -1315,8 +1382,12 @@ export function NotificationsScreen() {
     const unread = items.filter((item) => !item.isRead);
     if (unread.length === 0) return;
     setItems((prev) => prev.map((item) => ({ ...item, isRead: true })));
-    unread.forEach((item) => {
-      markNotificationRead(item.notificationNo).catch(() => {});
+    markAllNotificationsRead().catch(() => {
+      setItems((prev) => prev.map((item) => (
+        unread.some((unreadItem) => unreadItem.notificationNo === item.notificationNo)
+          ? { ...item, isRead: false }
+          : item
+      )));
     });
   };
 
@@ -1574,6 +1645,32 @@ export function NotificationSettingsScreen() {
 export function AccountSettingsScreen() {
   const navigate = useNavigate();
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
+  const [profile, setProfile] = React.useState(() => {
+    if (typeof window === 'undefined') return {};
+    try {
+      return JSON.parse(window.localStorage.getItem(PROFILE_STORAGE_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  });
+
+  React.useEffect(() => {
+    let mounted = true;
+    getMe()
+      .then((nextProfile) => {
+        if (!mounted) return;
+        setProfile({
+          displayName: nextProfile.nickname || nextProfile.name || '',
+          accountName: nextProfile.name || '',
+          email: nextProfile.email || '',
+          department: nextProfile.major || '',
+          studentId: nextProfile.studentNo || '',
+          grade: nextProfile.grade || '',
+        });
+      })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, []);
 
   const handleLogout = async () => {
     if (isLoggingOut) return;
@@ -1675,7 +1772,7 @@ export function AccountSettingsScreen() {
                   <span style={{ fontSize: 16, fontWeight: 700 }}>학교 인증 완료</span>
                   <span style={{ background: 'rgba(255,255,255,0.12)', color: 'white', borderRadius: 999, padding: '3px 8px', fontSize: 10, fontWeight: 700 }}>재학생</span>
                 </div>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.62)', marginTop: 4 }}>minji_kang@univ.ac.kr</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.62)', marginTop: 4 }}>{profile.email || '학교 이메일'}</div>
               </div>
             </div>
             <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.10)', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'rgba(255,255,255,0.62)' }}>
@@ -1687,10 +1784,10 @@ export function AccountSettingsScreen() {
 
         <div className="h-section"><h2>계정 정보</h2></div>
         <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 18, overflow: 'hidden' }}>
-          <InfoRow label="이름" value="강민지" sub="실명 인증 정보" />
-          <InfoRow label="학번" value="202234511" sub="같은 방 멤버에게만 표시" />
-          <InfoRow label="학과" value="경영학과 22학번" sub="학교 인증 정보" />
-          <InfoRow label="닉네임" value="민지" sub="인증된 계정 정보" />
+          <InfoRow label="이름" value={profile.accountName || '-'} sub="실명 인증 정보" />
+          <InfoRow label="학번" value={profile.studentId || '-'} sub="같은 방 멤버에게만 표시" />
+          <InfoRow label="학과" value={[profile.department, profile.grade].filter(Boolean).join(' ') || '-'} sub="학교 인증 정보" />
+          <InfoRow label="닉네임" value={profile.displayName || '-'} sub="인증된 계정 정보" />
         </div>
 
         <div style={{ margin: '14px 16px 0', background: 'var(--brand-soft)', borderRadius: 14, padding: 14, display: 'flex', alignItems: 'flex-start', gap: 10, color: 'var(--brand-deep)' }}>

@@ -1,7 +1,7 @@
 const DEVICE_ID_STORAGE_KEY = 'dorumdorum:deviceId';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
-function getDeviceId() {
+export function getNotificationDeviceId() {
   if (typeof window === 'undefined') return '';
 
   let deviceId = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY);
@@ -19,7 +19,7 @@ export function openNotificationStream(onNotification) {
     return () => {};
   }
 
-  const deviceId = getDeviceId();
+  const deviceId = getNotificationDeviceId();
   const source = new EventSource(
     `${API_BASE_URL}/api/notifications/stream?deviceId=${encodeURIComponent(deviceId)}`,
     { withCredentials: true },

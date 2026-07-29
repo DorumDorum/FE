@@ -22,6 +22,17 @@ export function markNotificationRead(notificationNo) {
   return apiRequestWithAuth(`/api/notifications/${notificationNo}/read`, { method: 'PATCH' });
 }
 
+export function markAllNotificationsRead() {
+  return apiRequestWithAuth('/api/notifications/read', { method: 'PATCH' });
+}
+
+export function registerNotificationDevice(deviceId, fcmToken = null) {
+  return apiRequestWithAuth('/api/notifications/devices', {
+    method: 'PUT',
+    body: { deviceId, fcmToken },
+  });
+}
+
 export function findRooms(filter) {
   return apiRequestWithAuth('/api/rooms/search', {
     method: 'POST',

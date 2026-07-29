@@ -21,26 +21,38 @@ export function ApplicantsListScreen() {
   React.useEffect(() => {
     let mounted = true;
     setLoading(true);
+    setError('');
     loadMyRoom()
       .then((room) => {
         if (!mounted) return;
+        if (!room?.roomNo) {
+          setRoomNo(null);
+          return [];
+        }
         setRoomNo(room.roomNo);
         return loadApplications(room.roomNo);
       })
       .then((list) => {
         if (!mounted) return;
-        setApplicants(list || []);
+        const rows = Array.isArray(list) ? list : [];
+        setApplicants(rows);
       })
       .catch(() => { if (mounted) setError('신청자 목록을 불러오지 못했어요.'); })
       .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
   }, []);
 
+  const applicantList = Array.isArray(applicants) ? applicants : [];
+
   const requestDecision = (applicant, action) => setConfirmAction({ applicant, action });
 
   const completeDecision = () => {
     if (!confirmAction) return;
     const { applicant, action } = confirmAction;
+    if (action === 'accept' && !roomNo) {
+      alert('방 정보를 찾을 수 없어요.');
+      return;
+    }
     const call = action === 'accept'
       ? approveApplication(roomNo, applicant.requestNo)
       : rejectApplication(applicant.requestNo);
@@ -54,6 +66,10 @@ export function ApplicantsListScreen() {
   };
 
   const openDM = (applicant) => {
+    if (!roomNo || !applicant?.userNo) {
+      alert('채팅을 시작할 정보를 찾을 수 없어요.');
+      return;
+    }
     getOrCreateDirectChatRoom(roomNo, applicant.userNo)
       .then((chatRoomNo) => navigate('/chat/dm/' + chatRoomNo))
       .catch((e) => alert(e?.message || '채팅방을 열 수 없어요.'));
@@ -85,7 +101,7 @@ export function ApplicantsListScreen() {
       <div className="scroll" style={{ padding: '0 16px 24px' }}>
         <div style={{ padding: '4px 4px 14px' }}>
           <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.4px' }}>
-            신청자 <span style={{ color: 'var(--brand)' }}>{applicants.length}</span>명
+            신청자 <span style={{ color: 'var(--brand)' }}>{applicantList.length}</span>명
           </div>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4 }}>신청 순서로 정렬했어요</div>
         </div>
@@ -94,11 +110,11 @@ export function ApplicantsListScreen() {
           <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink-3)', fontSize: 14 }}>{error}</div>
         )}
 
-        {!error && applicants.length === 0 && (
+        {!error && applicantList.length === 0 && (
           <div style={{ padding: 32, textAlign: 'center', color: 'var(--ink-3)', fontSize: 14 }}>아직 신청자가 없어요</div>
         )}
 
-        {applicants.map((a) => (
+        {applicantList.map((a) => (
           <div
             key={a.requestNo}
             onClick={() => navigate(`/rooms/applicants/${a.requestNo}`, { state: { applicant: a, roomNo } })}
