@@ -1,5 +1,5 @@
-const CACHE_NAME = 'dorumdorum-pwa-v1';
-const APP_SHELL = ['/', '/manifest.webmanifest', '/logo.png', '/icon-192.png', '/icon-512.png'];
+const CACHE_NAME = 'dorumdorum-pwa-v2';
+const APP_SHELL = ['/manifest.webmanifest', '/logo.png', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -25,12 +25,7 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put('/', copy));
-          return response;
-        })
-        .catch(() => caches.match(request).then((cached) => cached || caches.match('/')))
+        .catch(() => caches.match('/index.html'))
     );
     return;
   }
