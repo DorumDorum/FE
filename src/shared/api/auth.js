@@ -98,6 +98,15 @@ export async function reissueToken() {
   await apiRequest('/api/token/reissue', { method: 'POST' });
 }
 
+export async function updateUserProfile(request) {
+  const profile = await apiRequest('/api/users/profile', {
+    method: 'PATCH',
+    body: request,
+  });
+  cacheProfile(profile);
+  return profile;
+}
+
 export async function getMe({ retry = true } = {}) {
   try {
     const profile = await apiRequest('/api/users/profile/me');

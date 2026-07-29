@@ -37,6 +37,14 @@ export function loadMyChecklist() {
   return apiRequestWithAuth('/api/users/me/checklist');
 }
 
+export function createUserChecklist(request) {
+  return apiRequestWithAuth('/api/users/me/checklist', { method: 'POST', body: request });
+}
+
+export function updateUserChecklist(request) {
+  return apiRequestWithAuth('/api/users/me/checklist', { method: 'PUT', body: request });
+}
+
 export function loadLikedRooms() {
   return apiRequestWithAuth('/api/rooms/me/liked');
 }
@@ -51,4 +59,8 @@ export function unlikeRoom(roomNo) {
 
 export function loadRecommendedRooms() {
   return apiRequestWithAuth('/api/rooms/recommended');
+}
+
+export function loadMyAppliedRooms() {
+  return apiRequestWithAuth('/api/rooms/me/applied');
 }

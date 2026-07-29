@@ -19,6 +19,12 @@ export const RESIDENCE_PERIOD_LABELS = {
 
 export const residencePeriodLabel = (period) => RESIDENCE_PERIOD_LABELS[period] || period || '';
 
+export const roomStatusLabel = (roomStatus) => {
+  if (roomStatus === 'COMPLETED') return '모집 완료';
+  if (roomStatus === 'CONFIRM_PENDING') return '확정 대기';
+  return '모집중';
+};
+
 export const CHECKLIST_VALUE_LABELS = {
   FLEXIBLE: '유동적',
   FIXED: '고정적',
@@ -288,6 +294,15 @@ export function checklistFormToRoomRuleRequest(form, room) {
     capacity: room.capacity,
     residencePeriod: room.residencePeriod,
   };
+}
+
+export function checklistFormToUserChecklistRequest(form) {
+  const { roomType, capacity, residencePeriod, ...userChecklistRequest } = checklistFormToRoomRuleRequest(form, {
+    roomType: null,
+    capacity: null,
+    residencePeriod: null,
+  });
+  return userChecklistRequest;
 }
 
 export function createRoomDraftToRequest(draft, checklistForm = defaultRoomChecklistForm) {

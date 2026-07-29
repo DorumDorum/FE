@@ -51,6 +51,28 @@ export function loadMyRoommates() {
   return client.apiRequestWithAuth('/api/rooms/me/roommates');
 }
 
+export function cancelRoomApplication(roomNo) {
+  return client.apiRequestWithAuth(`/api/rooms/${roomNo}/request`, {
+    method: 'DELETE',
+  });
+}
+
+export function checkMyRoom() {
+  return client.apiRequestWithAuth('/api/rooms/me/exists');
+}
+
+export function kickRoommate(roomNo, kickedUserNo) {
+  return client.apiRequestWithAuth(`/api/rooms/${roomNo}/members/${kickedUserNo}`, {
+    method: 'DELETE',
+  });
+}
+
+export function confirmRoomAssignment(roomNo) {
+  return client.apiRequestWithAuth(`/api/rooms/me/confirm?roomNo=${encodeURIComponent(roomNo)}`, {
+    method: 'POST',
+  });
+}
+
 export function updateRoomTitle(roomNo, request) {
   return client.apiRequestWithAuth(`/api/rooms/me/title?roomNo=${encodeURIComponent(roomNo)}`, {
     method: 'PUT',
