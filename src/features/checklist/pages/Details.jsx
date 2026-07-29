@@ -1492,6 +1492,7 @@ export function NotificationsScreen() {
 export function NotificationSettingsScreen() {
   const navigate = useNavigate();
   const [enabled, setEnabled] = React.useState(true);
+  const settingsApiReady = false;
   const [settings, setSettings] = React.useState({
     applicants: true,
     applicantResult: true,
@@ -1515,7 +1516,7 @@ export function NotificationSettingsScreen() {
         padding: 3,
         background: checked && !disabled ? 'var(--brand)' : 'var(--line-2)',
         position: 'relative',
-        cursor: disabled ? 'default' : 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.6 : 1,
         transition: 'background .16s ease',
         flexShrink: 0,
@@ -1545,7 +1546,7 @@ export function NotificationSettingsScreen() {
         gap: 12,
         padding: '14px 16px',
         borderBottom: '1px solid var(--line)',
-        opacity: enabled ? 1 : 0.55,
+        opacity: enabled && settingsApiReady ? 1 : 0.55,
       }}>
         <div style={{
           width: 38,
@@ -1564,7 +1565,7 @@ export function NotificationSettingsScreen() {
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{title}</div>
           <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3, lineHeight: 1.4 }}>{desc}</div>
         </div>
-        <Toggle checked={settings[valueKey] && enabled} disabled={!enabled} onClick={() => set(valueKey)} />
+        <Toggle checked={settings[valueKey] && enabled} disabled={!enabled || !settingsApiReady} onClick={() => set(valueKey)} />
       </div>
     );
   };
@@ -1595,7 +1596,7 @@ export function NotificationSettingsScreen() {
             필요한 알림만 받을 수 있어요
           </div>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
-            방 신청, 채팅, 기숙사 공지 알림을 따로 조절해요.
+            알림 설정 저장 API가 준비되면 방 신청, 채팅, 기숙사 공지 알림을 따로 조절할 수 있어요.
           </div>
         </div>
 
@@ -1620,8 +1621,12 @@ export function NotificationSettingsScreen() {
                 모든 앱 알림을 한 번에 켜고 꺼요
               </div>
             </div>
-            <Toggle checked={enabled} onClick={() => setEnabled(!enabled)} />
+            <Toggle checked={enabled} disabled={!settingsApiReady} onClick={() => setEnabled(!enabled)} />
           </div>
+        </div>
+
+        <div style={{ margin: '12px 16px 0', background: 'var(--brand-soft)', borderRadius: 14, padding: 14, color: 'var(--brand-deep)', fontSize: 12, lineHeight: 1.5, fontWeight: 700 }}>
+          현재 백엔드에 알림 설정 저장 API가 없어 설정 변경은 아직 지원하지 않아요.
         </div>
 
         <Section title="방과 신청">
@@ -1830,7 +1835,8 @@ export function DeleteAccountScreen() {
   const [confirmText, setConfirmText] = React.useState('');
   const [confirmed, setConfirmed] = React.useState(false);
   const reasons = ['졸업했어요', '서비스를 자주 쓰지 않아요', '원하는 기능이 부족해요', '개인정보가 걱정돼요', '다른 이유'];
-  const canDelete = reason && confirmed && confirmText.trim() === '탈퇴';
+  const deleteApiReady = false;
+  const canDelete = deleteApiReady && reason && confirmed && confirmText.trim() === '탈퇴';
 
   return (
     <div className="screen">
@@ -1844,7 +1850,7 @@ export function DeleteAccountScreen() {
             <br />확인해주세요
           </div>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
-            탈퇴 후에는 내 프로필, 신청 내역, 북마크와 채팅 기록을 복구할 수 없어요.
+            현재 백엔드에 계정 탈퇴 API가 없어 앱에서 직접 탈퇴는 아직 지원하지 않아요.
           </div>
         </div>
 
@@ -1917,6 +1923,9 @@ export function DeleteAccountScreen() {
             탈퇴 후 계정과 이용 기록을 복구할 수 없다는 점을 확인했어요.
           </span>
         </label>
+        <div style={{ marginTop: 14, background: 'var(--brand-soft)', borderRadius: 14, padding: 14, color: 'var(--brand-deep)', fontSize: 12, lineHeight: 1.5, fontWeight: 700 }}>
+          계정 탈퇴가 필요하면 고객 문의로 요청해주세요. API가 추가되면 이 화면에서 직접 처리할 수 있게 연결할 예정이에요.
+        </div>
         <div style={{ height: 28 }} />
       </div>
 
@@ -1925,7 +1934,7 @@ export function DeleteAccountScreen() {
         <button
           type="button"
           disabled={!canDelete}
-          onClick={() => navigate('/', { replace: true })}
+          onClick={undefined}
           className="btn full"
           style={{
             flex: 1,
@@ -1934,7 +1943,7 @@ export function DeleteAccountScreen() {
             color: canDelete ? 'white' : 'var(--ink-4)',
             cursor: canDelete ? 'pointer' : 'default',
           }}
-        >계정 탈퇴</button>
+        >탈퇴 API 준비 중</button>
       </div>
     </div>
   );
@@ -1946,6 +1955,7 @@ export function SupportScreen() {
   const [category, setCategory] = React.useState('앱 이용');
   const [message, setMessage] = React.useState('');
   const maxLength = 500;
+  const supportApiReady = false;
   const categories = ['앱 이용', '매칭/신청', '계정/인증', '오류 및 사용자 신고'];
 
   return (
@@ -1963,7 +1973,7 @@ export function SupportScreen() {
             무엇을 도와드릴까요?
           </div>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
-            문의를 남기면 확인 후 앱 알림으로 답변드려요.
+            현재 문의 접수 API가 없어 안내 정보만 제공해요.
           </div>
         </div>
 
@@ -2033,15 +2043,20 @@ export function SupportScreen() {
           />
         </div>
 
+        <div style={{ background: 'var(--brand-soft)', borderRadius: 14, padding: 14, color: 'var(--brand-deep)', fontSize: 12, lineHeight: 1.5, fontWeight: 700 }}>
+          문의 접수 API가 준비되면 이 화면에서 바로 문의를 보낼 수 있어요.
+        </div>
+
       </div>
 
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)' }}>
         <button
           onClick={() => navigate('/me')}
+          disabled={!supportApiReady}
           className="btn full"
-          style={{ height: 52, opacity: message.trim() ? 1 : 0.55 }}
+          style={{ height: 52, opacity: supportApiReady && message.trim() ? 1 : 0.55, cursor: supportApiReady ? 'pointer' : 'not-allowed' }}
         >
-          문의 보내기
+          문의 API 준비 중
         </button>
       </div>
     </div>

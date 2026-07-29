@@ -1,22 +1,31 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon, TabBar, StatusBar, Avatar, goBack } from '../../../shared/components';
-import { updateUserProfile } from '../../../shared/api/auth';
+import { getMe, updateUserProfile } from '../../../shared/api/auth';
+import { loadLikedRooms, loadMyAppliedRooms, loadMyChecklist, loadMyRoom } from '../../../shared/api/home';
+import { CHECKLIST_SECTIONS } from '../../rooms/roomData';
 
 // mypage.jsx — My Page (profile, checklist, settings)
 
 const PROFILE_STORAGE_KEY = 'dorumdorum:profile';
 
 const DEFAULT_PROFILE = {
-  displayName: '민지',
-  accountName: '강민지',
-  email: 'minji_kang@univ.ac.kr',
-  department: '경영학과 22학번',
-  studentId: '202234511',
-  age: '23',
-  gender: '여성',
+  displayName: '',
+  accountName: '',
+  email: '',
+  department: '',
+  studentId: '',
+  age: '',
+  gender: '',
   photo: '',
 };
+
+const CHECKLIST_REQUIRED_KEYS = CHECKLIST_SECTIONS.flatMap((section) => section.items.map((item) => item.key));
+const CHECKLIST_SECTION_TOTALS = CHECKLIST_SECTIONS.map((section) => ({
+  label: section.cat,
+  total: section.items.length,
+  keys: section.items.map((item) => item.key),
+}));
 
 function readProfile() {
   if (typeof window === 'undefined') return { ...DEFAULT_PROFILE };
@@ -32,6 +41,37 @@ function readProfile() {
   }
 }
 
+function normalizeProfile(profile) {
+  if (!profile) return readProfile();
+  return {
+    displayName: profile.nickname || profile.displayName || profile.name || '',
+    accountName: profile.name || profile.accountName || '',
+    email: profile.email || '',
+    department: [profile.major || profile.department, profile.grade].filter(Boolean).join(' '),
+    studentId: profile.studentNo || profile.studentId || '',
+    age: profile.age != null ? String(profile.age) : '',
+    gender: profile.gender || '',
+    photo: profile.photo || '',
+    userNo: profile.userNo || '',
+    grade: profile.grade || '',
+  };
+}
+
+function countFilledChecklist(checklist) {
+  if (!checklist || typeof checklist !== 'object') return 0;
+  return CHECKLIST_REQUIRED_KEYS.filter((key) => checklist[key] !== undefined && checklist[key] !== null && checklist[key] !== '').length;
+}
+
+function sectionProgress(checklist) {
+  return CHECKLIST_SECTION_TOTALS.map((section) => {
+    const done = section.keys.filter((key) => checklist?.[key] !== undefined && checklist?.[key] !== null && checklist?.[key] !== '').length;
+    return {
+      l: section.label,
+      v: `${done}/${section.total} ${done === section.total ? '완료' : '작성됨'}`,
+      done: done === section.total,
+    };
+  });
+}
 
 function ProfilePhoto({ profile, size = 64, style = {} }) {
   if (profile.photo) {
@@ -59,6 +99,15 @@ function ProfilePhoto({ profile, size = 64, style = {} }) {
 export function MyPageScreen({ activeTab='me' }) {
   const navigate = useNavigate();
   const [profile, setProfile] = React.useState(readProfile);
+  const [summary, setSummary] = React.useState({
+    checklistDone: 0,
+    checklistTotal: CHECKLIST_REQUIRED_KEYS.length,
+    checklistSections: sectionProgress(null),
+    hasMyRoom: false,
+    appliedCount: 0,
+    likedCount: 0,
+    loading: true,
+  });
 
   React.useEffect(() => {
     const sync = () => setProfile(readProfile());
@@ -69,6 +118,38 @@ export function MyPageScreen({ activeTab='me' }) {
       window.removeEventListener('storage', sync);
     };
   }, []);
+
+  React.useEffect(() => {
+    let mounted = true;
+    Promise.allSettled([
+      getMe(),
+      loadMyChecklist(),
+      loadMyRoom(),
+      loadMyAppliedRooms(),
+      loadLikedRooms(),
+    ]).then(([profileResult, checklistResult, roomResult, appliedResult, likedResult]) => {
+      if (!mounted) return;
+      const checklist = checklistResult.status === 'fulfilled' ? checklistResult.value : null;
+      if (profileResult.status === 'fulfilled') {
+        setProfile(normalizeProfile(profileResult.value));
+      }
+      setSummary({
+        checklistDone: countFilledChecklist(checklist),
+        checklistTotal: CHECKLIST_REQUIRED_KEYS.length,
+        checklistSections: sectionProgress(checklist),
+        hasMyRoom: roomResult.status === 'fulfilled' && Boolean(roomResult.value?.roomNo),
+        appliedCount: appliedResult.status === 'fulfilled' && Array.isArray(appliedResult.value) ? appliedResult.value.length : 0,
+        likedCount: likedResult.status === 'fulfilled' && Array.isArray(likedResult.value) ? likedResult.value.length : 0,
+        loading: false,
+      });
+    });
+    return () => { mounted = false; };
+  }, []);
+
+  const checklistRemaining = Math.max(0, summary.checklistTotal - summary.checklistDone);
+  const checklistPercent = summary.checklistTotal > 0
+    ? `${Math.round((summary.checklistDone / summary.checklistTotal) * 100)}%`
+    : '0%';
 
 	  return (
 	    <div className="screen">
@@ -87,10 +168,10 @@ export function MyPageScreen({ activeTab='me' }) {
               <ProfilePhoto profile={profile} size={64} style={{ fontSize: 28 }}/>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                  <span style={{ fontSize: 19, fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.displayName}</span>
+                  <span style={{ fontSize: 19, fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.displayName || '사용자'}</span>
                   <span className="chip success" style={{ fontSize: 10, padding: '2px 6px', flexShrink: 0 }}><Icon.check size={10} weight={3}/> 인증</span>
                 </div>
-                <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 3 }}>{profile.department}</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 3 }}>{profile.department || '학교 인증 정보'}</div>
               </div>
               <button onClick={() => navigate('/me/edit')} style={{ background: 'var(--surface-2)', border: 0, padding: '8px 10px', borderRadius: 10, fontSize: 12, fontWeight: 600, color: 'var(--ink-2)', cursor: 'pointer', flexShrink: 0 }}>편집</button>
             </div>
@@ -103,19 +184,16 @@ export function MyPageScreen({ activeTab='me' }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <div>
               <div style={{ fontSize: 13, color: 'var(--ink-3)', fontWeight: 600 }}>완성도</div>
-              <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4, letterSpacing: '-0.5px' }}>20<span style={{ fontSize: 16, color: 'var(--ink-3)', fontWeight: 600 }}> / 22 항목</span></div>
+              <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4, letterSpacing: '-0.5px' }}>{summary.checklistDone}<span style={{ fontSize: 16, color: 'var(--ink-3)', fontWeight: 600 }}> / {summary.checklistTotal} 항목</span></div>
             </div>
-            <span className="chip brand" style={{ fontSize: 12, padding: '6px 12px' }}>2개 남음</span>
+            <span className="chip brand" style={{ fontSize: 12, padding: '6px 12px' }}>{summary.loading ? '확인 중' : checklistRemaining === 0 ? '완료' : `${checklistRemaining}개 남음`}</span>
           </div>
           {/* horizontal progress bar */}
           <div style={{ height: 8, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden', marginBottom: 14 }}>
-            <div style={{ width: 'calc(20/22 * 100%)', height: '100%', background: 'var(--brand)', borderRadius: 99 }}/>
+            <div style={{ width: checklistPercent, height: '100%', background: 'var(--brand)', borderRadius: 99 }}/>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            {[
-              { l: '생활 패턴', v: '14/14 완료', done: true },
-              { l: '추가 규칙', v: '6/9 작성됨', done: false },
-            ].map((r, i, a) => (
+            {summary.checklistSections.map((r, i, a) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: i === a.length - 1 ? 'none' : '1px solid var(--line)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ width: 22, height: 22, borderRadius: '50%', background: r.done ? 'var(--brand)' : 'var(--surface-2)', color: r.done ? 'white' : 'var(--ink-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -133,9 +211,9 @@ export function MyPageScreen({ activeTab='me' }) {
         <div className="h-section"><h2>활동</h2></div>
         <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 18, overflow: 'hidden' }}>
           {[
-            { i: 'door', l: '내가 만든 모집방', r: '1', to: '/rooms/me' },
-            { i: 'clipboard', l: '신청 내역', r: '3', to: '/my/applications' },
-            { i: 'bell', l: '북마크', r: '12', to: '/my/bookmarks' },
+            { i: 'door', l: '내가 만든 모집방', r: summary.hasMyRoom ? '1' : '0', to: '/rooms/me' },
+            { i: 'clipboard', l: '신청 내역', r: String(summary.appliedCount), to: '/my/applications' },
+            { i: 'bell', l: '북마크', r: String(summary.likedCount), to: '/my/bookmarks' },
             { i: 'user', l: '룸메이트 기록', r: '', to: '/my/roommates' },
           ].map((m, i, a) => {
             const I = Icon[m.i];
@@ -189,6 +267,14 @@ export function ProfileEditScreen() {
   const nickname = profile.displayName;
   const department = profile.department;
   const canSave = nickname.trim().length > 0 && department.trim().length > 0;
+
+  React.useEffect(() => {
+    let mounted = true;
+    getMe()
+      .then((nextProfile) => { if (mounted) setProfile(normalizeProfile(nextProfile)); })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, []);
 
   const handleSave = () => {
     if (!canSave || saving) return;

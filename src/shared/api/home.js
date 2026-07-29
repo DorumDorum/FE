@@ -48,6 +48,10 @@ export function loadMyChecklist() {
   return apiRequestWithAuth('/api/users/me/checklist');
 }
 
+export function loadUserChecklist(userNo) {
+  return apiRequestWithAuth(`/api/users/${encodeURIComponent(userNo)}/checklist`);
+}
+
 export function createUserChecklist(request) {
   return apiRequestWithAuth('/api/users/me/checklist', { method: 'POST', body: request });
 }

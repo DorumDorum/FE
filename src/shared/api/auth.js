@@ -1,4 +1,4 @@
-import { apiRequest } from './client';
+import { apiRequest, apiRequestWithAuth } from './client';
 
 const PROFILE_STORAGE_KEY = 'dorumdorum:profile';
 
@@ -120,4 +120,8 @@ export async function getMe({ retry = true } = {}) {
     cacheProfile(profile);
     return profile;
   }
+}
+
+export function loadUserProfile(userNo) {
+  return apiRequestWithAuth(`/api/users/profile/${encodeURIComponent(userNo)}`);
 }

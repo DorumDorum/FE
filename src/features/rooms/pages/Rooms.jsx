@@ -725,7 +725,7 @@ export function FindRoomScreen({ activeTab='find' }) {
         <div style={{ padding: '0 16px 12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', borderRadius: 14, padding: '12px 14px' }}>
             <Icon.search size={20} weight={1.8}/>
-            <input type="text" placeholder="방 제목, 방장 닉네임으로 검색" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 14, fontFamily: 'inherit', color: 'var(--ink)', minWidth: 0 }} />
+            <span style={{ flex: 1, fontSize: 14, color: 'var(--ink-3)', minWidth: 0 }}>제목·방장 검색은 추후 지원 예정이에요</span>
             <button onClick={() => navigate('/rooms/find/filter', { state: { checklistFilter } })} aria-label="체크리스트로 찾기" style={{ background: 'transparent', border: 0, color: 'var(--ink-2)', padding: 0, display: 'flex', cursor: 'pointer' }}><Icon.filter/></button>
           </div>
         </div>
