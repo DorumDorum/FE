@@ -56,6 +56,17 @@ export async function logout() {
   }
 }
 
+export async function deleteAccount(reason) {
+  try {
+    await apiRequestWithAuth('/api/users/me', {
+      method: 'DELETE',
+      body: reason ? { reason } : {},
+    });
+  } finally {
+    clearProfileCache();
+  }
+}
+
 export async function sendVerificationEmail(email) {
   await apiRequest(`/api/email/send?email=${encodeURIComponent(email)}`, {
     method: 'POST',

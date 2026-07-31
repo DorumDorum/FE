@@ -1,12 +1,14 @@
 import React from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Icon, StatusBar, Avatar, goBack } from '../../../shared/components';
-import { logout as logoutUser, getCachedUserNo, getMe } from '../../../shared/api/auth';
+import { logout as logoutUser, deleteAccount, getCachedUserNo, getMe } from '../../../shared/api/auth';
 import {
   loadMyRoom, loadNotices, loadNotifications, markAllNotificationsRead, markNotificationRead, registerNotificationDevice,
   loadMyChecklist, createUserChecklist, updateUserChecklist,
   loadMyAppliedRooms, loadLikedRooms, unlikeRoom,
+  loadNoticeDetail, loadNotificationSettings, updateNotificationSettings,
 } from '../../../shared/api/home';
+import { createSupportInquiry } from '../../../shared/api/support';
 import { submitRoomApplication, approveApplication, rejectApplication, loadMyRoomRule, updateMyRoomRule, createRoom, cancelRoomApplication } from '../../../shared/api/room';
 import { ChatMessageItem, ChatComposer } from '../../chat';
 import { getOrCreateDirectChatRoom, loadChatMessages, markChatRoomRead, leaveChatRoom } from '../../../shared/api/chat';
@@ -1222,13 +1224,24 @@ export function NoticeDetailScreen() {
   React.useEffect(() => {
     if (notice || !id) return undefined;
     let mounted = true;
-    loadNotices()
-      .then((list) => {
+    loadNoticeDetail(id)
+      .then((detail) => {
         if (!mounted) return;
-        const found = (Array.isArray(list) ? list : []).map(normalizeNotice).find((item) => String(item.noticeNo) === String(id));
-        setNotice(found || null);
+        if (!detail || typeof detail !== 'object') {
+          throw new TypeError('Notice detail response must be an object');
+        }
+        setNotice(detail ? normalizeNotice(detail) : null);
       })
-      .finally(() => { if (mounted) setLoading(false); });
+      .catch(() => loadNotices().then((list) => {
+        if (!mounted) return;
+        const found = (Array.isArray(list) ? list : []).map(normalizeNotice).find((item) => String(item.noticeNo || item.id) === String(id));
+        setNotice(found || null);
+      }).catch(() => {
+        if (mounted) setNotice(null);
+      }))
+      .finally(() => {
+        if (mounted) setLoading(false);
+      })
     return () => { mounted = false; };
   }, [id, notice]);
 
@@ -1492,7 +1505,6 @@ export function NotificationsScreen() {
 export function NotificationSettingsScreen() {
   const navigate = useNavigate();
   const [enabled, setEnabled] = React.useState(true);
-  const settingsApiReady = false;
   const [settings, setSettings] = React.useState({
     applicants: true,
     applicantResult: true,
@@ -1500,8 +1512,77 @@ export function NotificationSettingsScreen() {
     notice: true,
     schedule: false,
   });
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
 
-  const set = (key) => setSettings((prev) => ({ ...prev, [key]: !prev[key] }));
+  React.useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError('');
+    loadNotificationSettings()
+      .then((next) => {
+        if (!mounted) return;
+        setEnabled(Boolean(next?.enabled));
+        setSettings({
+          applicants: Boolean(next?.applicants),
+          applicantResult: Boolean(next?.applicantResult),
+          chat: Boolean(next?.chat),
+          notice: Boolean(next?.notice),
+          schedule: Boolean(next?.schedule),
+        });
+      })
+      .catch((e) => {
+        if (mounted) setError('알림 설정을 불러오지 못했어요.');
+      })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, []);
+
+  const saveSettings = (nextEnabled, nextSettings) => {
+    setSaving(true);
+    setError('');
+    return updateNotificationSettings({ enabled: nextEnabled, ...nextSettings })
+      .then((saved) => {
+        setEnabled(Boolean(saved?.enabled));
+        setSettings({
+          applicants: Boolean(saved?.applicants),
+          applicantResult: Boolean(saved?.applicantResult),
+          chat: Boolean(saved?.chat),
+          notice: Boolean(saved?.notice),
+          schedule: Boolean(saved?.schedule),
+        });
+      })
+      .catch((e) => {
+        setError('알림 설정을 저장하지 못했어요.');
+        throw e;
+      })
+      .finally(() => setSaving(false));
+  };
+
+  const set = (key) => {
+    if (saving || loading) return;
+    const previousEnabled = enabled;
+    const previousSettings = settings;
+    const nextSettings = { ...settings, [key]: !settings[key] };
+    setSettings(nextSettings);
+    saveSettings(enabled, nextSettings).catch(() => {
+      setEnabled(previousEnabled);
+      setSettings(previousSettings);
+    });
+  };
+
+  const toggleEnabled = () => {
+    if (saving || loading) return;
+    const previousEnabled = enabled;
+    const previousSettings = settings;
+    const nextEnabled = !enabled;
+    setEnabled(nextEnabled);
+    saveSettings(nextEnabled, settings).catch(() => {
+      setEnabled(previousEnabled);
+      setSettings(previousSettings);
+    });
+  };
 
   const Toggle = ({ checked, onClick, disabled = false }) => (
     <button
@@ -1546,7 +1627,7 @@ export function NotificationSettingsScreen() {
         gap: 12,
         padding: '14px 16px',
         borderBottom: '1px solid var(--line)',
-        opacity: enabled && settingsApiReady ? 1 : 0.55,
+        opacity: enabled && !loading ? 1 : 0.55,
       }}>
         <div style={{
           width: 38,
@@ -1565,7 +1646,7 @@ export function NotificationSettingsScreen() {
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{title}</div>
           <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3, lineHeight: 1.4 }}>{desc}</div>
         </div>
-        <Toggle checked={settings[valueKey] && enabled} disabled={!enabled || !settingsApiReady} onClick={() => set(valueKey)} />
+        <Toggle checked={settings[valueKey] && enabled} disabled={!enabled || loading || saving} onClick={() => set(valueKey)} />
       </div>
     );
   };
@@ -1596,7 +1677,7 @@ export function NotificationSettingsScreen() {
             필요한 알림만 받을 수 있어요
           </div>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
-            알림 설정 저장 API가 준비되면 방 신청, 채팅, 기숙사 공지 알림을 따로 조절할 수 있어요.
+            방 신청, 채팅, 기숙사 공지 알림을 따로 조절할 수 있어요.
           </div>
         </div>
 
@@ -1621,13 +1702,15 @@ export function NotificationSettingsScreen() {
                 모든 앱 알림을 한 번에 켜고 꺼요
               </div>
             </div>
-            <Toggle checked={enabled} disabled={!settingsApiReady} onClick={() => setEnabled(!enabled)} />
+            <Toggle checked={enabled} disabled={loading || saving} onClick={toggleEnabled} />
           </div>
         </div>
 
-        <div style={{ margin: '12px 16px 0', background: 'var(--brand-soft)', borderRadius: 14, padding: 14, color: 'var(--brand-deep)', fontSize: 12, lineHeight: 1.5, fontWeight: 700 }}>
-          현재 백엔드에 알림 설정 저장 API가 없어 설정 변경은 아직 지원하지 않아요.
-        </div>
+        {(loading || saving || error) && (
+          <div style={{ margin: '12px 16px 0', background: error ? '#FFF4F3' : 'var(--brand-soft)', borderRadius: 14, padding: 14, color: error ? 'var(--danger)' : 'var(--brand-deep)', fontSize: 12, lineHeight: 1.5, fontWeight: 700 }}>
+            {error || (saving ? '알림 설정을 저장하고 있어요.' : '알림 설정을 불러오고 있어요.')}
+          </div>
+        )}
 
         <Section title="방과 신청">
           <SettingRow icon="user" title="새 신청자" desc="내 모집방에 누군가 신청하면 알려줘요" valueKey="applicants" />
@@ -1834,9 +1917,20 @@ export function DeleteAccountScreen() {
   const [reason, setReason] = React.useState('');
   const [confirmText, setConfirmText] = React.useState('');
   const [confirmed, setConfirmed] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState('');
   const reasons = ['졸업했어요', '서비스를 자주 쓰지 않아요', '원하는 기능이 부족해요', '개인정보가 걱정돼요', '다른 이유'];
-  const deleteApiReady = false;
-  const canDelete = deleteApiReady && reason && confirmed && confirmText.trim() === '탈퇴';
+  const canDelete = Boolean(reason && confirmed && confirmText.trim() === '탈퇴' && !submitting);
+
+  const submitDelete = () => {
+    if (!canDelete) return;
+    setSubmitting(true);
+    setError('');
+    deleteAccount(reason)
+      .then(() => navigate('/login', { replace: true }))
+      .catch((e) => setError(e?.message || '계정 탈퇴에 실패했어요.'))
+      .finally(() => setSubmitting(false));
+  };
 
   return (
     <div className="screen">
@@ -1850,7 +1944,7 @@ export function DeleteAccountScreen() {
             <br />확인해주세요
           </div>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
-            현재 백엔드에 계정 탈퇴 API가 없어 앱에서 직접 탈퇴는 아직 지원하지 않아요.
+            탈퇴하면 계정과 이용 기록 일부가 삭제되거나 익명 처리돼요.
           </div>
         </div>
 
@@ -1923,9 +2017,11 @@ export function DeleteAccountScreen() {
             탈퇴 후 계정과 이용 기록을 복구할 수 없다는 점을 확인했어요.
           </span>
         </label>
-        <div style={{ marginTop: 14, background: 'var(--brand-soft)', borderRadius: 14, padding: 14, color: 'var(--brand-deep)', fontSize: 12, lineHeight: 1.5, fontWeight: 700 }}>
-          계정 탈퇴가 필요하면 고객 문의로 요청해주세요. API가 추가되면 이 화면에서 직접 처리할 수 있게 연결할 예정이에요.
-        </div>
+        {error && (
+          <div style={{ marginTop: 14, background: '#FFF4F3', borderRadius: 14, padding: 14, color: 'var(--danger)', fontSize: 12, lineHeight: 1.5, fontWeight: 700 }}>
+            {error}
+          </div>
+        )}
         <div style={{ height: 28 }} />
       </div>
 
@@ -1934,7 +2030,7 @@ export function DeleteAccountScreen() {
         <button
           type="button"
           disabled={!canDelete}
-          onClick={undefined}
+          onClick={submitDelete}
           className="btn full"
           style={{
             flex: 1,
@@ -1943,7 +2039,7 @@ export function DeleteAccountScreen() {
             color: canDelete ? 'white' : 'var(--ink-4)',
             cursor: canDelete ? 'pointer' : 'default',
           }}
-        >탈퇴 API 준비 중</button>
+        >{submitting ? '탈퇴 처리 중...' : '계정 탈퇴'}</button>
       </div>
     </div>
   );
@@ -1954,9 +2050,27 @@ export function SupportScreen() {
   const navigate = useNavigate();
   const [category, setCategory] = React.useState('앱 이용');
   const [message, setMessage] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState('');
   const maxLength = 500;
-  const supportApiReady = false;
   const categories = ['앱 이용', '매칭/신청', '계정/인증', '오류 및 사용자 신고'];
+  const categoryMap = {
+    '앱 이용': 'APP_USAGE',
+    '매칭/신청': 'MATCHING',
+    '계정/인증': 'ACCOUNT',
+    '오류 및 사용자 신고': 'BUG_REPORT',
+  };
+  const canSubmit = Boolean(message.trim() && !submitting);
+
+  const submitInquiry = () => {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError('');
+    createSupportInquiry({ category: categoryMap[category] || 'ETC', message: message.trim() })
+      .then(() => navigate('/me'))
+      .catch((e) => setError(e?.message || '문의를 접수하지 못했어요.'))
+      .finally(() => setSubmitting(false));
+  };
 
   return (
     <div className="screen">
@@ -1973,7 +2087,7 @@ export function SupportScreen() {
             무엇을 도와드릴까요?
           </div>
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
-            현재 문의 접수 API가 없어 안내 정보만 제공해요.
+            문의 내용을 남겨주시면 확인 후 답변드릴게요.
           </div>
         </div>
 
@@ -2043,20 +2157,22 @@ export function SupportScreen() {
           />
         </div>
 
-        <div style={{ background: 'var(--brand-soft)', borderRadius: 14, padding: 14, color: 'var(--brand-deep)', fontSize: 12, lineHeight: 1.5, fontWeight: 700 }}>
-          문의 접수 API가 준비되면 이 화면에서 바로 문의를 보낼 수 있어요.
-        </div>
+        {error && (
+          <div style={{ background: '#FFF4F3', borderRadius: 14, padding: 14, color: 'var(--danger)', fontSize: 12, lineHeight: 1.5, fontWeight: 700 }}>
+            {error}
+          </div>
+        )}
 
       </div>
 
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 30px', background: 'var(--surface)', borderTop: '1px solid var(--line)' }}>
         <button
-          onClick={() => navigate('/me')}
-          disabled={!supportApiReady}
+          onClick={submitInquiry}
+          disabled={!canSubmit}
           className="btn full"
-          style={{ height: 52, opacity: supportApiReady && message.trim() ? 1 : 0.55, cursor: supportApiReady ? 'pointer' : 'not-allowed' }}
+          style={{ height: 52, opacity: canSubmit ? 1 : 0.55, cursor: canSubmit ? 'pointer' : 'not-allowed' }}
         >
-          문의 API 준비 중
+          {submitting ? '문의 접수 중...' : '문의 보내기'}
         </button>
       </div>
     </div>

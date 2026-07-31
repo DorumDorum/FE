@@ -51,6 +51,10 @@ export function loadMyRoommates() {
   return client.apiRequestWithAuth('/api/rooms/me/roommates');
 }
 
+export function loadRoommateHistory() {
+  return client.apiRequestWithAuth('/api/users/me/roommate-history');
+}
+
 export function cancelRoomApplication(roomNo) {
   return client.apiRequestWithAuth(`/api/rooms/${roomNo}/request`, {
     method: 'DELETE',

@@ -3,7 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Icon, TabBar, StatusBar, Avatar, MarqueeText, ClipText, goBack } from '../../../shared/components';
 import { MemberCard } from '../../members';
 import { CREATE_ROOM_DORMS, ROOM_SIZE_OPTIONS } from '../../checklist';
-import { findRooms, likeRoom, unlikeRoom, loadLikedRooms, loadMyChecklist, loadRoomRule, loadRecommendedRooms, loadMyRoom } from '../../../shared/api/home';
+import { findRooms, likeRoom, unlikeRoom, loadLikedRooms, loadMyChecklist, loadRoomRule, loadRecommendedRooms, loadMyRoom, loadRoomDetail } from '../../../shared/api/home';
 import { getOrCreateDirectChatRoom, loadMyChatRooms, leaveChatRoom } from '../../../shared/api/chat';
 import { getCachedUserNo } from '../../../shared/api/auth';
 import { loadApplications, loadMyRoommates, deleteRoom, checkMyRoom, confirmRoomAssignment } from '../../../shared/api/room';
@@ -561,6 +561,9 @@ const normalizeRoom = (r) => ({
   host: { name: r.hostNickname, major: r.hostMajor, studentYear: r.hostStudentYear },
   residencePeriod: r.residencePeriod,
   notes: r.notes ?? null,
+  liked: Boolean(r.liked),
+  appliedStatus: r.appliedStatus,
+  isMyRoom: Boolean(r.isMyRoom),
   checklist: [],
 });
 
@@ -572,6 +575,7 @@ export function FindRoomScreen({ activeTab='find' }) {
   const [roomTypeFilter, setRoomTypeFilter] = React.useState('전체');
   const [capacityFilter, setCapacityFilter] = React.useState('전체');
   const [periodFilter, setPeriodFilter] = React.useState('전체');
+  const [keyword, setKeyword] = React.useState('');
   const [rooms, setRooms] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [loadingMore, setLoadingMore] = React.useState(false);
@@ -631,12 +635,14 @@ export function FindRoomScreen({ activeTab='find' }) {
     setNextCursor(null);
     setHasNext(false);
     setTotalCount(null);
+    const trimmedKeyword = keyword.trim();
     findRooms({
       ...checklistFilter,
       sortType: toSortType(sortBy),
       roomType: roomTypeFilter === '전체' ? null : roomTypeFilter,
       capacity: capacityFilter === '전체' ? null : capacityFilter,
       residencePeriod: periodFilter === '전체' ? null : periodFilter,
+      keyword: trimmedKeyword || null,
     })
       .then((res) => {
         if (!mounted) return;
@@ -654,7 +660,7 @@ export function FindRoomScreen({ activeTab='find' }) {
       })
       .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
-  }, [capacityFilter, sortBy, roomTypeFilter, periodFilter]);
+  }, [capacityFilter, sortBy, roomTypeFilter, periodFilter, keyword]);
 
   React.useEffect(() => {
     const target = loadMoreRef.current;
@@ -666,12 +672,14 @@ export function FindRoomScreen({ activeTab='find' }) {
       if (!entry.isIntersecting || requested) return;
       requested = true;
       setLoadingMore(true);
+      const trimmedKeyword = keyword.trim();
       findRooms({
         ...checklistFilter,
         sortType: toSortType(sortBy),
         roomType: roomTypeFilter === '전체' ? null : roomTypeFilter,
         capacity: capacityFilter === '전체' ? null : capacityFilter,
         residencePeriod: periodFilter === '전체' ? null : periodFilter,
+        keyword: trimmedKeyword || null,
         cursor: nextCursor,
       })
         .then((res) => {
@@ -693,7 +701,7 @@ export function FindRoomScreen({ activeTab='find' }) {
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [capacityFilter, hasNext, loading, loadingMore, nextCursor, periodFilter, roomTypeFilter, sortBy]);
+  }, [capacityFilter, hasNext, keyword, loading, loadingMore, nextCursor, periodFilter, roomTypeFilter, sortBy]);
 
   const toggleRoomBookmark = (roomNo) => {
     const isBookmarked = bookmarkedIds.has(roomNo);
@@ -725,7 +733,23 @@ export function FindRoomScreen({ activeTab='find' }) {
         <div style={{ padding: '0 16px 12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', borderRadius: 14, padding: '12px 14px' }}>
             <Icon.search size={20} weight={1.8}/>
-            <span style={{ flex: 1, fontSize: 14, color: 'var(--ink-3)', minWidth: 0 }}>제목·방장 검색은 추후 지원 예정이에요</span>
+            <input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="제목·방장 검색"
+              aria-label="방 제목 또는 방장 검색"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                border: 0,
+                outline: 0,
+                background: 'transparent',
+                color: 'var(--ink)',
+                fontSize: 14,
+                fontWeight: 600,
+                fontFamily: 'inherit',
+              }}
+            />
             <button onClick={() => navigate('/rooms/find/filter', { state: { checklistFilter } })} aria-label="체크리스트로 찾기" style={{ background: 'transparent', border: 0, color: 'var(--ink-2)', padding: 0, display: 'flex', cursor: 'pointer' }}><Icon.filter/></button>
           </div>
         </div>
@@ -860,16 +884,44 @@ export function RoomDetailScreen() {
   const navigate = useNavigate();
   const { id = '1' } = useParams();
   const { state } = useLocation();
-  const room = state?.room || readCachedRoom(id) || ROOMS.find((item) => String(item.id) === String(id));
-  const isClosed = state?.closed ?? room?.recruiting === false;
-  const isApplied = state?.appliedStatus === 'waiting';
-  const isAccepted = state?.appliedStatus === 'accepted';
-
+  const initialRoom = state?.room || readCachedRoom(id) || ROOMS.find((item) => String(item.id) === String(id)) || null;
+  const [room, setRoom] = React.useState(initialRoom);
+  const [roomLoading, setRoomLoading] = React.useState(!initialRoom);
+  const [roomError, setRoomError] = React.useState('');
   const [bookmarked, setBookmarked] = React.useState(false);
   const [checklist, setChecklist] = React.useState([]);
   const [checklistLoading, setChecklistLoading] = React.useState(true);
   const [checklistError, setChecklistError] = React.useState(false);
   const [isMyRoom, setIsMyRoom] = React.useState(false);
+  const appliedStatus = room?.appliedStatus || state?.appliedStatus;
+  const isClosed = state?.closed ?? room?.recruiting === false;
+  const isApplied = ['WAITING', 'waiting'].includes(appliedStatus);
+  const isAccepted = ['APPROVED', 'accepted'].includes(appliedStatus);
+
+  React.useEffect(() => {
+    let mounted = true;
+    setRoomLoading(true);
+    setRoomError('');
+    loadRoomDetail(id)
+      .then((detail) => {
+        if (!mounted) return;
+        if (!detail || typeof detail !== 'object') {
+          throw new TypeError('Room detail response must be an object');
+        }
+        const normalized = normalizeRoom(detail);
+        setRoom(normalized);
+        setBookmarked(Boolean(detail?.liked));
+        setIsMyRoom(Boolean(detail?.isMyRoom));
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem(ROOM_DETAIL_CACHE_KEY, JSON.stringify(normalized));
+        }
+      })
+      .catch((e) => {
+        if (mounted && !initialRoom) setRoomError(e?.message || '모집방 정보를 불러오지 못했어요.');
+      })
+      .finally(() => { if (mounted) setRoomLoading(false); });
+    return () => { mounted = false; };
+  }, [id]);
 
   React.useEffect(() => {
     let mounted = true;
@@ -879,7 +931,7 @@ export function RoomDetailScreen() {
       .then(([roomRule, myChecklist, myRoom]) => {
         if (!mounted) return;
         setChecklist(compareChecklists(roomRule, myChecklist));
-        setIsMyRoom(myRoom?.roomNo === id);
+        setIsMyRoom((current) => current || myRoom?.roomNo === id);
       })
       .catch(() => {
         if (mounted) setChecklistError(true);
@@ -926,6 +978,8 @@ export function RoomDetailScreen() {
         <div style={{ padding: '8px 20px 16px' }}>
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.3, fontFamily: 'var(--font-sans)' }}>{room?.title || '모집방 상세'}</h1>
           {roomMeta && <div style={{ fontSize: 14, color: 'var(--ink-3)', marginTop: 6 }}>{roomMeta}</div>}
+          {roomLoading && <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 8 }}>모집방 정보를 불러오고 있어요.</div>}
+          {roomError && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{roomError}</div>}
         </div>
 
         {/* Match summary — derived from checklist comparison */}

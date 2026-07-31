@@ -10,6 +10,7 @@ import {
   loadMyRoommates,
   updateRoomTitle,
   createRoom,
+  loadRoommateHistory,
 } from './room';
 
 describe('room api', () => {
@@ -79,6 +80,11 @@ describe('room api', () => {
     const result = await loadMyRoommates();
     expect(client.apiRequestWithAuth).toHaveBeenCalledWith('/api/rooms/me/roommates');
     expect(result).toEqual(mockList);
+  });
+
+  it('loadRoommateHistory는 GET /api/users/me/roommate-history 호출', async () => {
+    await loadRoommateHistory();
+    expect(client.apiRequestWithAuth).toHaveBeenCalledWith('/api/users/me/roommate-history');
   });
 
   it('updateRoomTitle은 PUT /api/rooms/me/title?roomNo=42 호출', async () => {

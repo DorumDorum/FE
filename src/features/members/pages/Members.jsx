@@ -4,7 +4,7 @@ import { Icon, Avatar, StatusBar, goBack } from '../../../shared/components';
 import { loadUserProfile } from '../../../shared/api/auth';
 import { loadMyRoom, loadUserChecklist } from '../../../shared/api/home';
 import { getOrCreateDirectChatRoom, loadMyChatRooms } from '../../../shared/api/chat';
-import { loadMyRoommates, kickRoommate } from '../../../shared/api/room';
+import { loadMyRoommates, loadRoommateHistory, kickRoommate } from '../../../shared/api/room';
 import { normalizeRoom, roommateToMember, roomRuleToChecklist } from '../../rooms/roomData';
 
 // members.jsx — 룸메이트 멤버 화면 (방장 시점)
@@ -29,6 +29,23 @@ async function enrichMember(member) {
     checklist,
   };
 }
+
+const historyToMember = (history) => ({
+  id: history.historyNo || `${history.roomNo}-${history.roommateUserNo}`,
+  userNo: history.roommateUserNo,
+  name: history.nickname || history.name,
+  realName: history.name,
+  studentId: history.studentNo,
+  dept: [history.major, history.studentYear ? `${history.studentYear}학번` : null].filter(Boolean).join(' '),
+  role: history.relation === 'CURRENT' ? '현재' : '과거',
+  confirmStatus: history.relation === 'CURRENT' ? '입주 중' : '함께 지냄',
+  roomTitle: history.roomTitle,
+  roomType: history.roomType,
+  capacity: history.capacity,
+  startedAt: history.startedAt,
+  endedAt: history.endedAt,
+  checklist: [],
+});
 
 export function MemberCard({ m, defaultOpen = false, onOpenChat, onKick }) {
   const [open, setOpen] = React.useState(defaultOpen);
@@ -314,12 +331,12 @@ export function RoommateHistoryScreen() {
     setError('');
     Promise.all([
       loadMyRoom().catch(() => null),
-      loadMyRoommates(),
+      loadRoommateHistory(),
     ])
       .then(([roomData, roommateList]) => {
         if (!mounted) return;
         setRoom(roomData?.roomNo ? normalizeRoom(roomData) : null);
-        const baseMembers = Array.isArray(roommateList) ? roommateList.map(roommateToMember) : [];
+        const baseMembers = Array.isArray(roommateList) ? roommateList.map(historyToMember) : [];
         setRoommates(baseMembers);
         Promise.all(baseMembers.map(enrichMember))
           .then((nextMembers) => { if (mounted) setRoommates(nextMembers); });
@@ -329,7 +346,7 @@ export function RoommateHistoryScreen() {
     return () => { mounted = false; };
   }, []);
 
-  const roomLabel = room ? [room.dorm, room.size].filter(Boolean).join(' · ') : '현재 방 정보';
+  const roomLabel = room ? [room.dorm, room.size].filter(Boolean).join(' · ') : '방 정보';
 
   return (
     <div className="screen">
@@ -342,8 +359,8 @@ export function RoommateHistoryScreen() {
 
       <div className="scroll" style={{ padding: '4px 16px 28px' }}>
         <div style={{ padding: '4px 4px 16px' }}>
-          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.4px' }}>함께 지내는 룸메이트</div>
-          <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 5, lineHeight: 1.45 }}>현재 같은 방에 입주한 룸메이트 목록이에요.</div>
+          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.4px' }}>룸메이트 기록</div>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 5, lineHeight: 1.45 }}>현재와 과거에 함께 지낸 룸메이트를 확인해요.</div>
         </div>
 
         <div className="card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', padding: 4, marginBottom: 16 }}>
@@ -376,6 +393,7 @@ export function RoommateHistoryScreen() {
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 5, fontWeight: 600 }}>{[mate.realName, mate.studentId].filter(Boolean).join(' · ') || '-'}</div>
                   <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>{mate.dept}</div>
+                  {mate.roomTitle && <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3 }}>{mate.roomTitle}</div>}
                 </div>
               </div>
 
@@ -386,19 +404,13 @@ export function RoommateHistoryScreen() {
                 </div>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 700 }}>방 정보</div>
-                  <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 800, marginTop: 4 }}>{roomLabel}</div>
+                  <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 800, marginTop: 4 }}>{mate.roomTitle || roomLabel}</div>
                 </div>
               </div>
             </div>
           ))}
         </div>
 
-        <div style={{ marginTop: 14, background: 'var(--brand-soft)', borderRadius: 14, padding: 14, display: 'flex', alignItems: 'flex-start', gap: 10, color: 'var(--brand-deep)' }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginTop: 1, flexShrink: 0 }}>
-            <path d="M12 2l9 4v6c0 5-3.5 9.5-9 10-5.5-.5-9-5-9-10V6l9-4z" stroke="currentColor" strokeWidth="1.8" />
-          </svg>
-          <div style={{ fontSize: 12, lineHeight: 1.5, fontWeight: 700 }}>과거 룸메이트 이력 API가 생기기 전까지 현재 방 룸메이트만 표시해요.</div>
-        </div>
       </div>
     </div>
   );

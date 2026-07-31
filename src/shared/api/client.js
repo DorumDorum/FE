@@ -40,6 +40,7 @@ export async function apiRequest(path, options = {}) {
     credentials: 'include',
   });
   const body = await parseResponseBody(response);
+  const contentType = response.headers.get('Content-Type') || '';
 
   if (!response.ok) {
     const message = typeof body === 'object' && body?.message
@@ -49,6 +50,12 @@ export async function apiRequest(path, options = {}) {
       status: response.status,
       code: typeof body === 'object' ? body?.code : undefined,
       details: typeof body === 'object' ? body?.details : undefined,
+    });
+  }
+
+  if (typeof body === 'string' && contentType.includes('text/html')) {
+    throw new ApiError('API 응답이 올바르지 않습니다.', {
+      status: response.status,
     });
   }
 
