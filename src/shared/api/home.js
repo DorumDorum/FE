@@ -8,6 +8,10 @@ export function loadNotices() {
   return apiRequest('/api/notices');
 }
 
+export function loadNoticeDetail(noticeNo) {
+  return apiRequest(`/api/notices/${encodeURIComponent(noticeNo)}`);
+}
+
 export function loadCalendarEvents(startDate, endDate) {
   const params = new URLSearchParams({ startDate, endDate });
   return apiRequest(`/api/calendar/events?${params.toString()}`);
@@ -33,11 +37,26 @@ export function registerNotificationDevice(deviceId, fcmToken = null) {
   });
 }
 
+export function loadNotificationSettings() {
+  return apiRequestWithAuth('/api/users/me/notification-settings');
+}
+
+export function updateNotificationSettings(settings) {
+  return apiRequestWithAuth('/api/users/me/notification-settings', {
+    method: 'PUT',
+    body: settings,
+  });
+}
+
 export function findRooms(filter) {
   return apiRequestWithAuth('/api/rooms/search', {
     method: 'POST',
     body: filter,
   });
+}
+
+export function loadRoomDetail(roomNo) {
+  return apiRequestWithAuth(`/api/rooms/${encodeURIComponent(roomNo)}`);
 }
 
 export function loadRoomRule(roomNo) {
