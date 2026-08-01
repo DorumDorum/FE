@@ -6,6 +6,7 @@ import {
   login as loginUser,
   resetPassword,
   sendPasswordResetEmail,
+  sendVerificationEmail,
   signUp,
   verifyEmail,
   verifyPasswordResetCode,
